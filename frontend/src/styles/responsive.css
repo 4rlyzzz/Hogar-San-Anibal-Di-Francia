@@ -1,0 +1,248 @@
+/* tablet */
+@media (max-width: 1100px) {
+  .grilla {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .marca-sub,
+  .usuario-datos {
+    display: none;
+  }
+
+  .usuario {
+    padding: 4px;
+  }
+
+  .fila {
+    grid-template-columns: 96px 1.4fr 100px 110px 100px 1fr;
+  }
+}
+
+/* celular */
+@media (max-width: 767px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 11px 8px;
+    padding: 12px 16px;
+  }
+
+  .marca {
+    flex: 1;
+  }
+
+  .marca-sub-movil {
+    display: block;
+    font-size: 10px;
+  }
+
+  .menu {
+    display: none;
+  }
+
+  .buscador {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .buscador input {
+    font-size: 16px;
+  }
+
+  .usuario {
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+
+  .avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .contenedor {
+    padding: 18px 16px 120px;
+  }
+
+  .encabezado {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .encabezado h1 {
+    font-size: 21px;
+  }
+
+  .encabezado p {
+    font-size: 12px;
+  }
+
+  .filtros {
+    margin-left: 0;
+  }
+
+  .filtros button {
+    flex: 1;
+    padding: 10px 8px;
+  }
+
+  .grilla {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .tarjeta .btn {
+    min-height: 46px;
+  }
+
+  /* la alerta queda dentro de la pagina */
+  .alerta-contenedor {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin-bottom: 16px;
+  }
+
+  .vencimiento-texto {
+    display: none;
+  }
+
+  .producto-foto {
+    width: 48px;
+    height: 48px;
+  }
+
+  .producto-nombre {
+    font-size: 15px;
+  }
+
+  .comparacion-fila {
+    flex-wrap: wrap;
+    gap: 5px 10px;
+  }
+
+  .comparacion-label {
+    flex: 1;
+  }
+
+  .comparacion-barra {
+    order: 3;
+    flex-basis: 100%;
+    height: 18px;
+  }
+
+  .boton-alerta {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 86px;
+  }
+
+  .toast {
+    bottom: 140px;
+  }
+
+  /* el modal sale desde abajo */
+  .fondo-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+    animation: subir 0.28s ease;
+  }
+
+  .campo input,
+  .input-fijo {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .dos-columnas + .dos-columnas {
+    grid-template-columns: 1fr;
+  }
+
+  /* historial como tarjetas */
+  .tabla {
+    background: none;
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tabla-header {
+    padding: 0;
+    border: 0;
+  }
+
+  .fila-titulos {
+    display: none;
+  }
+
+  .fila {
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      'insumo insumo cantidad'
+      'categoria movimiento fecha'
+      'responsable responsable responsable';
+    gap: 9px 8px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid #e5eae8;
+    border-radius: 16px;
+  }
+
+  .fila-insumo { grid-area: insumo; }
+  .fila-cantidad { grid-area: cantidad; justify-self: end; }
+  .fila-categoria { grid-area: categoria; }
+  .fila-movimiento { grid-area: movimiento; font-size: 10.5px; }
+  .fila-fecha { grid-area: fecha; font-size: 10.5px; }
+  .fila-responsable { grid-area: responsable; font-size: 11px; }
+
+  /* menu de abajo */
+  .menu-movil {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    gap: 4px;
+    padding: 8px 10px 14px;
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid #e4eae8;
+  }
+
+  .menu-movil button {
+    flex: 1;
+    min-height: 54px;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    color: #8b9a95;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-weight: 600;
+    font-size: 11px;
+  }
+
+  .menu-movil button.activo {
+    background: #e6f5ee;
+    color: #2d8e6c;
+  }
+
+  .menu-movil-icono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    font-size: 11.5px;
+  }
+}

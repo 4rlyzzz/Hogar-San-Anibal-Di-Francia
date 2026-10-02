@@ -1,0 +1,374 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f8f7;
+  color: #17211f;
+  font-family: 'Manrope', sans-serif;
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+button, input {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* colores de estado */
+.verde { background: #e6f5ee; color: #2d8e6c; }
+.naranja { background: #fdf2e3; color: #b9691b; }
+.rojo { background: #fbeceb; color: #c1423c; }
+.azul { background: #e7f1f8; color: #2f7fb5; }
+.gris { background: #eef2f1; color: #54635e; }
+
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes subir {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- barra de arriba ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 32px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e4eae8;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.marca-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: #3fb98f;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.marca-nombre {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.marca-sub,
+.marca-sub-movil {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.marca-sub-movil {
+  display: none;
+}
+
+.menu,
+.filtros {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: #f1f5f4;
+  border: 1px solid #e4eae8;
+  border-radius: 12px;
+}
+
+.menu button,
+.filtros button {
+  border: 0;
+  padding: 8px 15px;
+  border-radius: 9px;
+  background: transparent;
+  color: #6f7e79;
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.menu button.activo,
+.filtros button.activo {
+  background: #fff;
+  color: #17211f;
+  box-shadow: 0 1px 3px rgba(23, 33, 31, 0.12);
+}
+
+.buscador {
+  flex: 1;
+  max-width: 340px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  background: #f1f5f4;
+  border: 1px solid #e4eae8;
+  border-radius: 12px;
+}
+
+.buscador input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+}
+
+.topbar-derecha {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.campana {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #f1f5f4;
+  border: 1px solid #e4eae8;
+  display: grid;
+  place-items: center;
+}
+
+.campana-punto {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e07b28;
+  border: 2px solid #fff;
+}
+
+.usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 5px 5px;
+  background: #f1f5f4;
+  border: 1px solid #e4eae8;
+  border-radius: 999px;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #2f7fb5;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.usuario-datos {
+  display: flex;
+  flex-direction: column;
+}
+
+.usuario-nombre {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.usuario-rol {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: #7c8b86;
+}
+
+/* ---------- contenido ---------- */
+.contenedor {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 32px 32px 64px;
+}
+
+.encabezado {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+.encabezado h1 {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.encabezado p {
+  font-size: 13px;
+  color: #6f7e79;
+}
+
+.filtros {
+  margin-left: auto;
+  gap: 8px;
+  background: #eaefed;
+  border: 0;
+}
+
+.link {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #2f7fb5;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.link:hover {
+  color: #245f88;
+}
+
+.link:disabled {
+  color: #8b9a95;
+  cursor: default;
+}
+
+.titulo-seccion {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.titulo-seccion-icono {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 700;
+  font-size: 10px;
+}
+
+.titulo-seccion h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.titulo-seccion-detalle {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #7c8b86;
+}
+
+.vacio {
+  padding: 40px 20px;
+  margin-bottom: 38px;
+  text-align: center;
+  background: #fff;
+  border: 1px dashed #e0e7e4;
+  border-radius: 18px;
+  color: #7c8b86;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ---------- botones ---------- */
+.btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 11px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.btn-gris { border: 1px solid #e2e8e6; background: #f7faf9; color: #3d4b46; }
+.btn-gris:hover { background: #edf2f0; }
+.btn-azul { border: 1px solid #d8e6ef; background: #f2f8fc; color: #23698f; }
+.btn-azul:hover { background: #e4f0f8; }
+.btn-blanco { border: 1px solid #e0e7e4; background: #fff; color: #3d4b46; }
+.btn-verde { border: 1px solid #2d8e6c; background: #3fb98f; color: #fff; font-weight: 700; }
+.btn-verde:hover { background: #37a982; }
+
+.btn-cerrar {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1px solid #e5eae8;
+  background: #f7faf9;
+  color: #6f7e79;
+  font-size: 15px;
+}
+
+.btn-cerrar.naranja-claro {
+  border-color: #f0dcc2;
+  background: #fffaf3;
+  color: #b07c44;
+}
+
+.btn-cerrar.naranja-claro:hover {
+  background: #fbeeda;
+}
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  z-index: 95;
+  padding: 13px 18px;
+  border-radius: 13px;
+  background: #17211f;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+  box-shadow: 0 14px 30px -12px rgba(23, 33, 31, 0.5);
+}
+
+.toast::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: #3fb98f;
+}
+
+/* menu de abajo, solo en celular */
+.menu-movil {
+  display: none;
+}
