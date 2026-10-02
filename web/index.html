@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Casa Hogar</title>
+    <h2>Estado de sincronización</h2>
+    <p>
+        Estado:
+        <strong id="estado">Conectando...</strong>
+    </p>
+
+    <p>
+        Documentos locales:
+        <strong id="productosLocales">0</strong>
+    </p>
+
+    <p>
+        Pendientes de sincronizar:
+        <strong id="pendientes">0</strong>
+    </p>
+</head>
+<body>
+
+    <h1>Casa Hogar - Demo CouchDB + PouchDB</h1>
+
+    <h2>Registrar producto</h2>
+
+    <input type="text" id="nombre" placeholder="Nombre">
+    <input type="text" id="categoria" placeholder="Categoría">
+    <input type="text" id="almacen" placeholder="Almacén">
+    <input type="number" id="cantidad" placeholder="Cantidad">
+    <input type="text" id="unidad" placeholder="Unidad">
+
+    <button id="btnAgregar">Agregar producto</button>
+    <h2>Productos registrados</h2>
+    <button id="btnMostrar">Mostrar productos</button>
+
+    <ul id="listaProductos"></ul>
+
+    <script src="https://cdn.jsdelivr.net/npm/pouchdb@9.0.0/dist/pouchdb.min.js"></script>
+    <script src="js/demo.js"></script>
+
+</body>
+</html>
