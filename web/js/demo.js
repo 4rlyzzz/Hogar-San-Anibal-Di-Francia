@@ -2,7 +2,7 @@ const db = new PouchDB("casa_hogar");
 
 // No se olviden colocar la contraseña :P
 const remoteDB = new PouchDB(
-    "http://casa_app:<CONTRASEÑA>@127.0.0.1:5984/casa_hogar"
+    "http://casa_app:CasaDemo123@127.0.0.1:5984/casa_hogar"
 );
 
 const estado = document.getElementById("estado");

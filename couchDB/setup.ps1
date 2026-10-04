@@ -1,125 +1,150 @@
 # ============================================
-# CONFIGURACIÓN AUTOMÁTICA DE CASA HOGAR
+# CASA HOGAR - CONFIGURACION AUTOMATICA
 # ============================================
 
 $CouchDB = "http://127.0.0.1:5984"
 $Database = "casa_hogar"
 
 Write-Host ""
-Write-Host "============================================"
-Write-Host "   CONFIGURACION DE CASA HOGAR"
-Write-Host "============================================"
+Write-Host "===================================="
+Write-Host "   CONFIGURACION CASA HOGAR"
+Write-Host "===================================="
 Write-Host ""
 
-
 # ============================================
-# DATOS DE ACCESO
+# CREDENCIALES
 # ============================================
 
-$AdminUser = Read-Host "Usuario administrador de CouchDB"
-$AdminPasswordSecure = Read-Host "Contraseña del administrador" -AsSecureString
-$AdminPassword = $AdminPasswordSecure | ConvertFrom-SecureString -AsPlainText
+$AdminUser = Read-Host "Usuario administrador"
+
+$AdminPasswordSecure = Read-Host "Contrasena administrador" -AsSecureString
+$AdminPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($AdminPasswordSecure)
+)
 
 $AppUser = "casa_app"
 
-$AppPasswordSecure = Read-Host "Contraseña para $AppUser" -AsSecureString
-$AppPassword = $AppPasswordSecure | ConvertFrom-SecureString -AsPlainText
-
+$AppPasswordSecure = Read-Host "Contrasena para casa_app" -AsSecureString
+$AppPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($AppPasswordSecure)
+)
 
 # ============================================
-# AUTENTICACION
+# AUTH HEADER
 # ============================================
+
+$AuthString = "$($AdminUser):$($AdminPassword)"
 
 $AdminAuth = @{
-    Authorization = "Basic " + [Convert]::ToBase64String(
-        [Text.Encoding]::ASCII.GetBytes(
-            "${AdminUser}:${AdminPassword}"
-        )
+    Authorization = "Basic " + `
+    [Convert]::ToBase64String(
+        [Text.Encoding]::UTF8.GetBytes($AuthString)
     )
 }
 
-
 # ============================================
-# COMPROBAR COUCHDB
+# FUNCION PARA CREAR BD SI NO EXISTE
 # ============================================
 
-Write-Host ""
-Write-Host "[1/6] Comprobando CouchDB..."
+function Ensure-Database {
 
-try {
-
-    $response = Invoke-RestMethod `
-        -Uri "$CouchDB/" `
-        -Headers $AdminAuth `
-        -Method Get
-
-    Write-Host "CouchDB encontrado correctamente."
-
-}
-catch {
+    param($DbName)
 
     Write-Host ""
-    Write-Host "ERROR: No se pudo conectar con CouchDB."
-    Write-Host "Verifica que CouchDB este iniciado."
-    exit 1
-}
-
-
-# ============================================
-# COMPROBAR BASE DE DATOS
-# ============================================
-
-Write-Host ""
-Write-Host "[2/6] Comprobando base de datos $Database..."
-
-try {
-
-    Invoke-RestMethod `
-        -Uri "$CouchDB/$Database" `
-        -Headers $AdminAuth `
-        -Method Get | Out-Null
-
-    Write-Host "La base de datos ya existe."
-
-}
-catch {
-
-    Write-Host "La base de datos no existe."
-    Write-Host "Creando $Database..."
+    Write-Host "Comprobando $DbName ..."
 
     try {
 
         Invoke-RestMethod `
-            -Uri "$CouchDB/$Database" `
+            -Uri "$CouchDB/$DbName" `
             -Headers $AdminAuth `
-            -Method Put | Out-Null
+            -Method Get | Out-Null
 
-        Write-Host "Base de datos creada."
+        Write-Host "$DbName ya existe."
 
     }
     catch {
 
-        Write-Host "ERROR: No se pudo crear la base de datos."
-        exit 1
+        Write-Host "$DbName no existe."
+        Write-Host "Creando..."
+
+        try {
+
+            Invoke-RestMethod `
+                -Uri "$CouchDB/$DbName" `
+                -Headers $AdminAuth `
+                -Method Put | Out-Null
+
+            Write-Host "$DbName creada."
+
+        }
+        catch {
+
+            Write-Host "ERROR creando $DbName"
+            Write-Host $_.Exception.Message
+            exit 1
+        }
     }
 }
 
-
 # ============================================
-# CREAR USUARIO DE LA APLICACION
+# [1/7] COUCHDB
 # ============================================
 
 Write-Host ""
-Write-Host "[3/6] Comprobando usuario $AppUser..."
+Write-Host "[1/7] Comprobando CouchDB..."
+
+try {
+
+    Invoke-RestMethod `
+        -Uri "$CouchDB/" `
+        -Headers $AdminAuth `
+        -Method Get | Out-Null
+
+    Write-Host "CouchDB encontrado."
+
+}
+catch {
+
+    Write-Host "ERROR conectando a CouchDB"
+    Write-Host $_.Exception.Message
+    exit 1
+}
+
+# ============================================
+# [2/7] SISTEMA
+# ============================================
+
+Write-Host ""
+Write-Host "[2/7] Bases internas..."
+
+Ensure-Database "_users"
+Ensure-Database "_replicator"
+Ensure-Database "_global_changes"
+
+# ============================================
+# [3/7] CASA_HOGAR
+# ============================================
+
+Write-Host ""
+Write-Host "[3/7] Base principal..."
+
+Ensure-Database $Database
+
+# ============================================
+# [4/7] USUARIO
+# ============================================
+
+Write-Host ""
+Write-Host "[4/7] Usuario casa_app..."
 
 $UserId = "org.couchdb.user:$AppUser"
 
 $UserBody = @{
-    _id = $UserId
     name = $AppUser
-    type = "user"
-    roles = @()
     password = $AppPassword
+    roles = @()
+    type = "user"
 } | ConvertTo-Json
 
 try {
@@ -129,25 +154,22 @@ try {
         -Headers $AdminAuth `
         -Method Put `
         -ContentType "application/json" `
-        -Body $UserBody | Out-Null
+        -Body $UserBody
 
-    Write-Host "Usuario $AppUser creado/actualizado."
+    Write-Host "Usuario creado."
 
 }
 catch {
 
-    Write-Host "ERROR: No se pudo crear el usuario."
-    Write-Host $_.Exception.Message
-    exit 1
+    Write-Host "Usuario ya existe o error."
 }
 
-
 # ============================================
-# CONFIGURAR PERMISOS
+# [5/7] PERMISOS
 # ============================================
 
 Write-Host ""
-Write-Host "[4/6] Configurando permisos..."
+Write-Host "[5/7] Permisos..."
 
 $SecurityBody = @{
     admins = @{
@@ -160,7 +182,6 @@ $SecurityBody = @{
     }
 } | ConvertTo-Json -Depth 5
 
-
 try {
 
     Invoke-RestMethod `
@@ -168,37 +189,35 @@ try {
         -Headers $AdminAuth `
         -Method Put `
         -ContentType "application/json" `
-        -Body $SecurityBody | Out-Null
+        -Body $SecurityBody
 
-    Write-Host "$AppUser agregado como miembro de $Database."
+    Write-Host "Permisos configurados."
 
 }
 catch {
 
-    Write-Host "ERROR: No se pudieron configurar los permisos."
-    exit 1
+    Write-Host "Error configurando permisos."
 }
 
-
 # ============================================
-# CARGAR DATOS INICIALES
+# [6/7] DATOS
 # ============================================
 
 Write-Host ""
-Write-Host "[5/6] Cargando datos iniciales..."
+Write-Host "[6/7] Datos iniciales..."
 
-$JsonPath = Join-Path $PSScriptRoot "datos_iniciales.json"
+$JsonPath = Join-Path $PSScriptRoot "datos_actuales.json"
 
 if (!(Test-Path $JsonPath)) {
-
     Write-Host "ERROR: No existe:"
     Write-Host $JsonPath
     exit 1
 }
 
+Write-Host "Archivo encontrado:"
+Write-Host $JsonPath
 
 $Datos = Get-Content $JsonPath -Raw -Encoding UTF8
-
 
 try {
 
@@ -209,40 +228,40 @@ try {
         -ContentType "application/json" `
         -Body $Datos
 
-    Write-Host "Datos iniciales enviados."
+    Write-Host ""
+    Write-Host "Respuesta de CouchDB:"
+
+    $Resultado | Format-Table
+
+    Write-Host ""
+    Write-Host "Datos enviados."
 
 }
 catch {
 
-    Write-Host "ERROR: No se pudieron cargar los datos."
+    Write-Host ""
+    Write-Host "ERROR cargando datos:"
     Write-Host $_.Exception.Message
+
+    if ($_.ErrorDetails.Message) {
+        Write-Host ""
+        Write-Host "Respuesta de CouchDB:"
+        Write-Host $_.ErrorDetails.Message
+    }
+
     exit 1
 }
 
-
 # ============================================
-# FINAL
+# [7/7] FINAL
 # ============================================
 
 Write-Host ""
-Write-Host "[6/6] Configuracion terminada."
-Write-Host ""
-
-Write-Host "============================================"
-Write-Host "       CASA HOGAR LISTO"
-Write-Host "============================================"
-Write-Host ""
-
-Write-Host "Base de datos:"
-Write-Host "  $Database"
+Write-Host "===================================="
+Write-Host "CONFIGURACION TERMINADA"
+Write-Host "===================================="
 
 Write-Host ""
-
-Write-Host "Usuario de aplicacion:"
-Write-Host "  $AppUser"
-
-Write-Host ""
-
-Write-Host "Documentos iniciales cargados."
-
+Write-Host "Base de datos: $Database"
+Write-Host "Usuario: $AppUser"
 Write-Host ""
