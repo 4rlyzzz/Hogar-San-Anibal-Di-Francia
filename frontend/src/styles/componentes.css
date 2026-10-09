@@ -19,12 +19,8 @@
 
 .tarjeta-top {
   display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.tarjeta-top.arriba {
   align-items: flex-start;
+  gap: 12px;
 }
 
 .tarjeta-codigo {
@@ -45,10 +41,31 @@
   margin-bottom: 4px;
 }
 
+.tarjeta-descripcion {
+  font-size: 12px;
+  color: #6f7e79;
+  margin-bottom: 4px;
+}
+
 .tarjeta-meta {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11.5px;
   color: #7c8b86;
+}
+
+.btn-agregar {
+  margin-left: auto;
+  padding: 9px 14px;
+  border-radius: 11px;
+  border: 1px solid #2d8e6c;
+  background: #3fb98f;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.btn-agregar:hover {
+  background: #37a982;
 }
 
 .etiqueta {
@@ -61,33 +78,21 @@
   white-space: nowrap;
 }
 
-.barra {
-  height: 8px;
-  border-radius: 99px;
-  background: #eef2f1;
-  overflow: hidden;
-  margin-bottom: -8px;
+.aviso-minimo-cantidad {
+  margin-left: auto;
+  font-weight: 800;
+  font-size: 20px;
+  white-space: nowrap;
 }
 
-.barra-relleno {
-  height: 100%;
-  border-radius: 99px;
+.aviso-minimo-cantidad span {
+  font-weight: 600;
+  font-size: 12px;
 }
 
-.barra-relleno.verde { background: #3fb98f; }
-.barra-relleno.naranja { background: #e08b2f; }
-.barra-relleno.rojo { background: #d1544f; }
-
-.barra-texto {
+.botones {
   display: flex;
-  justify-content: space-between;
-  font-size: 11.5px;
-  color: #6f7e79;
-}
-
-.barra-texto b {
-  font-family: 'IBM Plex Mono', monospace;
-  color: #17211f;
+  gap: 8px;
 }
 
 .aviso-minimo {
@@ -462,6 +467,7 @@
 }
 
 .campo input,
+.campo select,
 .input-fijo {
   width: 100%;
   padding: 12px 13px;
@@ -470,12 +476,29 @@
   background: #f9fbfa;
   font-size: 13px;
   font-weight: 600;
+  color: #17211f;
   outline: none;
 }
 
-.campo input:focus {
+.campo input:focus,
+.campo select:focus {
   border-color: #a9dcc6;
-  background: #fff;
+  background-color: #fff;
+}
+
+/* desplegable: sin negrita y con flecha propia */
+.campo select {
+  appearance: none;
+  cursor: pointer;
+  font-weight: 500;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%237c8b86' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+.campo select option {
+  font-weight: 400;
 }
 
 .input-fijo {
@@ -506,12 +529,10 @@
   font-size: 12.5px;
 }
 
-.nota {
-  padding: 10px 12px;
-  border-radius: 11px;
-  background: #f1f5f4;
-  color: #7c8b86;
-  font-size: 11.5px;
+.tipo-ingreso {
+  border-color: #a9dcc6;
+  background: #effaf5;
+  color: #2d8e6c;
 }
 
 .error {
@@ -589,6 +610,14 @@
   font-size: 13px;
 }
 
+.fila-insumo small {
+  display: block;
+  margin-top: 3px;
+  font-weight: 500;
+  font-size: 11px;
+  color: #7c8b86;
+}
+
 .pastilla {
   padding: 5px 9px;
   border-radius: 999px;
@@ -616,4 +645,43 @@
 .tabla .vacio {
   margin: 0;
   border: 0;
+}
+
+/* ---------- donadores ---------- */
+.form-donador {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  background: #fff;
+  border: 1px solid #e5eae8;
+  border-radius: 18px;
+}
+
+.form-donador .campo {
+  flex: 1;
+  min-width: 200px;
+}
+
+.form-donador .btn {
+  flex: none;
+  padding: 12px 18px;
+  font-size: 13px;
+}
+
+.form-donador .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.donador-fila {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 120px;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 20px;
+  border-bottom: 1px solid #f2f5f4;
+  font-size: 12px;
 }

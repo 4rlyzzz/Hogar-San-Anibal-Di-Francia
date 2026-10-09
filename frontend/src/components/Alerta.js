@@ -1,30 +1,31 @@
 import { iconoAlerta, iconoObjetivo, iconoDonar } from '../assets/icons.js';
-
-const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+import { diasParaVencer, textoVencimiento } from './Comunes.js';
 
 // excedente = stock - consumo diario * dias que faltan para vencer
 function calcularExcedente(item) {
-  return item.cantidad - item.consumoDiario * item.diasParaVencer;
+  return item.cantidad - item.consumoDiario * diasParaVencer(item);
 }
 
 // se muestra en todas las pestañas: la alerta abierta o el boton para volver a abrirla
+// solo aplica si quedan 15 dias o menos y sobra producto
 export function Alerta(estado) {
   // por ahora solo la avena tiene datos de consumo para la alerta
   const avena = estado.alimentos.find(item => item.consumoDiario);
-  if (!avena || calcularExcedente(avena) <= 0) return '';
+  if (!avena) return '';
+
+  const dias = diasParaVencer(avena);
+  if (dias <= 0 || dias > 15 || calcularExcedente(avena) <= 0) return '';
 
   return estado.alertaAbierta ? AlertaSobrestock(avena) : BotonAlerta();
 }
 
 export function AlertaSobrestock(item) {
-  const consumo = item.consumoDiario * item.diasParaVencer;
+  const dias = diasParaVencer(item);
+  const consumo = item.consumoDiario * dias;
   const excedente = calcularExcedente(item);
   const pctConsumo = Math.round(consumo / item.cantidad * 100);
-  const grados = Math.round(item.diasParaVencer / 30 * 360);
-
-  const fechaVence = new Date();
-  fechaVence.setDate(fechaVence.getDate() + item.diasParaVencer);
-  const fechaTexto = `${fechaVence.getDate()} ${meses[fechaVence.getMonth()]} ${fechaVence.getFullYear()}`;
+  const grados = Math.round(dias / 30 * 360);
+  const fechaTexto = textoVencimiento(item).replace('Vence ', '');
 
   return `
     <div class="alerta-contenedor">
@@ -48,12 +49,12 @@ export function AlertaSobrestock(item) {
             <div class="vencimiento">
               <div class="anillo" style="background: conic-gradient(#e07b28 0deg ${grados}deg, #f4e3cf ${grados}deg 360deg)">
                 <div class="anillo-centro">
-                  <b>${item.diasParaVencer}</b>
+                  <b>${dias}</b>
                   <span>DÍAS</span>
                 </div>
               </div>
               <div class="vencimiento-texto">
-                <b>Vence en ${item.diasParaVencer} días</b>
+                <b>Vence en ${dias} días</b>
                 <span>${fechaTexto}</span>
               </div>
             </div>
@@ -84,7 +85,7 @@ export function AlertaSobrestock(item) {
             ${iconoObjetivo}
             <div>
               <b>Priorizar consumo interno</b>
-              <span>Incluir avena en el menú de desayuno de los próximos ${item.diasParaVencer} días.</span>
+              <span>Incluir avena en el menú de desayuno de los próximos ${dias} días.</span>
             </div>
           </div>
           <div class="consejo consejo-verde">

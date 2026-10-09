@@ -5,6 +5,7 @@ const secciones = [
   { nombre: 'Alimentos', icono: 'AL' },
   { nombre: 'Salud', icono: 'SA' },
   { nombre: 'Historial', icono: 'HI' },
+  { nombre: 'Donadores', icono: 'DO' },
 ];
 
 export function Layout() {

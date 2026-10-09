@@ -205,6 +205,22 @@
   .fila-fecha { grid-area: fecha; font-size: 10.5px; }
   .fila-responsable { grid-area: responsable; font-size: 11px; }
 
+  .donador-fila {
+    grid-template-columns: 1fr auto;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid #e5eae8;
+    border-radius: 16px;
+  }
+
+  .donador-fila .fila-cantidad {
+    display: none;
+  }
+
+  .form-donador .btn {
+    flex: 1;
+  }
+
   /* menu de abajo */
   .menu-movil {
     display: flex;

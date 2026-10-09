@@ -21,6 +21,10 @@ button {
   cursor: pointer;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .mono {
   font-family: 'IBM Plex Mono', monospace;
 }
@@ -315,6 +319,8 @@ button {
 .btn-gris:hover { background: #edf2f0; }
 .btn-azul { border: 1px solid #d8e6ef; background: #f2f8fc; color: #23698f; }
 .btn-azul:hover { background: #e4f0f8; }
+.btn-verde-claro { border: 1px solid #dceee6; background: #effaf5; color: #2d8e6c; }
+.btn-verde-claro:hover { background: #e2f4ec; }
 .btn-blanco { border: 1px solid #e0e7e4; background: #fff; color: #3d4b46; }
 .btn-verde { border: 1px solid #2d8e6c; background: #3fb98f; color: #fff; font-weight: 700; }
 .btn-verde:hover { background: #37a982; }

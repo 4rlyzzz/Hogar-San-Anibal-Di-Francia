@@ -1,35 +1,7 @@
-export function porcentaje(item) {
-  return Math.round(item.cantidad / item.maximo * 100);
-}
+import { escapar, colorVencimiento, textoVencimiento } from './Comunes.js';
 
-export function TarjetaAlimento(item) {
-  const pct = porcentaje(item);
-
-  return `
-    <div class="tarjeta">
-      <div class="tarjeta-top">
-        <div class="tarjeta-codigo ${item.color}">${item.codigo}</div>
-        <div>
-          <div class="tarjeta-nombre">${item.nombre}</div>
-          <div class="tarjeta-meta">${item.cantidad} ${item.unidad}</div>
-        </div>
-        <span class="etiqueta ${item.color}">● ${item.vence}</span>
-      </div>
-
-      <div class="barra">
-        <div class="barra-relleno ${item.color}" style="width: ${pct}%"></div>
-      </div>
-      <div class="barra-texto">
-        <span>Stock restante</span>
-        <b>${pct}%</b>
-      </div>
-
-      <button class="btn btn-gris" data-accion="registrar" data-categoria="Alimentos" data-id="${item.id}">Registrar salida</button>
-    </div>
-  `;
-}
-
-export function TarjetaSalud(item) {
+// misma tarjeta para alimentos y salud
+export function Tarjeta(item, categoria) {
   let color = 'verde';
   let mensaje = 'Stock sobre el mínimo';
   if (item.cantidad < item.minimo) {
@@ -40,26 +12,41 @@ export function TarjetaSalud(item) {
     mensaje = 'Revisar consumo';
   }
 
+  const esSalud = categoria === 'Salud';
+  const colorVence = colorVencimiento(item);
+
+  let extra = item.lote ? `Lote ${escapar(item.lote)}` : '';
+  if (esSalud && item.paraNino) {
+    extra += `${extra ? ' · ' : ''}Para: ${escapar(item.paraNino)}`;
+  }
+
   return `
     <div class="tarjeta">
-      <div class="tarjeta-top arriba">
-        <div class="tarjeta-codigo ${item.color}">${item.codigo}</div>
+      <div class="tarjeta-top">
+        <div class="tarjeta-codigo ${colorVence}">${escapar(item.codigo)}</div>
         <div>
-          <div class="tarjeta-nombre">${item.nombre}</div>
-          <div class="tarjeta-meta">Lote ${item.lote} · ${item.cantidad} ${item.unidad}</div>
+          <div class="tarjeta-nombre">${escapar(item.nombre)}</div>
+          <div class="tarjeta-descripcion">${escapar(item.descripcion)}</div>
+          ${extra ? `<div class="tarjeta-meta">${extra}</div>` : ''}
         </div>
-        <span class="etiqueta ${item.color}">${item.vence}</span>
+        <span class="etiqueta ${colorVence}">${textoVencimiento(item)}</span>
       </div>
 
       <div class="aviso-minimo ${color}">
         <span class="aviso-minimo-linea"></span>
         <div>
           <div class="aviso-minimo-titulo">${mensaje}</div>
-          <div class="aviso-minimo-nota">mín. ${item.minimo} · actual ${item.cantidad}</div>
+          <div class="aviso-minimo-nota">mín. ${item.minimo} ${escapar(item.unidad)}</div>
         </div>
+        <div class="aviso-minimo-cantidad">${item.cantidad} <span>${escapar(item.unidad)}</span></div>
       </div>
 
-      <button class="btn btn-azul" data-accion="registrar" data-categoria="Salud" data-id="${item.id}">Registrar uso</button>
+      <div class="botones">
+        <button class="btn ${esSalud ? 'btn-azul' : 'btn-gris'}" data-accion="registrar" data-tipo="Salida" data-categoria="${categoria}" data-id="${item.id}">
+          ${esSalud ? 'Registrar uso' : 'Registrar salida'}
+        </button>
+        <button class="btn btn-verde-claro" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">+ Ingreso</button>
+      </div>
     </div>
   `;
 }

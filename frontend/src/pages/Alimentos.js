@@ -1,17 +1,17 @@
-import { Encabezado, TituloSeccion, SinResultados, filtrarInsumos } from '../components/Comunes.js';
-import { TarjetaAlimento, porcentaje } from '../components/Tarjetas.js';
+import { Encabezado, TituloSeccion, SinResultados, filtrarInsumos, porVencer } from '../components/Comunes.js';
+import { Tarjeta } from '../components/Tarjetas.js';
 import { Alerta } from '../components/Alerta.js';
 
 export function paginaAlimentos(estado) {
-  const lista = filtrarInsumos(estado.alimentos, estado, item => porcentaje(item) <= 25);
-  const porVencer = estado.alimentos.filter(item => item.porVencer).length;
+  const lista = filtrarInsumos(estado.alimentos, estado);
+  const cantidadPorVencer = estado.alimentos.filter(porVencer).length;
 
-  const link = `<button class="link" data-accion="ver-todo">Ver todo el almacén</button>`;
+  const boton = `<button class="btn-agregar" data-accion="agregar-producto" data-categoria="Alimentos">+ Agregar producto</button>`;
 
   return `
-    ${Encabezado('Alimentos', `Actualizado hoy · 09:14 · ${estado.alimentos.length} insumos en almacén seco y frío`, estado.filtro)}
+    ${Encabezado('Alimentos', `Productos perecibles · ${estado.alimentos.length} insumos en almacén seco y frío`, estado.filtro)}
     ${Alerta(estado)}
-    ${TituloSeccion('AL', 'verde', 'Alimentos', `${lista.length} insumos · ${porVencer} por vencer`, link)}
-    ${lista.length ? `<div class="grilla">${lista.map(TarjetaAlimento).join('')}</div>` : SinResultados()}
+    ${TituloSeccion('AL', 'verde', 'Alimentos', `${lista.length} insumos · ${cantidadPorVencer} por vencer`, boton)}
+    ${lista.length ? `<div class="grilla">${lista.map(item => Tarjeta(item, 'Alimentos')).join('')}</div>` : SinResultados()}
   `;
 }
