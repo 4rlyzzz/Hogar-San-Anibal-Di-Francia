@@ -37,6 +37,19 @@ let seleccionado = null;
 document.querySelector('#app').innerHTML = Layout();
 fijarMenu(leerMenuFijo());
 render();
+quitarPantallaCarga();
+
+// la pantalla de carga se va cuando la app ya esta dibujada detras,
+// pero se queda un minimo para que el logo alcance a verse
+function quitarPantallaCarga() {
+  const pantalla = document.querySelector('#pantalla-carga');
+  const minimo = 1400;
+
+  setTimeout(() => {
+    pantalla.classList.add('oculta');
+    pantalla.addEventListener('transitionend', () => pantalla.remove(), { once: true });
+  }, Math.max(0, minimo - performance.now()));
+}
 
 // menu lateral: fijo abierto o que se abra al pasar el mouse; se recuerda en este navegador
 function leerMenuFijo() {
