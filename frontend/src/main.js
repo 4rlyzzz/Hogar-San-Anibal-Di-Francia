@@ -3,7 +3,10 @@ import './styles/global.css';
 import './styles/componentes.css';
 import './styles/responsive.css';
 
-import { db } from './db/database.js';
+import { obtenerDocumentos } from './db/database.js';
+import { guardarProductoDB } from './db/productos.js';
+import { guardarMovimientoDB } from './db/movimientos.js';
+import { guardarDonadorDB } from './db/donadores.js';
 
 import {
   alimentos,
@@ -19,7 +22,6 @@ import {
   ModalProducto,
   fechaActual
 } from './components/Modal.js';
-
 import { paginaAlimentos } from './pages/Alimentos.js';
 import { paginaSalud } from './pages/Salud.js';
 import { paginaHistorial } from './pages/Historial.js';
@@ -45,37 +47,6 @@ const paginas = {
 
 let seleccionado = null;
 
-// Guarda un documento nuevo o actualiza uno existente.
-async function guardarDocumento(documento) {
-  try {
-    const anterior = await db.get(documento._id);
-
-    await db.put({
-      ...anterior,
-      ...documento,
-      _rev: anterior._rev
-    });
-  } catch (error) {
-    if (error.status === 404) {
-      await db.put(documento);
-    } else {
-      throw error;
-    }
-  }
-}
-
-// Recupera los documentos locales.
-async function obtenerDocumentos() {
-  const resultado = await db.allDocs({
-    include_docs: true
-  });
-
-  return resultado.rows
-    .map(fila => fila.doc)
-    .filter(doc => doc && !doc._deleted);
-}
-
-// Carga los datos iniciales sin duplicarlos.
 async function cargarDatos() {
   let documentos = await obtenerDocumentos();
 
@@ -89,7 +60,7 @@ async function cargarDatos() {
 
   if (!tieneAlimentos) {
     for (const item of alimentos) {
-      await guardarDocumento({
+      await guardarProductoDB({
         ...item,
         _id: `producto:Alimentos:${item.id}`,
         tipo: 'producto',
@@ -100,7 +71,7 @@ async function cargarDatos() {
 
   if (!tieneSalud) {
     for (const item of salud) {
-      await guardarDocumento({
+      await guardarProductoDB({
         ...item,
         _id: `producto:Salud:${item.id}`,
         tipo: 'producto',
@@ -117,7 +88,7 @@ async function cargarDatos() {
 
   if (!tieneHistorial) {
     for (let i = 0; i < historial.length; i++) {
-      await guardarDocumento({
+      await guardarMovimientoDB({
         ...historial[i],
         _id: `movimiento:inicial:${i}`,
         tipo: 'movimiento',
@@ -133,20 +104,14 @@ async function cargarDatos() {
       doc.tipo === 'producto' &&
       ['Alimentos', 'Dulces', 'carnes'].includes(doc.categoria)
     )
-    .map(doc => ({
-      ...doc,
-      categoria: 'Alimentos'
-    }));
+    .map(doc => ({ ...doc, categoria: 'Alimentos' }));
 
   estado.salud = documentos
     .filter(doc =>
       doc.tipo === 'producto' &&
       ['Salud', 'medicinas', 'higiene'].includes(doc.categoria)
     )
-    .map(doc => ({
-      ...doc,
-      categoria: 'Salud'
-    }));
+    .map(doc => ({ ...doc, categoria: 'Salud' }));
 
   estado.historial = documentos
     .filter(doc => doc.tipo === 'movimiento')
@@ -171,7 +136,8 @@ cargarDatos().catch(error => {
 
 function render() {
   document.querySelector('#menu').innerHTML = Menu(estado.seccion);
-  document.querySelector('#menu-movil').innerHTML = MenuMovil(estado.seccion);
+  document.querySelector('#menu-movil').innerHTML =
+    MenuMovil(estado.seccion);
   document.querySelector('#contenido').innerHTML =
     paginas[estado.seccion](estado);
 }
@@ -193,11 +159,15 @@ function numero(id) {
 }
 
 function listaDe(categoria) {
-  return categoria === 'Salud' ? estado.salud : estado.alimentos;
+  return categoria === 'Salud'
+    ? estado.salud
+    : estado.alimentos;
 }
 
 function abrirModal(categoria, id, tipo) {
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(
+    i => i.id === Number(id)
+  );
 
   if (!item) {
     mostrarToast('No se encontró el producto');
@@ -258,7 +228,7 @@ async function leerDonador(error) {
     telefono
   };
 
-  await guardarDocumento(nuevoDonador);
+  await guardarDonadorDB(nuevoDonador);
   estado.donadores.push(nuevoDonador);
 
   return nombre;
@@ -322,14 +292,14 @@ async function guardarMovimiento() {
       para
     };
 
-    await guardarDocumento({
+    await guardarProductoDB({
       ...productoActualizado,
       _id: item._id || `producto:${categoria}:${item.id}`,
       tipo: 'producto',
       categoria
     });
 
-    await guardarDocumento(movimiento);
+    await guardarMovimientoDB(movimiento);
 
     Object.assign(item, productoActualizado);
     estado.historial.unshift(movimiento);
@@ -378,7 +348,8 @@ async function guardarProducto() {
   }
 
   if (categoria === 'Alimentos' && !vencimiento) {
-    error.textContent = 'Los alimentos necesitan fecha de vencimiento.';
+    error.textContent =
+      'Los alimentos necesitan fecha de vencimiento.';
     return;
   }
 
@@ -420,8 +391,8 @@ async function guardarProducto() {
       para
     };
 
-    await guardarDocumento(producto);
-    await guardarDocumento(movimiento);
+    await guardarProductoDB(producto);
+    await guardarMovimientoDB(movimiento);
 
     listaDe(categoria).push(producto);
     estado.historial.unshift(movimiento);
@@ -457,7 +428,7 @@ async function guardarDonador() {
       telefono
     };
 
-    await guardarDocumento(donador);
+    await guardarDonadorDB(donador);
     estado.donadores.push(donador);
 
     render();
@@ -468,7 +439,6 @@ async function guardarDonador() {
   }
 }
 
-// Acciones de los botones.
 document.addEventListener('click', e => {
   if (e.target.classList.contains('fondo-modal')) {
     cerrarModal();
@@ -483,15 +453,19 @@ document.addEventListener('click', e => {
       estado.seccion = boton.dataset.seccion;
       window.scrollTo(0, 0);
       break;
+
     case 'filtro':
       estado.filtro = boton.dataset.filtro;
       break;
+
     case 'cerrar-alerta':
       estado.alertaAbierta = false;
       break;
+
     case 'abrir-alerta':
       estado.alertaAbierta = true;
       break;
+
     case 'registrar':
       abrirModal(
         boton.dataset.categoria,
@@ -499,9 +473,11 @@ document.addEventListener('click', e => {
         boton.dataset.tipo
       );
       return;
+
     case 'agregar-producto':
       abrirModalProducto(boton.dataset.categoria);
       return;
+
     case 'cerrar-modal':
       cerrarModal();
       return;
@@ -510,28 +486,21 @@ document.addEventListener('click', e => {
   render();
 });
 
-// Formularios.
 document.addEventListener('submit', e => {
   e.preventDefault();
 
-  if (e.target.id === 'form-movimiento') {
-    guardarMovimiento();
-  }
-
-  if (e.target.id === 'form-producto') {
-    guardarProducto();
-  }
-
-  if (e.target.id === 'form-donador') {
-    guardarDonador();
-  }
+  if (e.target.id === 'form-movimiento') guardarMovimiento();
+  if (e.target.id === 'form-producto') guardarProducto();
+  if (e.target.id === 'form-donador') guardarDonador();
 });
 
-// Campos dinámicos de los formularios.
 document.addEventListener('change', e => {
   if (e.target.id === 'donador') {
     const nuevo = document.querySelector('#nuevo-donador');
-    if (nuevo) nuevo.hidden = e.target.value !== 'nuevo';
+
+    if (nuevo) {
+      nuevo.hidden = e.target.value !== 'nuevo';
+    }
   }
 
   if (e.target.id === 'unidad') {
