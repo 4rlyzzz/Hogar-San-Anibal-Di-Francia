@@ -1,10 +1,25 @@
+
 import './styles/global.css';
 import './styles/componentes.css';
 import './styles/responsive.css';
 
-import { alimentos, salud, historial, donadores, usuario } from './data/datos.js';
+import { db } from './db/database.js';
+
+import {
+  alimentos,
+  salud,
+  historial,
+  donadores,
+  usuario
+} from './data/datos.js';
+
 import { Layout, Menu, MenuMovil } from './layouts/MainLayout.js';
-import { ModalMovimiento, ModalProducto, fechaActual } from './components/Modal.js';
+import {
+  ModalMovimiento,
+  ModalProducto,
+  fechaActual
+} from './components/Modal.js';
+
 import { paginaAlimentos } from './pages/Alimentos.js';
 import { paginaSalud } from './pages/Salud.js';
 import { paginaHistorial } from './pages/Historial.js';
@@ -15,10 +30,10 @@ const estado = {
   filtro: 'Todos',
   busqueda: '',
   alertaAbierta: true,
-  alimentos,
-  salud,
-  historial,
-  donadores,
+  alimentos: [],
+  salud: [],
+  historial: [],
+  donadores: [],
 };
 
 const paginas = {
@@ -28,16 +43,137 @@ const paginas = {
   Donadores: paginaDonadores,
 };
 
-// lo que se esta registrando en el modal abierto
 let seleccionado = null;
+
+// Guarda un documento nuevo o actualiza uno existente.
+async function guardarDocumento(documento) {
+  try {
+    const anterior = await db.get(documento._id);
+
+    await db.put({
+      ...anterior,
+      ...documento,
+      _rev: anterior._rev
+    });
+  } catch (error) {
+    if (error.status === 404) {
+      await db.put(documento);
+    } else {
+      throw error;
+    }
+  }
+}
+
+// Recupera los documentos locales.
+async function obtenerDocumentos() {
+  const resultado = await db.allDocs({
+    include_docs: true
+  });
+
+  return resultado.rows
+    .map(fila => fila.doc)
+    .filter(doc => doc && !doc._deleted);
+}
+
+// Carga los datos iniciales sin duplicarlos.
+async function cargarDatos() {
+  let documentos = await obtenerDocumentos();
+
+  const tieneAlimentos = documentos.some(
+    doc => doc._id === 'producto:Alimentos:1'
+  );
+
+  const tieneSalud = documentos.some(
+    doc => doc._id === 'producto:Salud:1'
+  );
+
+  if (!tieneAlimentos) {
+    for (const item of alimentos) {
+      await guardarDocumento({
+        ...item,
+        _id: `producto:Alimentos:${item.id}`,
+        tipo: 'producto',
+        categoria: 'Alimentos'
+      });
+    }
+  }
+
+  if (!tieneSalud) {
+    for (const item of salud) {
+      await guardarDocumento({
+        ...item,
+        _id: `producto:Salud:${item.id}`,
+        tipo: 'producto',
+        categoria: 'Salud'
+      });
+    }
+  }
+
+  documentos = await obtenerDocumentos();
+
+  const tieneHistorial = documentos.some(
+    doc => doc.tipo === 'movimiento'
+  );
+
+  if (!tieneHistorial) {
+    for (let i = 0; i < historial.length; i++) {
+      await guardarDocumento({
+        ...historial[i],
+        _id: `movimiento:inicial:${i}`,
+        tipo: 'movimiento',
+        fechaOrden: String(i).padStart(5, '0')
+      });
+    }
+  }
+
+  documentos = await obtenerDocumentos();
+
+  estado.alimentos = documentos
+    .filter(doc =>
+      doc.tipo === 'producto' &&
+      ['Alimentos', 'Dulces', 'carnes'].includes(doc.categoria)
+    )
+    .map(doc => ({
+      ...doc,
+      categoria: 'Alimentos'
+    }));
+
+  estado.salud = documentos
+    .filter(doc =>
+      doc.tipo === 'producto' &&
+      ['Salud', 'medicinas', 'higiene'].includes(doc.categoria)
+    )
+    .map(doc => ({
+      ...doc,
+      categoria: 'Salud'
+    }));
+
+  estado.historial = documentos
+    .filter(doc => doc.tipo === 'movimiento')
+    .sort((a, b) =>
+      (b.fechaOrden || '').localeCompare(a.fechaOrden || '')
+    );
+
+  estado.donadores = documentos.filter(
+    doc => doc.tipo === 'donador'
+  );
+
+  render();
+}
 
 document.querySelector('#app').innerHTML = Layout();
 render();
 
+cargarDatos().catch(error => {
+  console.error('Error cargando datos:', error);
+  mostrarToast('Error al cargar los datos');
+});
+
 function render() {
   document.querySelector('#menu').innerHTML = Menu(estado.seccion);
   document.querySelector('#menu-movil').innerHTML = MenuMovil(estado.seccion);
-  document.querySelector('#contenido').innerHTML = paginas[estado.seccion](estado);
+  document.querySelector('#contenido').innerHTML =
+    paginas[estado.seccion](estado);
 }
 
 function mostrarToast(mensaje) {
@@ -47,7 +183,6 @@ function mostrarToast(mensaje) {
   setTimeout(() => (toast.innerHTML = ''), 2600);
 }
 
-// lee un input del formulario abierto
 function valor(id) {
   const input = document.querySelector('#' + id);
   return input ? input.value.trim() : '';
@@ -63,15 +198,26 @@ function listaDe(categoria) {
 
 function abrirModal(categoria, id, tipo) {
   const item = listaDe(categoria).find(i => i.id === Number(id));
+
+  if (!item) {
+    mostrarToast('No se encontró el producto');
+    return;
+  }
+
   seleccionado = { item, categoria, tipo };
 
-  document.querySelector('#modal').innerHTML = ModalMovimiento(item, categoria, tipo, estado.donadores);
+  document.querySelector('#modal').innerHTML =
+    ModalMovimiento(item, categoria, tipo, estado.donadores);
+
   document.querySelector('#cantidad').focus();
 }
 
 function abrirModalProducto(categoria) {
   seleccionado = { categoria };
-  document.querySelector('#modal').innerHTML = ModalProducto(categoria, estado.donadores);
+
+  document.querySelector('#modal').innerHTML =
+    ModalProducto(categoria, estado.donadores);
+
   document.querySelector('#nombre').focus();
 }
 
@@ -80,27 +226,47 @@ function cerrarModal() {
   document.querySelector('#modal').innerHTML = '';
 }
 
-// devuelve el nombre del donador elegido, '' si no hay, o null si falta completar el nuevo
-function leerDonador(error) {
+async function leerDonador(error) {
   const elegido = valor('donador');
+
   if (elegido === '') return '';
 
   if (elegido !== 'nuevo') {
-    return estado.donadores.find(d => d.id === Number(elegido)).nombre;
+    const donador = estado.donadores.find(
+      d => String(d.id) === elegido
+    );
+
+    return donador ? donador.nombre : '';
   }
 
   const nombre = valor('donador-nombre');
   const telefono = valor('donador-telefono');
+
   if (!nombre || !telefono) {
-    error.textContent = 'Completa el nombre y el número de contacto del donador.';
+    error.textContent =
+      'Completa el nombre y el número de contacto del donador.';
     return null;
   }
 
-  estado.donadores.push({ id: Date.now(), nombre, telefono });
+  const id = Date.now();
+
+  const nuevoDonador = {
+    _id: `donador:${id}`,
+    id,
+    tipo: 'donador',
+    nombre,
+    telefono
+  };
+
+  await guardarDocumento(nuevoDonador);
+  estado.donadores.push(nuevoDonador);
+
   return nombre;
 }
 
-function guardarMovimiento() {
+async function guardarMovimiento() {
+  if (!seleccionado) return;
+
   const { item, categoria, tipo } = seleccionado;
   const cantidad = numero('cantidad');
   const error = document.querySelector('#error');
@@ -109,49 +275,85 @@ function guardarMovimiento() {
     error.textContent = 'Ingresa una cantidad mayor que 0.';
     return;
   }
+
   if (tipo === 'Salida' && cantidad > item.cantidad) {
-    error.textContent = `No puedes sacar más de lo que hay (${item.cantidad} ${item.unidad}).`;
+    error.textContent =
+      `No puedes sacar más de lo que hay (${item.cantidad} ${item.unidad}).`;
     return;
   }
 
-  let donador = '';
-  if (tipo === 'Ingreso') {
-    donador = leerDonador(error);
-    if (donador === null) return;
+  try {
+    let donador = '';
+
+    if (tipo === 'Ingreso') {
+      donador = await leerDonador(error);
+      if (donador === null) return;
+    }
+
+    const cambio = tipo === 'Ingreso' ? cantidad : -cantidad;
+
+    const productoActualizado = {
+      ...item,
+      cantidad: Math.round((item.cantidad + cambio) * 100) / 100,
+      lote: valor('lote')
+    };
+
+    const para = valor('para');
+
+    if (categoria === 'Salud') {
+      productoActualizado.paraNino = para;
+    }
+
+    const fecha = fechaActual();
+    const idMovimiento = Date.now();
+
+    const movimiento = {
+      _id: `movimiento:${idMovimiento}`,
+      tipo: 'movimiento',
+      fecha,
+      fechaOrden: new Date().toISOString(),
+      insumo: item.nombre,
+      categoria,
+      movimiento: tipo,
+      cantidad,
+      unidad: item.unidad,
+      responsable: usuario.nombre,
+      donador,
+      para
+    };
+
+    await guardarDocumento({
+      ...productoActualizado,
+      _id: item._id || `producto:${categoria}:${item.id}`,
+      tipo: 'producto',
+      categoria
+    });
+
+    await guardarDocumento(movimiento);
+
+    Object.assign(item, productoActualizado);
+    estado.historial.unshift(movimiento);
+
+    cerrarModal();
+    render();
+    mostrarToast('Registro guardado · ' + item.nombre);
+  } catch (error) {
+    console.error('Error guardando movimiento:', error);
+    mostrarToast('No se pudo guardar el movimiento');
   }
-
-  // ingreso suma, salida resta
-  const cambio = tipo === 'Ingreso' ? cantidad : -cantidad;
-  item.cantidad = Math.round((item.cantidad + cambio) * 100) / 100;
-  item.lote = valor('lote');
-
-  const para = valor('para');
-  if (categoria === 'Salud') item.paraNino = para;
-
-  estado.historial.unshift({
-    fecha: fechaActual(),
-    insumo: item.nombre,
-    categoria,
-    movimiento: tipo,
-    cantidad,
-    unidad: item.unidad,
-    responsable: usuario.nombre,
-    donador,
-    para,
-  });
-
-  cerrarModal();
-  render();
-  mostrarToast('Registro guardado · ' + item.nombre);
 }
 
-function guardarProducto() {
+async function guardarProducto() {
+  if (!seleccionado) return;
+
   const { categoria } = seleccionado;
   const error = document.querySelector('#error');
 
   const nombre = valor('nombre');
   const cantidad = numero('cantidad');
-  const unidad = valor('unidad') === 'otro' ? valor('unidad-otro') : valor('unidad');
+  const unidad = valor('unidad') === 'otro'
+    ? valor('unidad-otro')
+    : valor('unidad');
   const minimo = numero('minimo');
   const vencimiento = valor('vencimiento');
 
@@ -159,75 +361,114 @@ function guardarProducto() {
     error.textContent = 'Escribe el nombre del producto.';
     return;
   }
+
   if (!cantidad || cantidad <= 0) {
     error.textContent = 'Ingresa una cantidad mayor que 0.';
     return;
   }
+
   if (!unidad) {
     error.textContent = 'Elige la unidad o escríbela en "Otro".';
     return;
   }
+
   if (isNaN(minimo) || minimo < 0) {
     error.textContent = 'El stock mínimo debe ser un número.';
     return;
   }
+
   if (categoria === 'Alimentos' && !vencimiento) {
     error.textContent = 'Los alimentos necesitan fecha de vencimiento.';
     return;
   }
 
-  const donador = leerDonador(error);
-  if (donador === null) return;
+  try {
+    const donador = await leerDonador(error);
+    if (donador === null) return;
 
-  const para = valor('para');
+    const para = valor('para');
+    const id = Date.now();
 
-  listaDe(categoria).push({
-    id: Date.now(),
-    codigo: nombre.slice(0, 2).toUpperCase(),
-    nombre,
-    descripcion: valor('descripcion'),
-    cantidad,
-    minimo,
-    unidad,
-    vencimiento: vencimiento || null,
-    lote: valor('lote'),
-    paraNino: para,
-  });
+    const producto = {
+      _id: `producto:${categoria}:${id}`,
+      id,
+      tipo: 'producto',
+      categoria,
+      codigo: nombre.slice(0, 2).toUpperCase(),
+      nombre,
+      descripcion: valor('descripcion'),
+      cantidad,
+      minimo,
+      unidad,
+      vencimiento: vencimiento || null,
+      lote: valor('lote'),
+      paraNino: para
+    };
 
-  // el producto nuevo cuenta como su primer ingreso
-  estado.historial.unshift({
-    fecha: fechaActual(),
-    insumo: nombre,
-    categoria,
-    movimiento: 'Ingreso',
-    cantidad,
-    unidad,
-    responsable: usuario.nombre,
-    donador,
-    para,
-  });
+    const movimiento = {
+      _id: `movimiento:${Date.now()}`,
+      tipo: 'movimiento',
+      fecha: fechaActual(),
+      fechaOrden: new Date().toISOString(),
+      insumo: nombre,
+      categoria,
+      movimiento: 'Ingreso',
+      cantidad,
+      unidad,
+      responsable: usuario.nombre,
+      donador,
+      para
+    };
 
-  cerrarModal();
-  estado.filtro = 'Todos';
-  render();
-  mostrarToast('Producto agregado · ' + nombre);
+    await guardarDocumento(producto);
+    await guardarDocumento(movimiento);
+
+    listaDe(categoria).push(producto);
+    estado.historial.unshift(movimiento);
+
+    cerrarModal();
+    estado.filtro = 'Todos';
+    render();
+    mostrarToast('Producto agregado · ' + nombre);
+  } catch (error) {
+    console.error('Error guardando producto:', error);
+    mostrarToast('No se pudo guardar el producto');
+  }
 }
 
-function guardarDonador() {
+async function guardarDonador() {
   const nombre = valor('nuevo-nombre');
   const telefono = valor('nuevo-telefono');
 
   if (!nombre || !telefono) {
-    document.querySelector('#error').textContent = 'Completa el nombre y el número de contacto.';
+    document.querySelector('#error').textContent =
+      'Completa el nombre y el número de contacto.';
     return;
   }
 
-  estado.donadores.push({ id: Date.now(), nombre, telefono });
-  render();
-  mostrarToast('Donador agregado · ' + nombre);
+  try {
+    const id = Date.now();
+
+    const donador = {
+      _id: `donador:${id}`,
+      id,
+      tipo: 'donador',
+      nombre,
+      telefono
+    };
+
+    await guardarDocumento(donador);
+    estado.donadores.push(donador);
+
+    render();
+    mostrarToast('Donador agregado · ' + nombre);
+  } catch (error) {
+    console.error('Error guardando donador:', error);
+    mostrarToast('No se pudo guardar el donador');
+  }
 }
 
-// todos los botones tienen data-accion
+// Acciones de los botones.
 document.addEventListener('click', e => {
   if (e.target.classList.contains('fondo-modal')) {
     cerrarModal();
@@ -252,7 +493,11 @@ document.addEventListener('click', e => {
       estado.alertaAbierta = true;
       break;
     case 'registrar':
-      abrirModal(boton.dataset.categoria, boton.dataset.id, boton.dataset.tipo);
+      abrirModal(
+        boton.dataset.categoria,
+        boton.dataset.id,
+        boton.dataset.tipo
+      );
       return;
     case 'agregar-producto':
       abrirModalProducto(boton.dataset.categoria);
@@ -265,23 +510,37 @@ document.addEventListener('click', e => {
   render();
 });
 
-// cada formulario tiene su id
+// Formularios.
 document.addEventListener('submit', e => {
   e.preventDefault();
-  if (e.target.id === 'form-movimiento') guardarMovimiento();
-  if (e.target.id === 'form-producto') guardarProducto();
-  if (e.target.id === 'form-donador') guardarDonador();
+
+  if (e.target.id === 'form-movimiento') {
+    guardarMovimiento();
+  }
+
+  if (e.target.id === 'form-producto') {
+    guardarProducto();
+  }
+
+  if (e.target.id === 'form-donador') {
+    guardarDonador();
+  }
 });
 
-// mostrar los campos extra solo si se elige "+ Nuevo donador" u "Otro"
+// Campos dinámicos de los formularios.
 document.addEventListener('change', e => {
   if (e.target.id === 'donador') {
-    document.querySelector('#nuevo-donador').hidden = e.target.value !== 'nuevo';
+    const nuevo = document.querySelector('#nuevo-donador');
+    if (nuevo) nuevo.hidden = e.target.value !== 'nuevo';
   }
+
   if (e.target.id === 'unidad') {
     const otro = document.querySelector('#unidad-otro');
-    otro.hidden = e.target.value !== 'otro';
-    if (!otro.hidden) otro.focus();
+
+    if (otro) {
+      otro.hidden = e.target.value !== 'otro';
+      if (!otro.hidden) otro.focus();
+    }
   }
 });
 

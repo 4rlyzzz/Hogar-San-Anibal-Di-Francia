@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.local
 
 # Dependencias de Node.js
 node_modules/
