@@ -4,14 +4,16 @@ import './styles/responsive.css';
 
 import { alimentos, salud, historial, donadores, usuario } from './data/datos.js';
 import { Layout, Menu, MenuMovil } from './layouts/MainLayout.js';
-import { ModalMovimiento, ModalProducto, fechaActual } from './components/Modal.js';
+import { ModalMovimiento, ModalProducto, ModalElegir, ModalDonador, fechaActual } from './components/Modal.js';
+import { paginaInicio } from './pages/Inicio.js';
 import { paginaAlimentos } from './pages/Alimentos.js';
 import { paginaSalud } from './pages/Salud.js';
 import { paginaHistorial } from './pages/Historial.js';
 import { paginaDonadores } from './pages/Donadores.js';
 
 const estado = {
-  seccion: 'Alimentos',
+  seccion: 'Inicio',
+  grafico: { vista: 'Movimientos', periodo: 'Mes', categoria: 'Alimentos' },
   filtro: 'Todos',
   busqueda: '',
   alertaAbierta: true,
@@ -22,6 +24,7 @@ const estado = {
 };
 
 const paginas = {
+  Inicio: paginaInicio,
   Alimentos: paginaAlimentos,
   Salud: paginaSalud,
   Historial: paginaHistorial,
@@ -32,12 +35,38 @@ const paginas = {
 let seleccionado = null;
 
 document.querySelector('#app').innerHTML = Layout();
+fijarMenu(leerMenuFijo());
 render();
+
+// menu lateral: fijo abierto o que se abra al pasar el mouse; se recuerda en este navegador
+function leerMenuFijo() {
+  try {
+    return localStorage.getItem('menu-fijo') === 'si';
+  } catch {
+    return false;
+  }
+}
+
+function fijarMenu(fijo) {
+  document.body.classList.toggle('menu-fijo', fijo);
+  document.querySelector('#fijar-menu span').textContent = fijo ? 'Soltar menú' : 'Fijar menú';
+  try {
+    localStorage.setItem('menu-fijo', fijo ? 'si' : 'no');
+  } catch {
+    // sin almacenamiento solo dura hasta recargar
+  }
+}
 
 function render() {
   document.querySelector('#menu').innerHTML = Menu(estado.seccion);
   document.querySelector('#menu-movil').innerHTML = MenuMovil(estado.seccion);
   document.querySelector('#contenido').innerHTML = paginas[estado.seccion](estado);
+
+  // el css usa la seccion actual (en celular, Inicio no muestra el buscador)
+  document.body.dataset.seccion = estado.seccion;
+
+  // los graficos de tiempo empiezan mostrando lo mas reciente (a la derecha)
+  document.querySelectorAll('[data-al-final]').forEach(s => (s.scrollLeft = s.scrollWidth));
 }
 
 function mostrarToast(mensaje) {
@@ -73,6 +102,23 @@ function abrirModalProducto(categoria) {
   seleccionado = { categoria };
   document.querySelector('#modal').innerHTML = ModalProducto(categoria, estado.donadores);
   document.querySelector('#nombre').focus();
+}
+
+function abrirModalDonador() {
+  seleccionado = null;
+  document.querySelector('#modal').innerHTML = ModalDonador();
+  document.querySelector('#nuevo-nombre').focus();
+}
+
+// el "+" depende de la pestaña: abre su formulario, o pregunta que agregar en Inicio e Historial
+function agregar() {
+  if (estado.seccion === 'Alimentos' || estado.seccion === 'Salud') {
+    abrirModalProducto(estado.seccion);
+  } else if (estado.seccion === 'Donadores') {
+    abrirModalDonador();
+  } else {
+    document.querySelector('#modal').innerHTML = ModalElegir();
+  }
 }
 
 function cerrarModal() {
@@ -223,6 +269,7 @@ function guardarDonador() {
   }
 
   estado.donadores.push({ id: Date.now(), nombre, telefono });
+  cerrarModal();
   render();
   mostrarToast('Donador agregado · ' + nombre);
 }
@@ -245,6 +292,9 @@ document.addEventListener('click', e => {
     case 'filtro':
       estado.filtro = boton.dataset.filtro;
       break;
+    case 'grafico':
+      estado.grafico[boton.dataset.campo] = boton.dataset.valor;
+      break;
     case 'cerrar-alerta':
       estado.alertaAbierta = false;
       break;
@@ -254,8 +304,18 @@ document.addEventListener('click', e => {
     case 'registrar':
       abrirModal(boton.dataset.categoria, boton.dataset.id, boton.dataset.tipo);
       return;
+    case 'agregar':
+      agregar();
+      return;
+    case 'fijar-menu':
+      fijarMenu(!document.body.classList.contains('menu-fijo'));
+      boton.blur();
+      return;
     case 'agregar-producto':
       abrirModalProducto(boton.dataset.categoria);
+      return;
+    case 'agregar-donador':
+      abrirModalDonador();
       return;
     case 'cerrar-modal':
       cerrarModal();

@@ -1,15 +1,12 @@
 import { usuario } from '../data/datos.js';
-import { escapar, colorVencimiento } from './Comunes.js';
-
-const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+import { iconoAlimentos, iconoSalud, iconoDonadores } from '../assets/icons.js';
+import { escapar, colorVencimiento, textoFecha } from './Comunes.js';
 
 const unidadesAlimentos = ['kg', 'g', 'L', 'latas', 'bolsas', 'paquetes', 'sacos', 'cajas', 'unidades'];
 const unidadesSalud = ['frascos', 'blísters', 'sobres', 'cajas', 'tabletas', 'paquetes', 'L', 'unidades'];
 
 export function fechaActual() {
-  const d = new Date();
-  const dos = n => String(n).padStart(2, '0');
-  return `${dos(d.getDate())} ${meses[d.getMonth()]} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+  return textoFecha(new Date());
 }
 
 // lista de donadores + opcion para registrar uno nuevo ahi mismo
@@ -131,6 +128,15 @@ export function ModalProducto(categoria, donadores) {
 
         <div class="modal-cuerpo">
           <div class="campo">
+            <label>CATEGORÍA</label>
+            <div class="filtros selector-categoria">
+              ${['Alimentos', 'Salud'].map(c => `
+                <button type="button" class="${c === categoria ? 'activo' : ''}" data-accion="agregar-producto" data-categoria="${c}">${c}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="campo">
             <label>NOMBRE</label>
             <input id="nombre" type="text" placeholder="${esSalud ? 'Ej. Ibuprofeno 400 mg' : 'Ej. Fideos Don Vittorio'}">
           </div>
@@ -180,6 +186,60 @@ export function ModalProducto(categoria, donadores) {
         </div>
 
         ${Botones('Agregar producto')}
+      </form>
+    </div>
+  `;
+}
+
+// desde Inicio o Historial el "+" pregunta que se quiere agregar
+export function ModalElegir() {
+  const opciones = [
+    { accion: 'agregar-producto', categoria: 'Alimentos', color: 'verde', icono: iconoAlimentos, titulo: 'Alimento', detalle: 'Producto perecible' },
+    { accion: 'agregar-producto', categoria: 'Salud', color: 'azul', icono: iconoSalud, titulo: 'Salud', detalle: 'Medicina o higiene' },
+    { accion: 'agregar-donador', categoria: '', color: 'naranja', icono: iconoDonadores, titulo: 'Donador', detalle: 'Persona o institución' },
+  ];
+
+  return `
+    <div class="fondo-modal">
+      <div class="modal">
+        ${Cabecera('+', 'verde', '¿Qué quieres agregar?', 'Elige una opción')}
+
+        <div class="modal-cuerpo">
+          ${opciones.map(o => `
+            <button type="button" class="opcion-agregar" data-accion="${o.accion}" data-categoria="${o.categoria}">
+              <span class="tarjeta-codigo ${o.color}">${o.icono}</span>
+              <span>
+                <b>${o.titulo}</b>
+                <small>${o.detalle}</small>
+              </span>
+              <span class="opcion-flecha">›</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function ModalDonador() {
+  return `
+    <div class="fondo-modal">
+      <form class="modal" id="form-donador">
+        ${Cabecera('+', 'naranja', 'Agregar donador', 'Persona o institución que dona al hogar')}
+
+        <div class="modal-cuerpo">
+          <div class="campo">
+            <label>NOMBRE</label>
+            <input id="nuevo-nombre" type="text" placeholder="Nombre o institución">
+          </div>
+          <div class="campo">
+            <label>NÚMERO DE CONTACTO</label>
+            <input id="nuevo-telefono" type="tel" placeholder="987 654 321">
+          </div>
+          <p class="error" id="error"></p>
+        </div>
+
+        ${Botones('Agregar donador')}
       </form>
     </div>
   `;

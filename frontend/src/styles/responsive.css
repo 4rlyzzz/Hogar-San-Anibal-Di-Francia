@@ -4,7 +4,6 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .marca-sub,
   .usuario-datos {
     display: none;
   }
@@ -15,6 +14,16 @@
 
   .fila {
     grid-template-columns: 96px 1.4fr 100px 110px 100px 1fr;
+  }
+
+  /* inicio: todo en una columna */
+  .panel-recuadros {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .panel-medio,
+  .panel-bajo {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -35,8 +44,16 @@
     font-size: 10px;
   }
 
-  .menu {
+  .lateral {
     display: none;
+  }
+
+  .principal {
+    margin-left: 0;
+  }
+
+  .topbar .marca {
+    display: flex;
   }
 
   .buscador {
@@ -47,6 +64,10 @@
 
   .buscador input {
     font-size: 16px;
+  }
+
+  body[data-seccion="Inicio"] .buscador {
+    display: none;
   }
 
   .usuario {
@@ -135,9 +156,8 @@
 
   .boton-alerta {
     right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 86px;
+    left: 16px;
+    bottom: calc(96px + env(safe-area-inset-bottom));
   }
 
   .toast {
@@ -217,48 +237,143 @@
     display: none;
   }
 
-  .form-donador .btn {
-    flex: 1;
+  /* inicio */
+  .panel-recuadros {
+    gap: 12px;
   }
 
-  /* menu de abajo */
+  .recuadro {
+    padding: 14px;
+  }
+
+  .recuadro-cabecera {
+    gap: 9px;
+    margin-bottom: 12px;
+  }
+
+  .recuadro-icono {
+    width: 36px;
+    height: 36px;
+  }
+
+  .recuadro-icono svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .recuadro-titulo {
+    font-size: 12px;
+  }
+
+  .recuadro-numero {
+    font-size: 24px;
+  }
+
+  /* en celular el detalle va debajo del titulo */
+  .recuadro-fila {
+    flex-wrap: wrap;
+    gap: 3px 6px;
+  }
+
+  .recuadro-detalle {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .panel {
+    padding: 16px 14px;
+  }
+
+  .grafico,
+  .grafico-eje {
+    height: 190px;
+  }
+
+  .grafico-eje {
+    flex-basis: 30px;
+  }
+
+  .grafico-nombres span {
+    font-size: 10px;
+    padding: 0 2px;
+  }
+
+  .grafico-cabecera {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .grafico-cabecera .filtros {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .grafico-cabecera .filtros button,
+  .grafico-cabecera .pestanas-grafico button {
+    flex: none;
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  .alerta-fila {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'insumo prioridad'
+      'tipo categoria';
+    gap: 9px 8px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid #e5eae8;
+    border-radius: 16px;
+  }
+
+  .alerta-fila .fila-insumo { grid-area: insumo; }
+  .alerta-fila-prioridad { grid-area: prioridad; justify-self: end; }
+  .alerta-fila-tipo { grid-area: tipo; }
+  .alerta-fila-categoria { grid-area: categoria; justify-self: end; }
+
+  /* menu de abajo: flotante, solo iconos, siempre visible */
   .menu-movil {
     display: flex;
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
     z-index: 60;
+    justify-content: space-between;
     gap: 4px;
-    padding: 8px 10px 14px;
-    background: rgba(255, 255, 255, 0.96);
-    border-top: 1px solid #e4eae8;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid #e4eae8;
+    border-radius: 24px;
+    box-shadow: 0 12px 30px -12px rgba(23, 33, 31, 0.28);
   }
 
   .menu-movil button {
     flex: 1;
-    min-height: 54px;
+    height: 52px;
+    max-width: 72px;
     border: 0;
-    border-radius: 13px;
+    border-radius: 16px;
     background: transparent;
     color: #8b9a95;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    font-weight: 600;
-    font-size: 11px;
+    display: grid;
+    place-items: center;
+  }
+
+  .menu-movil button svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* agregar producto: el "+" flota encima de la barra de abajo */
+  .btn-flotante {
+    right: 18px;
+    bottom: calc(94px + env(safe-area-inset-bottom));
   }
 
   .menu-movil button.activo {
     background: #e6f5ee;
     color: #2d8e6c;
-  }
-
-  .menu-movil-icono {
-    font-family: 'IBM Plex Mono', monospace;
-    font-weight: 700;
-    font-size: 11.5px;
   }
 }

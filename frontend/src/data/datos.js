@@ -1,4 +1,5 @@
 // datos de prueba mientras no hay backend
+import { textoFecha, fechaDe } from '../components/Comunes.js';
 
 export const usuario = { nombre: 'Almacén', iniciales: 'AL', rol: 'Usuario' };
 
@@ -26,7 +27,47 @@ export const salud = [
   { id: 6, codigo: 'VC', nombre: 'Vitamina C gotas', descripcion: 'Suplemento para niños', cantidad: 9, minimo: 8, unidad: 'frascos', vencimiento: '2026-11-05', lote: 'VC-5503', paraNino: '' },
 ];
 
-// movimientos: ingresos y salidas de cada producto
+// movimientos de prueba del ultimo año (contando desde hoy) para que el grafico de inicio tenga datos
+function movimientosDePrueba() {
+  // numeros "al azar" pero siempre los mismos
+  let semilla = 7;
+  const azar = n => {
+    semilla = (semilla * 9301 + 49297) % 233280;
+    return Math.floor(semilla / 233280 * n);
+  };
+
+  const filas = [];
+  // menos de un año: la fecha no guarda el año y "19 oct" de hace 365 dias se leeria como hoy
+  for (let d = 1; d < 365; d++) {
+    const veces = [0, 0, 1, 1, 2][azar(5)];
+
+    for (let v = 0; v < veces; v++) {
+      const esSalud = azar(3) === 0;
+      const lista = esSalud ? salud : alimentos;
+      const item = lista[azar(lista.length)];
+      const esIngreso = azar(5) < 2;
+
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() - d);
+      fecha.setHours(8 + azar(10), azar(60));
+
+      filas.push({
+        fecha: textoFecha(fecha),
+        insumo: item.nombre,
+        categoria: esSalud ? 'Salud' : 'Alimentos',
+        movimiento: esIngreso ? 'Ingreso' : 'Salida',
+        cantidad: esIngreso ? 5 + azar(36) : 1 + azar(10),
+        unidad: item.unidad,
+        responsable: esIngreso ? 'Almacén' : esSalud ? 'Enfermería' : 'Cocina',
+        donador: '',
+        para: '',
+      });
+    }
+  }
+  return filas;
+}
+
+// movimientos: ingresos y salidas de cada producto, del mas nuevo al mas antiguo
 export const historial = [
   { fecha: '07 oct 09:05', insumo: 'Avena 3 Ositos', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 150, unidad: 'kg', responsable: 'Almacén', donador: '', para: '' },
   { fecha: '07 oct 08:40', insumo: 'Leche evaporada Gloria', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 12, unidad: 'latas', responsable: 'Cocina', donador: '', para: '' },
@@ -35,4 +76,5 @@ export const historial = [
   { fecha: '06 oct 11:35', insumo: 'Pollo entero', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 8, unidad: 'kg', responsable: 'Cocina', donador: '', para: '' },
   { fecha: '05 oct 15:48', insumo: 'Sales de rehidratación oral', categoria: 'Salud', movimiento: 'Ingreso', cantidad: 40, unidad: 'sobres', responsable: 'Almacén', donador: '', para: '' },
   { fecha: '05 oct 09:12', insumo: 'Arroz Costeño', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 120, unidad: 'kg', responsable: 'Almacén', donador: '', para: '' },
-];
+  ...movimientosDePrueba(),
+].sort((a, b) => fechaDe(b.fecha) - fechaDe(a.fecha));

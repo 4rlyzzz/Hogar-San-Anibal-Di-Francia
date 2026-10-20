@@ -7,3 +7,21 @@ export const iconoAlerta = `<svg width="20" height="20" viewBox="0 0 20 20" fill
 export const iconoObjetivo = `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7.1" stroke="#9c5713" stroke-width="1.5"/><circle cx="9" cy="9" r="3.1" stroke="#9c5713" stroke-width="1.5"/></svg>`;
 
 export const iconoDonar = `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M3 6.4h9.2M9.6 3.6l2.9 2.8-2.9 2.8" stroke="#2d8e6c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 11.6H5.8M8.2 8.8 5.3 11.6l2.9 2.8" stroke="#2d8e6c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// iconos de los recuadros de inicio (toman el color del recuadro)
+export const iconoAlimentos = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 7.5c-1.6-1.3-5.5-1.6-6.6 2-1 3.4 1.4 9.5 4.3 9.5.9 0 1.4-.5 2.3-.5s1.4.5 2.3.5c2.9 0 5.3-6.1 4.3-9.5-1.1-3.6-5-3.3-6.6-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 7.5c0-2 .8-3.3 2.5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+export const iconoSalud = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2.6" y="8.2" width="18.8" height="7.6" rx="3.8" transform="rotate(-45 12 12)" stroke="currentColor" stroke-width="1.6"/><path d="m9.3 9.3 5.4 5.4" stroke="currentColor" stroke-width="1.6"/></svg>`;
+
+export const iconoReloj = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v4l2.8 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+export const iconoCaja = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 8.5 12 4.5l8 4v7l-8 4-8-4v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 8.5l8 4 8-4M12 12.5v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+
+// iconos del menu (toman el color del boton)
+export const iconoInicio = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1v-8.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
+
+export const iconoHistorial = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.5 4.5v3.8h3.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4.2l2.8 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+export const iconoDonadores = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8.5" r="3.2" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M15.5 5.6a3 3 0 0 1 0 5.8M17.5 14.6c1.6.6 2.7 2.1 3 4.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+
+export const iconoFijar = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M9 4.5v15" stroke="currentColor" stroke-width="1.7"/><path d="m13.5 10 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

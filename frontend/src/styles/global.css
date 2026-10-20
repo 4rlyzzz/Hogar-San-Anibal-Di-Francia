@@ -46,7 +46,167 @@ button {
   to { opacity: 1; transform: none; }
 }
 
+/* ---------- menu lateral (desktop) ---------- */
+/* cerrado muestra solo iconos; al pasar el mouse se abre encima del contenido */
+.lateral {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px 12px;
+  background: #fff;
+  box-shadow: 1px 0 0 rgba(23, 33, 31, 0.04);
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: width 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lateral:hover,
+.lateral:focus-within {
+  width: 240px;
+  box-shadow: 8px 0 30px -12px rgba(23, 33, 31, 0.18);
+}
+
+/* en el menu lateral solo va el logo (ya trae el nombre) */
+.lateral .marca {
+  justify-content: center;
+  min-height: 72px;
+}
+
+.lateral .marca > div {
+  display: none;
+}
+
+.lateral .marca-logo {
+  width: 48px;
+  height: 48px;
+  transition: width 0.2s ease, height 0.2s ease;
+}
+
+.lateral:hover .marca-logo,
+.lateral:focus-within .marca-logo {
+  width: 72px;
+  height: 72px;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* lo que solo se lee con el menu abierto */
+.menu-grupo,
+.menu button span {
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.lateral:hover .menu-grupo,
+.lateral:hover .menu button span,
+.lateral:focus-within .menu-grupo,
+.lateral:focus-within .menu button span {
+  opacity: 1;
+}
+
+.menu-grupo {
+  margin: 14px 0 6px;
+  padding: 0 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: #8b9a95;
+}
+
+.menu-grupo:first-child {
+  margin-top: 0;
+}
+
+/* el icono queda centrado con el menu cerrado y no se mueve al abrirlo */
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #6f7e79;
+  font-weight: 600;
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.menu button svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.menu button:hover {
+  background: #f1f5f4;
+  color: #17211f;
+}
+
+.menu button.activo {
+  background: #e6f5ee;
+  color: #2d8e6c;
+}
+
+/* boton para fijar el menu, al fondo */
+.menu-pie {
+  margin-top: auto;
+}
+
+.menu-pie svg {
+  transition: transform 0.2s ease;
+}
+
+/* menu fijo: siempre abierto y el contenido se corre a la derecha (solo desktop y tablet) */
+@media (min-width: 768px) {
+  .menu-fijo .lateral {
+    width: 240px;
+    box-shadow: 1px 0 0 rgba(23, 33, 31, 0.04);
+  }
+
+  .menu-fijo .lateral .marca-logo {
+    width: 72px;
+    height: 72px;
+  }
+
+  .menu-fijo .menu-grupo,
+  .menu-fijo .menu button span {
+    opacity: 1;
+  }
+
+  .menu-fijo .menu-pie svg {
+    transform: scaleX(-1);
+  }
+
+  .menu-fijo .principal {
+    margin-left: 240px;
+  }
+}
+
+.principal {
+  transition: margin-left 0.2s ease;
+}
+
+/* todo lo que va a la derecha del menu lateral */
+.principal {
+  margin-left: 76px;
+  min-width: 0;
+}
+
 /* ---------- barra de arriba ---------- */
+/* sin borde: se funde con el fondo de la pagina */
 .topbar {
   position: sticky;
   top: 0;
@@ -55,9 +215,8 @@ button {
   align-items: center;
   gap: 24px;
   padding: 14px 32px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(245, 248, 247, 0.88);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid #e4eae8;
 }
 
 .marca {
@@ -67,15 +226,10 @@ button {
 }
 
 .marca-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  background: #3fb98f;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 13px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .marca-nombre {
@@ -83,7 +237,6 @@ button {
   font-size: 14px;
 }
 
-.marca-sub,
 .marca-sub-movil {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
@@ -94,7 +247,10 @@ button {
   display: none;
 }
 
-.menu,
+.topbar .marca {
+  display: none;
+}
+
 .filtros {
   display: flex;
   gap: 3px;
@@ -104,7 +260,6 @@ button {
   border-radius: 12px;
 }
 
-.menu button,
 .filtros button {
   border: 0;
   padding: 8px 15px;
@@ -116,7 +271,6 @@ button {
   white-space: nowrap;
 }
 
-.menu button.activo,
 .filtros button.activo {
   background: #fff;
   color: #17211f;
@@ -130,7 +284,7 @@ button {
   align-items: center;
   gap: 9px;
   padding: 9px 14px;
-  background: #f1f5f4;
+  background: #fff;
   border: 1px solid #e4eae8;
   border-radius: 12px;
 }
@@ -156,7 +310,7 @@ button {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: #f1f5f4;
+  background: #fff;
   border: 1px solid #e4eae8;
   display: grid;
   place-items: center;
@@ -178,7 +332,7 @@ button {
   align-items: center;
   gap: 10px;
   padding: 5px 12px 5px 5px;
-  background: #f1f5f4;
+  background: #fff;
   border: 1px solid #e4eae8;
   border-radius: 999px;
 }

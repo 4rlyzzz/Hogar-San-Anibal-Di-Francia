@@ -12,19 +12,6 @@ export function paginaDonadores(estado) {
     ${Encabezado('Donadores', 'Personas e instituciones que donan al hogar')}
     ${Alerta(estado)}
 
-    <form class="form-donador" id="form-donador">
-      <div class="campo">
-        <label>NOMBRE</label>
-        <input id="nuevo-nombre" type="text" placeholder="Nombre o institución">
-      </div>
-      <div class="campo">
-        <label>NÚMERO DE CONTACTO</label>
-        <input id="nuevo-telefono" type="tel" placeholder="987 654 321">
-      </div>
-      <button type="submit" class="btn btn-verde">+ Agregar donador</button>
-      <p class="error" id="error"></p>
-    </form>
-
     <div class="tabla">
       <div class="tabla-header">
         ${TituloSeccion('DO', 'verde', 'Lista de donadores', `${estado.donadores.length} registrados`)}

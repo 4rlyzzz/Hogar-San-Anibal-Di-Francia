@@ -6,20 +6,27 @@ function calcularExcedente(item) {
   return item.cantidad - item.consumoDiario * diasParaVencer(item);
 }
 
-// se muestra en todas las pestañas: la alerta abierta o el boton para volver a abrirla
+// producto con riesgo de sobrestock, o null si no hay
 // solo aplica si quedan 15 dias o menos y sobra producto
-export function Alerta(estado) {
+export function itemSobrestock(estado) {
   // por ahora solo la avena tiene datos de consumo para la alerta
   const avena = estado.alimentos.find(item => item.consumoDiario);
-  if (!avena) return '';
+  if (!avena) return null;
 
   const dias = diasParaVencer(avena);
-  if (dias <= 0 || dias > 15 || calcularExcedente(avena) <= 0) return '';
-
-  return estado.alertaAbierta ? AlertaSobrestock(avena) : BotonAlerta();
+  if (dias <= 0 || dias > 15 || calcularExcedente(avena) <= 0) return null;
+  return avena;
 }
 
-export function AlertaSobrestock(item) {
+// se muestra en las demas pestañas: la alerta abierta o el boton para volver a abrirla
+export function Alerta(estado) {
+  const item = itemSobrestock(estado);
+  if (!item) return '';
+  return estado.alertaAbierta ? AlertaSobrestock(item) : BotonAlerta();
+}
+
+// enPagina: en Inicio va dentro de la pagina, sin flotar ni boton de cerrar
+export function AlertaSobrestock(item, enPagina = false) {
   const dias = diasParaVencer(item);
   const consumo = item.consumoDiario * dias;
   const excedente = calcularExcedente(item);
@@ -28,7 +35,7 @@ export function AlertaSobrestock(item) {
   const fechaTexto = textoVencimiento(item).replace('Vence ', '');
 
   return `
-    <div class="alerta-contenedor">
+    <div class="alerta-contenedor ${enPagina ? 'en-pagina' : ''}">
       <div class="alerta">
         <div class="alerta-header">
           ${iconoAlerta}
@@ -36,7 +43,7 @@ export function AlertaSobrestock(item) {
             <div class="alerta-titulo">Riesgo de Desperdicio por Sobrestock</div>
             <div class="alerta-sub">Alerta prioritaria · generada 09:14</div>
           </div>
-          <button class="btn-cerrar naranja-claro" data-accion="cerrar-alerta">×</button>
+          ${enPagina ? '' : '<button class="btn-cerrar naranja-claro" data-accion="cerrar-alerta">×</button>'}
         </div>
 
         <div class="alerta-cuerpo">

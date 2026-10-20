@@ -9,6 +9,24 @@ export function escapar(texto) {
     .replaceAll('"', '&quot;');
 }
 
+export const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+
+// Date -> '07 oct 09:05' (asi se guarda en el historial)
+export function textoFecha(d) {
+  const dos = n => String(n).padStart(2, '0');
+  return `${dos(d.getDate())} ${meses[d.getMonth()]} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}
+
+// '07 oct 09:05' -> Date. no trae año: si quedaria en el futuro es del año pasado
+export function fechaDe(texto) {
+  const [dia, mes, hora] = texto.split(' ');
+  const [h, m] = hora.split(':');
+  const hoy = new Date();
+  const fecha = new Date(hoy.getFullYear(), meses.indexOf(mes), Number(dia), Number(h), Number(m));
+  if (fecha > hoy) fecha.setFullYear(hoy.getFullYear() - 1);
+  return fecha;
+}
+
 // dias que faltan para vencer (null si no vence)
 export function diasParaVencer(item) {
   if (!item.vencimiento) return null;
@@ -39,7 +57,7 @@ export function textoVencimiento(item) {
   return diasParaVencer(item) < 0 ? `Venció ${texto}` : `Vence ${texto}`;
 }
 
-export function Encabezado(titulo, subtitulo, filtroActivo) {
+export function Encabezado(titulo, subtitulo = '', filtroActivo) {
   let filtros = '';
   if (filtroActivo) {
     filtros = `
@@ -54,7 +72,7 @@ export function Encabezado(titulo, subtitulo, filtroActivo) {
     <div class="encabezado">
       <div>
         <h1>${titulo}</h1>
-        <p>${subtitulo}</p>
+        ${subtitulo ? `<p>${subtitulo}</p>` : ''}
       </div>
       ${filtros}
     </div>
