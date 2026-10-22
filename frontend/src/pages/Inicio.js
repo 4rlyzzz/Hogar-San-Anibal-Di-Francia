@@ -1,30 +1,14 @@
-import { Encabezado, TituloSeccion, escapar, diasParaVencer, porVencer, fechaDe, meses } from '../components/Comunes.js';
+import { Encabezado, TituloSeccion, Recuadro, escapar, textoCambio, diasParaVencer, porVencer, fechaDe, meses } from '../components/Comunes.js';
 import { AlertaSobrestock, itemSobrestock } from '../components/Alerta.js';
+import { calcularAlertas, coloresPrioridad } from '../components/Alertas.js';
 import { iconoAlimentos, iconoSalud, iconoReloj, iconoCaja } from '../assets/icons.js';
 
-const prioridades = { Alta: 'rojo', Media: 'naranja', Baja: 'azul' };
 
 function bajoMinimo(item) {
   return item.cantidad < item.minimo;
 }
 
 // ---------- recuadros de arriba ----------
-function Recuadro(color, icono, numero, titulo, detalle) {
-  return `
-    <div class="recuadro">
-      <div class="recuadro-cabecera">
-        <div class="recuadro-icono ${color}">${icono}</div>
-        <span class="recuadro-titulo">${titulo}</span>
-      </div>
-      <div class="recuadro-fila">
-        <b class="recuadro-numero">${numero}</b>
-        <span class="recuadro-unidad">${numero === 1 ? 'producto' : 'productos'}</span>
-        <span class="recuadro-detalle texto-${color}">${detalle}</span>
-      </div>
-    </div>
-  `;
-}
-
 function Recuadros(estado) {
   const todos = [...estado.alimentos, ...estado.salud];
   const vencen = todos.filter(porVencer).length;
@@ -285,14 +269,14 @@ function MovimientosRecientes(estado) {
       <ul class="linea-tiempo">
         ${ultimos.map(f => {
           const [dia, mes, hora] = f.fecha.split(' ');
-          const esIngreso = f.movimiento === 'Ingreso';
+          const verbo = { Ingreso: 'un ingreso', Salida: 'una salida', Ajuste: 'un ajuste' }[f.movimiento];
           return `
-            <li class="${esIngreso ? 'ingreso' : 'salida'}">
+            <li class="${{ Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' }[f.movimiento]}">
               <span class="linea-hora">${hora}<small>${dia} ${mes}</small></span>
               <span class="linea-punto"></span>
               <div class="linea-texto">
-                <b>${escapar(f.responsable)}</b> registró ${esIngreso ? 'un ingreso' : 'una salida'} de
-                <span class="mono">${esIngreso ? '+' : '−'}${f.cantidad} ${escapar(f.unidad)}</span>
+                <b>${escapar(f.responsable)}</b> registró ${verbo} de
+                <span class="mono">${escapar(textoCambio(f))}</span>
                 <small>${escapar(f.insumo)}${f.donador ? ` · donado por ${escapar(f.donador)}` : ''}</small>
               </div>
             </li>
@@ -306,33 +290,9 @@ function MovimientosRecientes(estado) {
 }
 
 // ---------- otras alertas: vencimiento y stock ----------
-function alertasDe(lista, categoria) {
-  const filas = [];
-
-  lista.forEach(item => {
-    const dias = diasParaVencer(item);
-    if (dias !== null && dias < 0) {
-      filas.push({ item, categoria, tipo: 'Vencido', detalle: `Venció hace ${-dias} días`, prioridad: 'Alta' });
-    } else if (dias !== null && dias <= 3) {
-      filas.push({ item, categoria, tipo: 'Por vencer', detalle: `Vence en ${dias} días`, prioridad: 'Alta' });
-    } else if (dias !== null && dias <= 15) {
-      filas.push({ item, categoria, tipo: 'Por vencer', detalle: `Vence en ${dias} días`, prioridad: 'Media' });
-    }
-
-    if (bajoMinimo(item)) {
-      filas.push({ item, categoria, tipo: 'Stock bajo', detalle: `${item.cantidad} de ${item.minimo} ${item.unidad} mín.`, prioridad: 'Alta' });
-    } else if (item.cantidad <= item.minimo * 1.2) {
-      filas.push({ item, categoria, tipo: 'Revisar consumo', detalle: `${item.cantidad} de ${item.minimo} ${item.unidad} mín.`, prioridad: 'Baja' });
-    }
-  });
-
-  return filas;
-}
-
 function OtrasAlertas(estado) {
-  const orden = Object.keys(prioridades);
-  const filas = [...alertasDe(estado.alimentos, 'Alimentos'), ...alertasDe(estado.salud, 'Salud')]
-    .sort((a, b) => orden.indexOf(a.prioridad) - orden.indexOf(b.prioridad));
+  // el sobrestock ya tiene su recuadro arriba
+  const filas = calcularAlertas(estado, false);
 
   return `
     <div class="tabla">
@@ -345,12 +305,12 @@ function OtrasAlertas(estado) {
       </div>
 
       ${filas.map(f => `
-        <div class="alerta-fila">
+        <button class="alerta-fila fila-boton" data-accion="ver-producto" data-categoria="${f.categoria}" data-id="${f.item.id}">
           <span class="fila-insumo">${escapar(f.item.nombre)}</span>
           <span class="alerta-fila-categoria"><span class="pastilla ${f.categoria === 'Salud' ? 'azul' : 'verde'}">${f.categoria}</span></span>
           <span class="alerta-fila-tipo">${f.tipo}<small>${escapar(f.detalle)}</small></span>
-          <span class="alerta-fila-prioridad"><span class="pastilla ${prioridades[f.prioridad]}">${f.prioridad}</span></span>
-        </div>
+          <span class="alerta-fila-prioridad"><span class="pastilla ${coloresPrioridad[f.prioridad]}">${f.prioridad}</span></span>
+        </button>
       `).join('')}
 
       ${filas.length === 0 ? '<div class="vacio">Todo en orden, no hay alertas</div>' : ''}

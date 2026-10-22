@@ -25,3 +25,15 @@ export const iconoHistorial = `<svg width="22" height="22" viewBox="0 0 24 24" f
 export const iconoDonadores = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8.5" r="3.2" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M15.5 5.6a3 3 0 0 1 0 5.8M17.5 14.6c1.6.6 2.7 2.1 3 4.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 
 export const iconoFijar = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M9 4.5v15" stroke="currentColor" stroke-width="1.7"/><path d="m13.5 10 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+export const iconoOjo = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>`;
+
+export const iconoSalir = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M10 12h10m0 0-3.2-3.2M20 12l-3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+export const iconoUsuarios = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3.5 19 6v5.2c0 4.4-2.9 7.9-7 9.3-4.1-1.4-7-4.9-7-9.3V6l7-2.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M8.3 16c.7-1.6 2.1-2.5 3.7-2.5s3 .9 3.7 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+export const iconoDescargar = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0-4.2-4.2M12 15l4.2-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 15.5v2.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+
+export const iconoFiltro = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>`;
+
+export const iconoAjustar = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 7h9M18 7h1M5 17h1M10 17h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.8"/></svg>`;

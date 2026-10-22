@@ -1,33 +1,87 @@
 // datos de prueba mientras no hay backend
 import { textoFecha, fechaDe } from '../components/Comunes.js';
 
-export const usuario = { nombre: 'Almacén', iniciales: 'AL', rol: 'Usuario' };
+const horasAtras = h => new Date(Date.now() - h * 60 * 60 * 1000);
+
+// cuentas de prueba: cuando haya backend las claves se validan alla, nunca en el frontend
+// creado: fecha de alta; ultimoAcceso: ultima vez que inicio sesion (null si nunca entro)
+// el nombre es el mismo que aparece como "responsable" en el historial
+export const cuentas = [
+  { id: 1, usuario: 'admin', clave: 'admin123', nombre: 'Administración', rol: 'Administrador', activo: true, creado: new Date(2026, 7, 1), creadoPor: '', ultimoAcceso: horasAtras(3) },
+  { id: 2, usuario: 'almacen', clave: 'almacen123', nombre: 'Almacén', rol: 'Usuario', activo: true, creado: new Date(2026, 7, 4), creadoPor: 'Administración', ultimoAcceso: horasAtras(26) },
+  { id: 3, usuario: 'cocina', clave: 'cocina123', nombre: 'Cocina', rol: 'Usuario', activo: true, creado: new Date(2026, 7, 12), creadoPor: 'Administración', ultimoAcceso: horasAtras(0.4) },
+  { id: 4, usuario: 'enfermeria', clave: 'enfermeria123', nombre: 'Enfermería', rol: 'Usuario', activo: false, creado: new Date(2026, 8, 2), creadoPor: 'Administración', ultimoAcceso: horasAtras(24 * 9) },
+];
+
+// quien inicio sesion; se llena al entrar (ver main.js)
+export const usuario = { id: null, nombre: '', iniciales: '', rol: '' };
 
 // otra tabla aparte: los donadores se ingresan a mano (pestaña Donadores o al registrar un ingreso)
-export const donadores = [];
+// creadoPor y creado son opcionales: los documentos viejos de la bd no los traen
+export const donadores = [
+  { id: 1, nombre: 'Parroquia San José', telefono: '987 654 321', creadoPor: 'Almacén', creadoPorId: 2, creado: horasAtras(48) },
+  { id: 2, nombre: 'Supermercados Plaza Vea', telefono: '01 625 8000', creadoPor: 'Administración', creadoPorId: 1, creado: horasAtras(24 * 15) },
+  { id: 3, nombre: 'Familia Quispe', telefono: '956 112 334' },
+];
+
+// actividades por las que se dona; aparecen como opciones al registrar una donacion
+// para cambiarlas, editar esta lista (las que se escriban con "Otra actividad" se suman solas)
+export const actividadesDonacion = [
+  'Aniversario del hogar',
+  'Navidad',
+  'Maratón',
+  'Día del niño',
+  'Campaña de invierno',
+  'Donación libre',
+];
+
+// niños del hogar: opciones de "para quién" en las salidas de Salud
+// solo el nombre de pila (son datos de menores); los que se escriban con "Otro niño/a" se suman solos
+export const ninos = ['Mateo', 'Lucía', 'Thiago', 'Valentina'];
+
+// lo que no es ingreso ni salida (eso ya esta en el historial): donadores, usuarios, roles...
+// en la bd seria un documento con tipo: 'actividad'; quienId apunta a la cuenta
+// accion: donador | usuario | rol | estado
+export const actividad = [
+  { id: 1, fecha: horasAtras(48), quienId: 2, quien: 'Almacén', accion: 'donador', texto: 'Agregó donador', detalle: 'Parroquia San José' },
+  { id: 2, fecha: horasAtras(24 * 8), quienId: 1, quien: 'Administración', accion: 'estado', texto: 'Desactivó a', detalle: 'Enfermería' },
+  { id: 3, fecha: horasAtras(24 * 15), quienId: 1, quien: 'Administración', accion: 'donador', texto: 'Agregó donador', detalle: 'Supermercados Plaza Vea' },
+  { id: 4, fecha: cuentas[3].creado, quienId: 1, quien: 'Administración', accion: 'usuario', texto: 'Agregó usuario', detalle: 'Enfermería' },
+  { id: 5, fecha: cuentas[2].creado, quienId: 1, quien: 'Administración', accion: 'usuario', texto: 'Agregó usuario', detalle: 'Cocina' },
+  { id: 6, fecha: cuentas[1].creado, quienId: 1, quien: 'Administración', accion: 'usuario', texto: 'Agregó usuario', detalle: 'Almacén' },
+];
 
 // productos perecibles
 export const alimentos = [
-  { id: 1, codigo: 'LE', nombre: 'Leche evaporada Gloria', descripcion: 'Lata de 400 g, para el desayuno', cantidad: 96, minimo: 40, unidad: 'latas', vencimiento: '2027-03-15', lote: '' },
-  { id: 2, codigo: 'MA', nombre: 'Manzana', descripcion: 'Fruta para el refrigerio', cantidad: 42, minimo: 30, unidad: 'kg', vencimiento: '2026-10-13', lote: '' },
-  { id: 3, codigo: 'AV', nombre: 'Avena 3 Ositos', descripcion: 'Bolsa de 1 kg, para el desayuno', cantidad: 150, minimo: 50, unidad: 'kg', vencimiento: '2026-10-16', lote: 'AV-3308', consumoDiario: 3.75 },
-  { id: 4, codigo: 'AR', nombre: 'Arroz Costeño', descripcion: 'Saco de 50 kg', cantidad: 210, minimo: 100, unidad: 'kg', vencimiento: '2027-08-20', lote: '' },
-  { id: 5, codigo: 'PO', nombre: 'Pollo entero', descripcion: 'Congelado, para el almuerzo', cantidad: 28, minimo: 40, unidad: 'kg', vencimiento: '2026-10-10', lote: '' },
-  { id: 6, codigo: 'LT', nombre: 'Lentejas', descripcion: 'Bolsa de 1 kg', cantidad: 12, minimo: 20, unidad: 'kg', vencimiento: '2027-05-10', lote: '' },
+  { id: 1, codigo: 'LE', nombre: 'Leche evaporada Gloria', contenido: 400, medida: 'g', cantidad: 96, minimo: 40, unidad: 'latas', vencimiento: '2027-03-15', lote: '' },
+  { id: 2, codigo: 'MA', nombre: 'Manzana', cantidad: 42, minimo: 30, unidad: 'kg', vencimiento: '2026-10-13', lote: '' },
+  { id: 3, codigo: 'AV', nombre: 'Avena 3 Ositos', cantidad: 150, minimo: 50, unidad: 'kg', vencimiento: '2026-10-16', lote: 'AV-3308', consumoDiario: 3.75 },
+  { id: 4, codigo: 'AR', nombre: 'Arroz Costeño', cantidad: 210, minimo: 100, unidad: 'kg', vencimiento: '2027-08-20', lote: '' },
+  { id: 5, codigo: 'PO', nombre: 'Pollo entero', cantidad: 28, minimo: 40, unidad: 'kg', vencimiento: '2026-10-10', lote: '' },
+  { id: 6, codigo: 'LT', nombre: 'Lentejas', contenido: 1, medida: 'kg', cantidad: 12, minimo: 20, unidad: 'bolsas', vencimiento: '2027-05-10', lote: '' },
 ];
 
 // productos indispensables (medicinas e higiene)
-// paraNino: si la medicina es para un niño en especifico
 export const salud = [
-  { id: 1, codigo: 'PC', nombre: 'Paracetamol jarabe 120 mg/5 ml', descripcion: 'Para fiebre y dolor', cantidad: 18, minimo: 10, unidad: 'frascos', vencimiento: '2027-02-28', lote: 'PX-4471', paraNino: '' },
-  { id: 2, codigo: 'AM', nombre: 'Amoxicilina 500 mg', descripcion: 'Antibiótico, solo con receta', cantidad: 6, minimo: 12, unidad: 'blísters', vencimiento: '2026-11-30', lote: 'AM-2290', paraNino: '' },
-  { id: 3, codigo: 'PÑ', nombre: 'Pañales Huggies talla M', descripcion: 'Paquete de 40 unidades', cantidad: 4, minimo: 10, unidad: 'paquetes', vencimiento: null, lote: 'DN-0815', paraNino: '' },
-  { id: 4, codigo: 'SR', nombre: 'Sales de rehidratación oral', descripcion: 'Para deshidratación por diarrea', cantidad: 34, minimo: 20, unidad: 'sobres', vencimiento: '2027-06-30', lote: 'SO-1132', paraNino: '' },
-  { id: 5, codigo: 'AG', nombre: 'Alcohol en gel', descripcion: 'Frasco de 1 L', cantidad: 22, minimo: 8, unidad: 'L', vencimiento: '2027-03-31', lote: 'AG-7740', paraNino: '' },
-  { id: 6, codigo: 'VC', nombre: 'Vitamina C gotas', descripcion: 'Suplemento para niños', cantidad: 9, minimo: 8, unidad: 'frascos', vencimiento: '2026-11-05', lote: 'VC-5503', paraNino: '' },
+  { id: 1, codigo: 'PC', nombre: 'Paracetamol jarabe 120 mg/5 ml', contenido: 60, medida: 'ml', cantidad: 18, minimo: 10, unidad: 'frascos', vencimiento: '2027-02-28', lote: 'PX-4471' },
+  { id: 2, codigo: 'AM', nombre: 'Amoxicilina 500 mg', contenido: 10, medida: 'unidades', cantidad: 6, minimo: 12, unidad: 'blísters', vencimiento: '2026-11-30', lote: 'AM-2290' },
+  { id: 3, codigo: 'PÑ', nombre: 'Pañales Huggies talla M', contenido: 40, medida: 'unidades', cantidad: 4, minimo: 10, unidad: 'paquetes', vencimiento: null, lote: 'DN-0815' },
+  { id: 4, codigo: 'SR', nombre: 'Sales de rehidratación oral', contenido: 27.9, medida: 'g', cantidad: 34, minimo: 20, unidad: 'sobres', vencimiento: '2027-06-30', lote: 'SO-1132' },
+  { id: 5, codigo: 'AG', nombre: 'Alcohol en gel', contenido: 1, medida: 'L', cantidad: 22, minimo: 8, unidad: 'frascos', vencimiento: '2027-03-31', lote: 'AG-7740' },
+  { id: 6, codigo: 'VC', nombre: 'Vitamina C gotas', contenido: 30, medida: 'ml', cantidad: 9, minimo: 8, unidad: 'frascos', vencimiento: '2026-11-05', lote: 'VC-5503' },
 ];
 
 // movimientos de prueba del ultimo año (contando desde hoy) para que el grafico de inicio tenga datos
+// la actividad de una donacion segun la epoca del año
+function actividadDeFecha(fecha) {
+  const mes = fecha.getMonth();
+  if (mes === 11) return 'Navidad';
+  if (mes === 8) return 'Aniversario del hogar';
+  if (mes === 5 || mes === 6) return 'Campaña de invierno';
+  if (mes === 3) return 'Maratón';
+  return 'Donación libre';
+}
+
 function movimientosDePrueba() {
   // numeros "al azar" pero siempre los mismos
   let semilla = 7;
@@ -51,6 +105,9 @@ function movimientosDePrueba() {
       fecha.setDate(fecha.getDate() - d);
       fecha.setHours(8 + azar(10), azar(60));
 
+      // la mitad de los ingresos son donaciones de alguno de los donadores
+      const donacion = esIngreso && azar(2) === 0;
+
       filas.push({
         fecha: textoFecha(fecha),
         insumo: item.nombre,
@@ -59,8 +116,9 @@ function movimientosDePrueba() {
         cantidad: esIngreso ? 5 + azar(36) : 1 + azar(10),
         unidad: item.unidad,
         responsable: esIngreso ? 'Almacén' : esSalud ? 'Enfermería' : 'Cocina',
-        donador: '',
-        para: '',
+        donador: donacion ? donadores[azar(donadores.length)].nombre : '',
+        actividad: donacion ? actividadDeFecha(fecha) : '',
+        para: esSalud && !esIngreso && azar(3) === 0 ? ninos[azar(ninos.length)] : '',
       });
     }
   }

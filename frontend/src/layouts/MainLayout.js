@@ -1,17 +1,24 @@
 import { usuario } from '../data/datos.js';
 import {
-  iconoBuscar, iconoCampana, iconoInicio, iconoAlimentos, iconoSalud, iconoHistorial, iconoDonadores, iconoFijar,
+  iconoBuscar, iconoCampana, iconoInicio, iconoAlimentos, iconoSalud, iconoHistorial, iconoDonadores, iconoFijar, iconoSalir, iconoUsuarios,
 } from '../assets/icons.js';
 import logo from '../assets/logo.png';
 
 // grupo: titulo que se muestra encima en el menu lateral
+// soloAdmin: solo aparece si entro un administrador
 const secciones = [
   { nombre: 'Inicio', icono: iconoInicio, grupo: 'GENERAL' },
   { nombre: 'Alimentos', icono: iconoAlimentos, grupo: 'INVENTARIO' },
   { nombre: 'Salud', icono: iconoSalud, grupo: 'INVENTARIO' },
   { nombre: 'Historial', icono: iconoHistorial, grupo: 'REGISTROS' },
   { nombre: 'Donadores', icono: iconoDonadores, grupo: 'REGISTROS' },
+  { nombre: 'Usuarios', icono: iconoUsuarios, grupo: 'ADMINISTRACIÓN', soloAdmin: true },
 ];
+
+// las secciones que puede ver quien entro
+export function seccionesVisibles() {
+  return secciones.filter(s => !s.soloAdmin || usuario.rol === 'Administrador');
+}
 
 function Marca() {
   return `
@@ -50,15 +57,26 @@ export function Layout() {
         </div>
 
         <div class="topbar-derecha">
-          <button class="campana" data-accion="abrir-alerta">
+          <button class="campana" data-accion="ver-alertas" aria-label="Alertas">
             ${iconoCampana}
-            <span class="campana-punto"></span>
+            <span class="campana-numero" id="campana-numero" hidden></span>
           </button>
-          <div class="usuario">
-            <div class="avatar">${usuario.iniciales}</div>
-            <div class="usuario-datos">
-              <span class="usuario-nombre">${usuario.nombre}</span>
-              <span class="usuario-rol">${usuario.rol}</span>
+          <div class="usuario-caja">
+            <button class="usuario" data-accion="menu-usuario" aria-haspopup="true">
+              <div class="avatar">${usuario.iniciales}</div>
+              <div class="usuario-datos">
+                <span class="usuario-nombre">${usuario.nombre}</span>
+                <span class="usuario-rol">${usuario.rol}</span>
+              </div>
+            </button>
+
+            <div class="usuario-menu" id="usuario-menu" hidden>
+              <div class="usuario-menu-datos">
+                <b>${usuario.nombre}</b>
+                <span>${usuario.rol}</span>
+              </div>
+              <button class="usuario-menu-opcion" data-accion="mi-actividad">${iconoHistorial} Mi actividad</button>
+              <button data-accion="salir">${iconoSalir} Cerrar sesión</button>
             </div>
           </div>
         </div>
@@ -77,8 +95,9 @@ export function Layout() {
 }
 
 export function Menu(seccionActual) {
-  return secciones.map((s, i) => `
-    ${s.grupo !== secciones[i - 1]?.grupo ? `<span class="menu-grupo">${s.grupo}</span>` : ''}
+  const lista = seccionesVisibles();
+  return lista.map((s, i) => `
+    ${s.grupo !== lista[i - 1]?.grupo ? `<span class="menu-grupo">${s.grupo}</span>` : ''}
     <button class="${s.nombre === seccionActual ? 'activo' : ''}" data-accion="seccion" data-seccion="${s.nombre}" title="${s.nombre}">
       ${s.icono}
       <span>${s.nombre}</span>
@@ -87,7 +106,7 @@ export function Menu(seccionActual) {
 }
 
 export function MenuMovil(seccionActual) {
-  return secciones.map(s => `
+  return seccionesVisibles().map(s => `
     <button class="${s.nombre === seccionActual ? 'activo' : ''}" data-accion="seccion" data-seccion="${s.nombre}" aria-label="${s.nombre}">
       ${s.icono}
     </button>

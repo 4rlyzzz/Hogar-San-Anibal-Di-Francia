@@ -1,4 +1,5 @@
-import { escapar, colorVencimiento, textoVencimiento } from './Comunes.js';
+import { escapar, colorVencimiento, textoVencimiento, textoPresentacion } from './Comunes.js';
+import { iconoAjustar } from '../assets/icons.js';
 
 // misma tarjeta para alimentos y salud
 export function Tarjeta(item, categoria) {
@@ -15,20 +16,14 @@ export function Tarjeta(item, categoria) {
   const esSalud = categoria === 'Salud';
   const colorVence = colorVencimiento(item);
 
-  let extra = item.lote ? `Lote ${escapar(item.lote)}` : '';
-  if (esSalud && item.paraNino) {
-    extra += `${extra ? ' · ' : ''}Para: ${escapar(item.paraNino)}`;
-  }
-
   return `
     <div class="tarjeta">
       <div class="tarjeta-top">
         <div class="tarjeta-codigo ${colorVence}">${escapar(item.codigo)}</div>
-        <div>
-          <div class="tarjeta-nombre">${escapar(item.nombre)}</div>
-          <div class="tarjeta-descripcion">${escapar(item.descripcion)}</div>
-          ${extra ? `<div class="tarjeta-meta">${extra}</div>` : ''}
-        </div>
+        <button class="tarjeta-info" data-accion="ver-producto" data-categoria="${categoria}" data-id="${item.id}" title="Ver detalle">
+          <span class="tarjeta-nombre">${escapar(item.nombre)}</span>
+          ${textoPresentacion(item) ? `<span class="tarjeta-descripcion">${escapar(textoPresentacion(item))}</span>` : ''}
+        </button>
         <span class="etiqueta ${colorVence}">${textoVencimiento(item)}</span>
       </div>
 
@@ -46,6 +41,7 @@ export function Tarjeta(item, categoria) {
           ${esSalud ? 'Registrar uso' : 'Registrar salida'}
         </button>
         <button class="btn btn-verde-claro" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">+ Ingreso</button>
+        <button class="btn btn-ajustar" data-accion="ajustar" data-categoria="${categoria}" data-id="${item.id}" title="Ajustar stock según conteo" aria-label="Ajustar stock">${iconoAjustar}</button>
       </div>
     </div>
   `;

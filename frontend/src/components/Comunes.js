@@ -9,12 +9,37 @@ export function escapar(texto) {
     .replaceAll('"', '&quot;');
 }
 
+// 'Administración' -> 'AD', 'María López' -> 'ML'
+export function iniciales(nombre) {
+  const partes = nombre.trim().split(/\s+/);
+  const letras = partes.length > 1 ? partes[0][0] + partes[1][0] : nombre.slice(0, 2);
+  return letras.toUpperCase();
+}
+
 export const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
 
 // Date -> '07 oct 09:05' (asi se guarda en el historial)
 export function textoFecha(d) {
   const dos = n => String(n).padStart(2, '0');
   return `${dos(d.getDate())} ${meses[d.getMonth()]} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}
+
+// Date -> '01 ago 2026'
+export function fechaLarga(d) {
+  return `${String(d.getDate()).padStart(2, '0')} ${meses[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// Date -> 'hace 5 min', 'hace 3 h', 'ayer', 'hace 9 días'
+export function tiempoRelativo(d) {
+  const minutos = Math.round((Date.now() - d) / 60000);
+  if (minutos < 1) return 'ahora';
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+  const dias = Math.round(horas / 24);
+  if (dias === 1) return 'ayer';
+  if (dias < 30) return `hace ${dias} días`;
+  return fechaLarga(d);
 }
 
 // '07 oct 09:05' -> Date. no trae año: si quedaria en el futuro es del año pasado
@@ -25,6 +50,137 @@ export function fechaDe(texto) {
   const fecha = new Date(hoy.getFullYear(), meses.indexOf(mes), Number(dia), Number(h), Number(m));
   if (fecha > hoy) fecha.setFullYear(hoy.getFullYear() - 1);
   return fecha;
+}
+
+// ---------- productos ----------
+// envases: se guarda el plural (es en lo que se cuenta: "12 bolsas") y se muestra el singular ("Bolsa x 1 kg")
+export const envases = {
+  bolsas: 'Bolsa', latas: 'Lata', sacos: 'Saco', cajas: 'Caja', paquetes: 'Paquete', botellas: 'Botella',
+  frascos: 'Frasco', sobres: 'Sobre', blísters: 'Blíster', ampollas: 'Ampolla', tubos: 'Tubo',
+};
+
+// 'bolsas' -> 'Bolsa'; los envases escritos a mano ('bidones') se muestran tal cual con mayuscula
+export function envaseSingular(unidad) {
+  return envases[unidad] || unidad.charAt(0).toUpperCase() + unidad.slice(1);
+}
+
+// 'Bidón' -> 'bidones', 'Galonera' -> 'galoneras' (para un envase nuevo escrito a mano)
+export function pluralizar(singular) {
+  const s = singular.trim().toLowerCase();
+  if (/[aeiou]$/.test(s)) return s + 's';
+  if (/[áéíóú]n$/.test(s)) return s.slice(0, -2) + s.at(-2).normalize('NFD')[0] + 'nes';
+  return s + 'es';
+}
+
+// presentacion como en la etiqueta: 'Bolsa x 1 kg', 'Caja x 10 tabletas'; '' si es suelto (se cuenta en kg, L...)
+// item.envase: el singular tal como se escribio (para envases que no estan en la lista, ej. 'Bidón')
+export function textoPresentacion(item) {
+  if (!item.contenido || !item.medida) return '';
+  return `${item.envase || envaseSingular(item.unidad)} x ${item.contenido} ${item.medida}`;
+}
+
+// cuanto suma todo lo que hay: '60 kg en total', '60 cápsulas en total'; '' si no viene en envases
+export function textoTotal(item) {
+  if (!item.contenido || !item.medida) return '';
+  let total = item.cantidad * item.contenido;
+  let medida = item.medida;
+  // 38400 g se lee mejor como 38.4 kg
+  if ((medida === 'g' || medida === 'ml') && total >= 1000) {
+    total /= 1000;
+    medida = medida === 'g' ? 'kg' : 'L';
+  }
+  return `${Math.round(total * 100) / 100} ${medida} en total`;
+}
+
+// 'Leche Évaporada' -> ['leche', 'evaporada']: sin tildes, mayusculas ni signos
+export function palabras(texto) {
+  return texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+// cuantas letras hay que cambiar, agregar o quitar para pasar de una palabra a otra
+function distancia(a, b) {
+  const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = fila[0];
+    fila[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const arriba = fila[j];
+      fila[j] = Math.min(fila[j] + 1, fila[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = arriba;
+    }
+  }
+  return fila[b.length];
+}
+
+// 'lentjas' se parece a 'lentejas': empieza igual o tiene 1 error (2 si la palabra es larga)
+function palabraParecida(escrita, otra) {
+  if (otra.startsWith(escrita)) return true;
+  if (escrita.length < 4) return false;
+  return distancia(escrita, otra) <= (escrita.length >= 8 ? 2 : 1);
+}
+
+// al buscar: todas las palabras escritas estan en el nombre (en cualquier orden, con algun error de tipeo)
+export function coincideNombre(buscado, nombre) {
+  const buscadas = palabras(buscado).filter(p => p.length >= 2);
+  if (buscadas.length === 0) return false;
+  const delNombre = palabras(nombre);
+  return buscadas.every(b => delNombre.some(p => palabraParecida(b, p)));
+}
+
+// al unir: cuantas palabras importantes comparten dos nombres (0 = nada que ver, como Lentejas y Manzana)
+export function palabrasEnComun(a, b) {
+  const deB = palabras(b);
+  return palabras(a).filter(p => p.length >= 4 && deB.some(q => palabraParecida(p, q) || palabraParecida(q, p))).length;
+}
+
+// ---------- movimientos ----------
+// tipos: Ingreso suma, Salida resta, Ajuste corrige el stock tras un conteo (puede sumar o restar)
+// todo ajuste viene de un conteo fisico; el motivo dice por que no coincidia con el sistema
+export const motivosAjuste = [
+  'Sin identificar',
+  'Producto malogrado o vencido',
+  'Salida no registrada',
+  'Ingreso o donación no registrada',
+  'Error al registrar un movimiento',
+  'Corrección de un ajuste anterior',
+  'Otro',
+];
+export const motivoCorreccion = 'Corrección de un ajuste anterior';
+
+// cuanto cambio el stock, con signo: +20, -5
+export function cambioDe(fila) {
+  if (fila.movimiento === 'Ajuste') return fila.diferencia;
+  return fila.movimiento === 'Ingreso' ? fila.cantidad : -fila.cantidad;
+}
+
+// cuanto habia antes del movimiento: lo que quedo menos lo que cambio
+// null si el movimiento es de antes de que se guardara el saldo
+export function stockAntes(fila) {
+  if (fila.saldo == null) return null;
+  return Math.round((fila.saldo - cambioDe(fila)) * 100) / 100;
+}
+
+// '100 → 95' (sin unidad); '—' si no hay saldo
+export function textoStock(fila) {
+  return fila.saldo == null ? '—' : `${stockAntes(fila)} → ${fila.saldo}`;
+}
+
+// lo importante de cada movimiento segun su tipo: de donde vino, a quien fue o por que cambio
+export function textoDetalle(fila) {
+  const nota = fila.nota ? ' · ' + fila.nota : '';
+  if (fila.movimiento === 'Ajuste') return (fila.motivo || 'Ajuste') + nota;
+  if (fila.movimiento === 'Ingreso') {
+    if (fila.donador) return fila.donador + (fila.actividad ? ' · ' + fila.actividad : '') + nota;
+    return fila.inicial ? 'Registro inicial' : 'Compra del hogar';
+  }
+  if (fila.para) return 'Para ' + fila.para;
+  return fila.categoria === 'Salud' ? 'Uso general' : '';
+}
+
+// '+20 kg', '−5 kg' (con el signo menos tipografico)
+export function textoCambio(fila) {
+  const cambio = cambioDe(fila);
+  return `${cambio >= 0 ? '+' : '−'}${Math.abs(cambio)} ${fila.unidad}`;
 }
 
 // dias que faltan para vencer (null si no vence)
@@ -57,13 +213,16 @@ export function textoVencimiento(item) {
   return diasParaVencer(item) < 0 ? `Venció ${texto}` : `Vence ${texto}`;
 }
 
-export function Encabezado(titulo, subtitulo = '', filtroActivo) {
+// conteos: cuantos hay en cada filtro, ej. { 'Por vencer': 3 } (se muestra dentro del boton)
+export function Encabezado(titulo, subtitulo = '', filtroActivo, conteos = {}) {
   let filtros = '';
   if (filtroActivo) {
     filtros = `
       <div class="filtros">
         ${['Todos', 'Por vencer', 'Stock bajo'].map(f => `
-          <button class="${f === filtroActivo ? 'activo' : ''}" data-accion="filtro" data-filtro="${f}">${f}</button>
+          <button class="${f === filtroActivo ? 'activo' : ''}" data-accion="filtro" data-filtro="${f}">
+            ${f}${conteos[f] ? ` <span class="filtro-numero">${conteos[f]}</span>` : ''}
+          </button>
         `).join('')}
       </div>`;
   }
@@ -90,6 +249,23 @@ export function TituloSeccion(codigo, color, titulo, detalle, extra = '') {
   `;
 }
 
+// recuadro de resumen (Inicio, Usuarios); unidad: [singular, plural]
+export function Recuadro(color, icono, numero, titulo, detalle, unidad = ['producto', 'productos']) {
+  return `
+    <div class="recuadro">
+      <div class="recuadro-cabecera">
+        <div class="recuadro-icono ${color}">${icono}</div>
+        <span class="recuadro-titulo">${titulo}</span>
+      </div>
+      <div class="recuadro-fila">
+        <b class="recuadro-numero">${numero}</b>
+        <span class="recuadro-unidad">${numero === 1 ? unidad[0] : unidad[1]}</span>
+        <span class="recuadro-detalle texto-${color}">${detalle}</span>
+      </div>
+    </div>
+  `;
+}
+
 export function SinResultados(texto = 'Sin insumos en este filtro') {
   return `<div class="vacio">${texto}</div>`;
 }
@@ -101,7 +277,7 @@ export function filtrarInsumos(lista, estado) {
   return lista.filter(item => {
     if (estado.filtro === 'Por vencer' && !porVencer(item)) return false;
     if (estado.filtro === 'Stock bajo' && item.cantidad >= item.minimo) return false;
-    if (texto && !(item.nombre + ' ' + item.descripcion + ' ' + item.lote).toLowerCase().includes(texto)) return false;
+    if (texto && !(item.nombre + ' ' + textoPresentacion(item) + ' ' + item.lote).toLowerCase().includes(texto)) return false;
     return true;
   });
 }

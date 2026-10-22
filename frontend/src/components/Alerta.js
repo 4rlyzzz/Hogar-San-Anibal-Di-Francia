@@ -2,7 +2,7 @@ import { iconoAlerta, iconoObjetivo, iconoDonar } from '../assets/icons.js';
 import { diasParaVencer, textoVencimiento } from './Comunes.js';
 
 // excedente = stock - consumo diario * dias que faltan para vencer
-function calcularExcedente(item) {
+export function calcularExcedente(item) {
   return item.cantidad - item.consumoDiario * diasParaVencer(item);
 }
 
@@ -16,13 +16,6 @@ export function itemSobrestock(estado) {
   const dias = diasParaVencer(avena);
   if (dias <= 0 || dias > 15 || calcularExcedente(avena) <= 0) return null;
   return avena;
-}
-
-// se muestra en las demas pestañas: la alerta abierta o el boton para volver a abrirla
-export function Alerta(estado) {
-  const item = itemSobrestock(estado);
-  if (!item) return '';
-  return estado.alertaAbierta ? AlertaSobrestock(item) : BotonAlerta();
 }
 
 // enPagina: en Inicio va dentro de la pagina, sin flotar ni boton de cerrar
@@ -43,7 +36,6 @@ export function AlertaSobrestock(item, enPagina = false) {
             <div class="alerta-titulo">Riesgo de Desperdicio por Sobrestock</div>
             <div class="alerta-sub">Alerta prioritaria · generada 09:14</div>
           </div>
-          ${enPagina ? '' : '<button class="btn-cerrar naranja-claro" data-accion="cerrar-alerta">×</button>'}
         </div>
 
         <div class="alerta-cuerpo">
@@ -108,10 +100,3 @@ export function AlertaSobrestock(item, enPagina = false) {
   `;
 }
 
-export function BotonAlerta() {
-  return `
-    <button class="boton-alerta" data-accion="abrir-alerta">
-      ${iconoAlerta} 1 alerta de sobrestock <span>VER</span>
-    </button>
-  `;
-}
