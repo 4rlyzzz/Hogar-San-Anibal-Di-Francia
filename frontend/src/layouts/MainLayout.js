@@ -4,12 +4,13 @@ import {
 } from '../assets/icons.js';
 import logo from '../assets/logo.png';
 
+// etiqueta: nombre que se muestra si es distinto de la clave
 // grupo: titulo que se muestra encima en el menu lateral
 // soloAdmin: solo aparece si entro un administrador
 const secciones = [
   { nombre: 'Inicio', icono: iconoInicio, grupo: 'GENERAL' },
   { nombre: 'Alimentos', icono: iconoAlimentos, grupo: 'INVENTARIO' },
-  { nombre: 'Salud', icono: iconoSalud, grupo: 'INVENTARIO' },
+  { nombre: 'Salud', etiqueta: 'Salud e higiene', icono: iconoSalud, grupo: 'INVENTARIO' },
   { nombre: 'Historial', icono: iconoHistorial, grupo: 'REGISTROS' },
   { nombre: 'Donadores', icono: iconoDonadores, grupo: 'REGISTROS' },
   { nombre: 'Usuarios', icono: iconoUsuarios, grupo: 'ADMINISTRACIÓN', soloAdmin: true },
@@ -53,7 +54,7 @@ export function Layout() {
 
         <div class="buscador">
           ${iconoBuscar}
-          <input id="buscador" type="text" placeholder="Buscar insumo, lote o categoría">
+          <input id="buscador" type="text" placeholder="Buscar insumo o categoría">
         </div>
 
         <div class="topbar-derecha">
@@ -98,16 +99,16 @@ export function Menu(seccionActual) {
   const lista = seccionesVisibles();
   return lista.map((s, i) => `
     ${s.grupo !== lista[i - 1]?.grupo ? `<span class="menu-grupo">${s.grupo}</span>` : ''}
-    <button class="${s.nombre === seccionActual ? 'activo' : ''}" data-accion="seccion" data-seccion="${s.nombre}" title="${s.nombre}">
+    <button class="${s.nombre === seccionActual ? 'activo' : ''}" data-accion="seccion" data-seccion="${s.nombre}" title="${s.etiqueta || s.nombre}">
       ${s.icono}
-      <span>${s.nombre}</span>
+      <span>${s.etiqueta || s.nombre}</span>
     </button>
   `).join('');
 }
 
 export function MenuMovil(seccionActual) {
   return seccionesVisibles().map(s => `
-    <button class="${s.nombre === seccionActual ? 'activo' : ''}" data-accion="seccion" data-seccion="${s.nombre}" aria-label="${s.nombre}">
+    <button class="${s.nombre === seccionActual ? 'activo' : ''}" data-accion="seccion" data-seccion="${s.nombre}" aria-label="${s.etiqueta || s.nombre}">
       ${s.icono}
     </button>
   `).join('');

@@ -13,7 +13,7 @@
   }
 
   .fila {
-    grid-template-columns: 88px 1.2fr 88px 88px 78px 78px 1.3fr 88px;
+    grid-template-columns: 88px 1.2fr 118px 88px 78px 78px 1.3fr 88px;
   }
 
   .usuario-fila {
@@ -103,6 +103,14 @@
 
   .encabezado h1 {
     font-size: 22px;
+  }
+
+  .encabezado-derecha {
+    margin-left: 0;
+  }
+
+  .encabezado-derecha .filtros {
+    flex: 1;
   }
 
   .encabezado p {
@@ -230,12 +238,8 @@
   }
 
   .tarjeta .btn {
-    min-height: 38px;
+    min-height: 44px;
     padding: 8px;
-  }
-
-  .tarjeta .btn-ajustar {
-    width: 38px;
   }
 
   /* la alerta queda dentro de la pagina */
@@ -604,12 +608,18 @@
   }
 
   .alerta-fila {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     grid-template-areas:
-      'insumo prioridad'
-      'tipo categoria';
+      'insumo categoria prioridad'
+      'tipo tipo tipo';
     gap: 6px 8px;
     padding: 11px 14px;
+  }
+
+  .alerta-fila.fila-titulos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
   }
 
   .alerta-fila .fila-insumo { grid-area: insumo; }

@@ -1,4 +1,5 @@
-import { escapar, diasParaVencer } from './Comunes.js';
+import { escapar, diasParaVencer, diasHasta, nombreCategoria } from './Comunes.js';
+import { lotesCon, lotesVencidos, cantidadVencida, disponible, estaVencido } from './Lotes.js';
 import { itemSobrestock, calcularExcedente } from './Alerta.js';
 
 // color de cada prioridad y orden en que se muestran
@@ -6,42 +7,117 @@ export const coloresPrioridad = { Alta: 'rojo', Media: 'naranja', Baja: 'azul' }
 const orden = Object.keys(coloresPrioridad);
 const grupos = { Alta: 'Urgente', Media: 'Pronto', Baja: 'Para revisar' };
 
-// vencimiento y stock de cada producto de una lista
+// de la alerta mas grave a la menos; sirve para ordenar por la columna ALERTA
+const tipos = ['Vencido', 'Sobrestock', 'Por vencer', 'Stock bajo', 'Cerca del mínimo'];
+
+const dias = n => `${n} ${n === 1 ? 'día' : 'días'}`;
+
+// los problemas de un producto, mirando cada lote: lo vencido, lo proximo a vencer y el stock
+// el stock que cuenta es el que se puede usar (sin lo vencido); si todo vencio, solo se dice eso
+export function problemasDe(item) {
+  const u = item.unidad;
+  const vencidos = lotesVencidos(item);
+  const vencida = cantidadVencida(item);
+  const problemas = [];
+
+  if (vencidos.length) {
+    const masViejo = Math.max(...vencidos.map(l => -diasHasta(l.vence)));
+    const cuanto = vencida >= item.cantidad ? `Todo (${vencida} ${u})` : `${vencida} ${u}`;
+    problemas.push({ tipo: 'Vencido', detalle: `${cuanto} venció hace ${dias(masViejo)}`, corto: `${cuanto}, hace ${dias(masViejo)}`, prioridad: 'Alta' });
+    if (vencida >= item.cantidad) return problemas;
+  }
+
+  // el proximo lote en vencer que todavia sirve
+  const proximo = lotesCon(item)
+    .filter(l => l.vence && !estaVencido(l))
+    .sort((a, b) => a.vence.localeCompare(b.vence))[0];
+  const vence = proximo ? diasHasta(proximo.vence) : null;
+  if (vence !== null && vence <= 15) {
+    const cuando = vence === 0 ? 'vence hoy' : `vence en ${dias(vence)}`;
+    const cuanto = proximo.quedan === item.cantidad ? 'Todo' : `${proximo.quedan} ${u}`;
+    const enCuanto = vence === 0 ? 'hoy' : `en ${dias(vence)}`;
+    problemas.push({ tipo: 'Por vencer', detalle: `${cuanto} ${cuando}`, corto: `${cuanto} ${enCuanto}`, prioridad: vence <= 3 ? 'Alta' : 'Media' });
+  }
+
+  // cerca del minimo: hasta un 20% sobre el minimo; avisa antes de que falte
+  const sirve = disponible(item);
+  const quedan = `Quedan ${sirve} ${u}${vencida ? ' que sirven' : ''} · mín. ${item.minimo}`;
+  const deMinimo = `${sirve} de ${item.minimo} ${u}`;
+  if (sirve < item.minimo) {
+    problemas.push({ tipo: 'Stock bajo', detalle: quedan, corto: deMinimo, prioridad: 'Alta' });
+  } else if (sirve <= item.minimo * 1.2) {
+    problemas.push({ tipo: 'Cerca del mínimo', detalle: quedan, corto: deMinimo, prioridad: 'Baja' });
+  }
+  return problemas;
+}
+
+// una fila por producto con todos sus problemas juntos; la prioridad es la mas alta de ellos
 function alertasDe(lista, categoria) {
-  const filas = [];
-
-  lista.forEach(item => {
-    const dias = diasParaVencer(item);
-    if (dias !== null && dias < 0) {
-      filas.push({ item, categoria, tipo: 'Vencido', detalle: `Venció hace ${-dias} días`, prioridad: 'Alta' });
-    } else if (dias !== null && dias <= 3) {
-      filas.push({ item, categoria, tipo: 'Por vencer', detalle: `Vence en ${dias} días`, prioridad: 'Alta' });
-    } else if (dias !== null && dias <= 15) {
-      filas.push({ item, categoria, tipo: 'Por vencer', detalle: `Vence en ${dias} días`, prioridad: 'Media' });
-    }
-
-    if (item.cantidad < item.minimo) {
-      filas.push({ item, categoria, tipo: 'Stock bajo', detalle: `${item.cantidad} de ${item.minimo} ${item.unidad} mín.`, prioridad: 'Alta' });
-    } else if (item.cantidad <= item.minimo * 1.2) {
-      filas.push({ item, categoria, tipo: 'Revisar consumo', detalle: `${item.cantidad} de ${item.minimo} ${item.unidad} mín.`, prioridad: 'Baja' });
-    }
+  return lista.flatMap(item => {
+    const problemas = problemasDe(item);
+    if (problemas.length === 0) return [];
+    return [{
+      item,
+      categoria,
+      // 'Vencido', 'Vencido y Stock bajo', 'Vencido, Por vencer y Cerca del mínimo'
+      tipo: problemas.map(p => p.tipo).join(', ').replace(/, ([^,]*)$/, ' y $1'),
+      detalle: problemas.map(p => p.detalle).join(' · '),
+      prioridad: orden.find(o => problemas.some(p => p.prioridad === o)),
+      problemas,
+    }];
   });
-
-  return filas;
 }
 
 // todas las alertas, de la mas urgente a la menos
 // conSobrestock: Inicio ya muestra el sobrestock en su propio recuadro, ahi va sin el
 export function calcularAlertas(estado, conSobrestock = true) {
-  const filas = [...alertasDe(estado.alimentos, 'Alimentos'), ...alertasDe(estado.salud, 'Salud')];
+  let filas = [...alertasDe(estado.alimentos, 'Alimentos'), ...alertasDe(estado.salud, 'Salud')];
 
+  // el sobrestock reemplaza la fila de "por vencer" de ese producto, para no repetirlo
   const sobra = conSobrestock ? itemSobrestock(estado) : null;
   if (sobra) {
-    const detalle = `Vence en ${diasParaVencer(sobra)} días y sobrarían ${calcularExcedente(sobra)} ${sobra.unidad}`;
-    filas.unshift({ item: sobra, categoria: 'Alimentos', tipo: 'Sobrestock', detalle, prioridad: 'Alta' });
+    const detalle = `Vence en ${dias(diasParaVencer(sobra))} y sobrarían ${calcularExcedente(sobra)} ${sobra.unidad}`;
+    const problema = { tipo: 'Sobrestock', detalle, corto: `sobrarían ${calcularExcedente(sobra)} ${sobra.unidad}`, prioridad: 'Alta' };
+    filas = [{ item: sobra, categoria: 'Alimentos', ...problema, problemas: [problema] }, ...filas.filter(f => f.item !== sobra)];
   }
 
-  return filas.sort((a, b) => orden.indexOf(a.prioridad) - orden.indexOf(b.prioridad));
+  return filas.sort(porPrioridad);
+}
+
+const rangoTipo = f => tipos.findIndex(t => f.tipo.startsWith(t));
+const porPrioridad = (a, b) => orden.indexOf(a.prioridad) - orden.indexOf(b.prioridad) || rangoTipo(a) - rangoTipo(b);
+
+// columnas de la tabla de alertas que ordenan; empatados quedan por prioridad
+const comparar = {
+  producto: (a, b) => a.item.nombre.localeCompare(b.item.nombre),
+  categoria: (a, b) => nombreCategoria(a.categoria).localeCompare(nombreCategoria(b.categoria)),
+  alerta: (a, b) => rangoTipo(a) - rangoTipo(b),
+  prioridad: porPrioridad,
+};
+
+// { orden: 'categoria', invertido: true } -> las filas ya ordenadas
+export function ordenarAlertas(filas, { orden: columna, invertido }) {
+  const sentido = invertido ? -1 : 1;
+  return [...filas].sort((a, b) => sentido * comparar[columna](a, b) || porPrioridad(a, b));
+}
+
+// los problemas de un producto, uno por franja con el color de su prioridad
+// (con span y no ul: tambien va dentro de las filas de la tabla, que son botones)
+export function ListaProblemas(problemas) {
+  return `
+    <span class="lista-alertas">
+      ${problemas.map(p => `
+        <span class="lista-alertas-item ${coloresPrioridad[p.prioridad]}">
+          <span class="actividad-punto ${coloresPrioridad[p.prioridad]}"></span>
+          <span><b>${p.tipo}</b> · ${escapar(p.detalle)}</span>
+        </span>`).join('')}
+    </span>`;
+}
+
+// los mismos problemas en pastillas de una linea (tabla de alertas de Inicio); el detalle completo, al pasar el mouse
+export function PastillasProblemas(problemas) {
+  return problemas.map(p => `
+    <span class="pastilla-alerta ${coloresPrioridad[p.prioridad]}" title="${escapar(p.tipo + ': ' + p.detalle)}"><b>${p.tipo}</b> · ${escapar(p.corto)}</span>`).join('');
 }
 
 // panel de la campanita: todas las alertas en cualquier pestaña; tocar una abre ese producto
@@ -62,7 +138,7 @@ export function PanelAlertas(alertas) {
               <b>${escapar(a.item.nombre)}</b>
               <small>${a.tipo} · ${escapar(a.detalle)}</small>
             </span>
-            <span class="actividad-hora">${a.categoria}</span>
+            <span class="actividad-hora">${nombreCategoria(a.categoria)}</span>
           </button>
         </li>
       `).join('')}

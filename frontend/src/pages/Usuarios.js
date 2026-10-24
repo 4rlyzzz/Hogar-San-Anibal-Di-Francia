@@ -1,4 +1,4 @@
-import { Encabezado, SinResultados, escapar, iniciales, fechaLarga, textoFecha, tiempoRelativo } from '../components/Comunes.js';
+import { Encabezado, SinResultados, TituloOrden, escapar, iniciales, fechaLarga, textoFecha, tiempoRelativo } from '../components/Comunes.js';
 import { actividadDe } from '../components/Actividad.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips } from '../components/Filtros.js';
 import { usuario } from '../data/datos.js';
@@ -22,13 +22,6 @@ function pasaFiltros(c, filtros, texto) {
   if (filtros.estado === 'Activos' && !c.activo) return false;
   if (filtros.estado === 'Desactivados' && c.activo) return false;
   return (c.nombre + ' ' + c.usuario).toLowerCase().includes(texto);
-}
-
-// titulo de columna que ordena al hacer clic; la flecha muestra el orden actual
-function TituloOrden(texto, orden, filtros) {
-  const activo = filtros.orden === orden;
-  const flecha = activo ? (filtros.invertido ? '↑' : '↓') : '';
-  return `<button class="titulo-orden ${activo ? 'activo' : ''}" data-accion="ordenar-usuarios" data-orden="${orden}">${texto} ${flecha}</button>`;
 }
 
 // solo la ve el administrador (ver MainLayout y main.js)
@@ -70,11 +63,11 @@ export function paginaUsuarios(estado) {
       </div>
 
       <div class="usuario-fila fila-titulos">
-        <span>${TituloOrden('USUARIO', 'nombre', filtros)}</span><span>ROL</span><span>ESTADO</span>
-        <span>${TituloOrden('ÚLTIMO ACCESO', 'acceso', filtros)}</span>
+        <span>${TituloOrden('USUARIO', 'nombre', filtros, 'usuarios')}</span><span>ROL</span><span>ESTADO</span>
+        <span>${TituloOrden('ÚLTIMO ACCESO', 'acceso', filtros, 'usuarios')}</span>
         <span>ÚLTIMA ACTIVIDAD</span>
-        <span>${TituloOrden('MOV.', 'movimientos', filtros)}</span>
-        <span>${TituloOrden('AGREGADO', 'agregado', filtros)}</span><span></span>
+        <span>${TituloOrden('MOV.', 'movimientos', filtros, 'usuarios')}</span>
+        <span>${TituloOrden('AGREGADO', 'agregado', filtros, 'usuarios')}</span><span></span>
       </div>
 
       ${lista.map(f => FilaUsuario(f.cuenta, f.registros, f.ultima)).join('')}

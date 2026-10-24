@@ -51,24 +51,41 @@ export const actividad = [
   { id: 6, fecha: cuentas[1].creado, quienId: 1, quien: 'Administración', accion: 'usuario', texto: 'Agregó usuario', detalle: 'Almacén' },
 ];
 
-// productos perecibles
+// lotes de prueba, con fechas contadas desde hoy para que siempre se vean igual
+// llego: hace cuantos dias ingreso; vence: en cuantos dias vence (negativo: ya vencio; null: no tiene fecha)
+let idLote = 1;
+function lote(llego, vence, quedan) {
+  const ingreso = new Date();
+  ingreso.setDate(ingreso.getDate() - llego);
+  ingreso.setHours(9, 0, 0, 0);
+
+  let fecha = null;
+  if (vence !== null) {
+    const d = new Date();
+    d.setDate(d.getDate() + vence);
+    fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return { id: idLote++, ingreso, vence: fecha, cantidad: quedan, quedan, origen: '' };
+}
+
+// cantidad: la suma de lo que queda en sus lotes (ver components/Lotes.js)
 export const alimentos = [
-  { id: 1, codigo: 'LE', nombre: 'Leche evaporada Gloria', contenido: 400, medida: 'g', cantidad: 96, minimo: 40, unidad: 'latas', vencimiento: '2027-03-15', lote: '' },
-  { id: 2, codigo: 'MA', nombre: 'Manzana', cantidad: 42, minimo: 30, unidad: 'kg', vencimiento: '2026-10-13', lote: '' },
-  { id: 3, codigo: 'AV', nombre: 'Avena 3 Ositos', cantidad: 150, minimo: 50, unidad: 'kg', vencimiento: '2026-10-16', lote: 'AV-3308', consumoDiario: 3.75 },
-  { id: 4, codigo: 'AR', nombre: 'Arroz Costeño', cantidad: 210, minimo: 100, unidad: 'kg', vencimiento: '2027-08-20', lote: '' },
-  { id: 5, codigo: 'PO', nombre: 'Pollo entero', cantidad: 28, minimo: 40, unidad: 'kg', vencimiento: '2026-10-10', lote: '' },
-  { id: 6, codigo: 'LT', nombre: 'Lentejas', contenido: 1, medida: 'kg', cantidad: 12, minimo: 20, unidad: 'bolsas', vencimiento: '2027-05-10', lote: '' },
+  { id: 1, codigo: 'LE', nombre: 'Leche evaporada Gloria', contenido: 400, medida: 'g', cantidad: 96, minimo: 40, unidad: 'latas', lotes: [lote(40, 142, 60), lote(6, 210, 36)] },
+  { id: 2, codigo: 'MA', nombre: 'Manzana', cantidad: 42, minimo: 30, unidad: 'kg', lotes: [lote(20, -11, 12), lote(3, 10, 30)] },
+  { id: 3, codigo: 'AV', nombre: 'Avena 3 Ositos', cantidad: 150, minimo: 50, unidad: 'kg', consumoDiario: 3.75, lotes: [lote(17, 12, 150)] },
+  { id: 4, codigo: 'AR', nombre: 'Arroz Costeño', cantidad: 210, minimo: 100, unidad: 'kg', lotes: [lote(60, 300, 90), lote(19, 330, 120)] },
+  { id: 5, codigo: 'PO', nombre: 'Pollo entero', cantidad: 28, minimo: 40, unidad: 'kg', lotes: [lote(19, -14, 4), lote(5, null, 10), lote(1, null, 14)] },
+  { id: 6, codigo: 'LT', nombre: 'Lentejas', contenido: 1, medida: 'kg', cantidad: 12, minimo: 20, unidad: 'bolsas', lotes: [lote(50, 198, 12)] },
 ];
 
-// productos indispensables (medicinas e higiene)
+// medicinas, higiene y aseo (la categoria se guarda como 'Salud')
 export const salud = [
-  { id: 1, codigo: 'PC', nombre: 'Paracetamol jarabe 120 mg/5 ml', contenido: 60, medida: 'ml', cantidad: 18, minimo: 10, unidad: 'frascos', vencimiento: '2027-02-28', lote: 'PX-4471' },
-  { id: 2, codigo: 'AM', nombre: 'Amoxicilina 500 mg', contenido: 10, medida: 'unidades', cantidad: 6, minimo: 12, unidad: 'blísters', vencimiento: '2026-11-30', lote: 'AM-2290' },
-  { id: 3, codigo: 'PÑ', nombre: 'Pañales Huggies talla M', contenido: 40, medida: 'unidades', cantidad: 4, minimo: 10, unidad: 'paquetes', vencimiento: null, lote: 'DN-0815' },
-  { id: 4, codigo: 'SR', nombre: 'Sales de rehidratación oral', contenido: 27.9, medida: 'g', cantidad: 34, minimo: 20, unidad: 'sobres', vencimiento: '2027-06-30', lote: 'SO-1132' },
-  { id: 5, codigo: 'AG', nombre: 'Alcohol en gel', contenido: 1, medida: 'L', cantidad: 22, minimo: 8, unidad: 'frascos', vencimiento: '2027-03-31', lote: 'AG-7740' },
-  { id: 6, codigo: 'VC', nombre: 'Vitamina C gotas', contenido: 30, medida: 'ml', cantidad: 9, minimo: 8, unidad: 'frascos', vencimiento: '2026-11-05', lote: 'VC-5503' },
+  { id: 1, codigo: 'PC', nombre: 'Paracetamol jarabe 120 mg/5 ml', contenido: 60, medida: 'ml', cantidad: 18, minimo: 10, unidad: 'frascos', lotes: [lote(30, 127, 18)] },
+  { id: 2, codigo: 'AM', nombre: 'Amoxicilina 500 mg', contenido: 10, medida: 'unidades', cantidad: 6, minimo: 12, unidad: 'blísters', lotes: [lote(45, 37, 6)] },
+  { id: 3, codigo: 'PÑ', nombre: 'Pañales Huggies talla M', contenido: 40, medida: 'unidades', cantidad: 4, minimo: 10, unidad: 'paquetes', lotes: [lote(30, null, 4)] },
+  { id: 4, codigo: 'SR', nombre: 'Sales de rehidratación oral', contenido: 27.9, medida: 'g', cantidad: 34, minimo: 20, unidad: 'sobres', lotes: [lote(19, 249, 34)] },
+  { id: 5, codigo: 'AG', nombre: 'Alcohol en gel', contenido: 1, medida: 'L', cantidad: 22, minimo: 8, unidad: 'frascos', lotes: [lote(70, 158, 22)] },
+  { id: 6, codigo: 'VC', nombre: 'Vitamina C gotas', contenido: 30, medida: 'ml', cantidad: 9, minimo: 8, unidad: 'frascos', lotes: [lote(25, 12, 9)] },
 ];
 
 // movimientos de prueba del ultimo año (contando desde hoy) para que el grafico de inicio tenga datos

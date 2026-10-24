@@ -1,18 +1,23 @@
-import { escapar, colorVencimiento, textoVencimiento, textoCambio, textoStock, textoPresentacion, textoTotal } from './Comunes.js';
-import { iconoAjustar } from '../assets/icons.js';
+import { escapar, nombreCategoria, colorVencimiento, textoCambio, textoStock, textoPresentacion, textoTotal } from './Comunes.js';
+import { iconoAjustar, iconoSalida, iconoIngreso } from '../assets/icons.js';
+import { TablaLotes, disponible } from './Lotes.js';
+import { problemasDe, ListaProblemas } from './Alertas.js';
 
 const clases = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
 
 // campos que se muestran con su nombre; los que la bd agregue despues salen con su nombre tal cual
-const etiquetas = { unidad: 'Se cuenta en', minimo: 'Stock mínimo', lote: 'Lote', consumoDiario: 'Consumo diario', unidos: 'Se le unió' };
-const internos = ['id', 'codigo', 'nombre', 'cantidad', 'vencimiento', 'contenido', 'medida', '_id', '_rev', 'tipo', 'categoria'];
+const etiquetas = { unidad: 'Se cuenta en', minimo: 'Stock mínimo', consumoDiario: 'Consumo diario', unidos: 'Se le unió' };
+// lotes van en su propia tabla; vencimiento y lote son de los documentos de antes de los lotes
+const internos = ['id', 'codigo', 'nombre', 'cantidad', 'lotes', 'vencimiento', 'lote', 'contenido', 'medida', '_id', '_rev', 'tipo', 'categoria'];
 
 // cuantos movimientos recientes se muestran (el resto, en el historial)
 const ultimos = 8;
 
+// cuenta solo lo que se puede usar (sin lo vencido)
 function estadoStock(item) {
-  if (item.cantidad < item.minimo) return { color: 'rojo', texto: 'Bajo el stock mínimo' };
-  if (item.cantidad <= item.minimo * 1.2) return { color: 'naranja', texto: 'Cerca del mínimo' };
+  const sirve = disponible(item);
+  if (sirve < item.minimo) return { color: 'rojo', texto: 'Bajo el stock mínimo' };
+  if (sirve <= item.minimo * 1.2) return { color: 'naranja', texto: 'Cerca del mínimo' };
   return { color: 'verde', texto: 'Sobre el mínimo' };
 }
 
@@ -32,10 +37,6 @@ function DatosProducto(item) {
   return `
     <dl class="mov-datos">
       <div><dt>Presentación</dt><dd>${escapar(textoPresentacion(item) || 'Suelto, en ' + item.unidad)}</dd></div>
-      <div>
-        <dt>Vencimiento</dt>
-        <dd><span class="etiqueta ${colorVencimiento(item)}">${textoVencimiento(item)}</span></dd>
-      </div>
       ${filas}
     </dl>`;
 }
@@ -45,7 +46,7 @@ function DatosProducto(item) {
 // esAdmin: solo el administrador puede unir un producto repetido con otro
 export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
   const estado = estadoStock(item);
-  const esSalud = categoria === 'Salud';
+  const problemas = problemasDe(item);
 
   return `
     <div class="fondo-modal fondo-panel">
@@ -54,7 +55,7 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
           <span class="tarjeta-codigo ${colorVencimiento(item)}">${escapar(item.codigo)}</span>
           <div>
             <div class="modal-titulo">${escapar(item.nombre)}</div>
-            <div class="modal-sub">${categoria}</div>
+            <div class="modal-sub">${nombreCategoria(categoria)}</div>
           </div>
           <button type="button" class="btn-cerrar" data-accion="cerrar-modal" aria-label="Cerrar">×</button>
         </div>
@@ -65,18 +66,22 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
               <b>${item.cantidad} <small>${escapar(item.unidad)}</small></b>
               ${textoPresentacion(item) ? `<span class="producto-total">${escapar(textoPresentacion(item))} · ${textoTotal(item)}</span>` : ''}
             </div>
-            <span class="texto-${estado.color}">● ${estado.texto}</span>
+            ${problemas.length ? '' : `<span class="texto-${estado.color}">● ${estado.texto}</span>`}
           </div>
+
+          ${problemas.length ? `<div class="producto-alertas">${ListaProblemas(problemas)}</div>` : ''}
 
           <div class="botones producto-botones">
-            <button class="btn ${esSalud ? 'btn-azul' : 'btn-gris'}" data-accion="registrar" data-tipo="Salida" data-categoria="${categoria}" data-id="${item.id}">
-              ${esSalud ? 'Registrar uso' : 'Registrar salida'}
-            </button>
-            <button class="btn btn-verde-claro" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">+ Ingreso</button>
-            <button class="btn btn-ajustar" data-accion="ajustar" data-categoria="${categoria}" data-id="${item.id}" title="Ajustar stock según conteo" aria-label="Ajustar stock">${iconoAjustar}</button>
+            <button class="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" data-categoria="${categoria}" data-id="${item.id}">${iconoSalida} Registrar salida</button>
+            <button class="btn btn-registrar btn-ingreso" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">${iconoIngreso} Registrar ingreso</button>
           </div>
+          <button class="btn btn-blanco btn-contar" data-accion="ajustar" data-categoria="${categoria}" data-id="${item.id}">
+            ${iconoAjustar} Contar y corregir stock
+          </button>
 
           ${DatosProducto(item)}
+
+          ${TablaLotes(item, categoria)}
 
           <div class="mov-pasos-titulo">
             <b>Últimos movimientos</b>

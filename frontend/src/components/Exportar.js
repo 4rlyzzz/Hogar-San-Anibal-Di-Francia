@@ -1,4 +1,4 @@
-import { fechaDe, cambioDe } from './Comunes.js';
+import { fechaDe, cambioDe, nombreCategoria } from './Comunes.js';
 
 const negrita = texto => ({ value: texto, fontWeight: 'bold' });
 
@@ -7,18 +7,19 @@ const columnasHistorial = [
   { header: negrita('Fecha'), width: 12, cell: f => ({ value: fechaDe(f.fecha), type: Date, format: 'dd/mm/yyyy' }) },
   { header: negrita('Hora'), width: 8, cell: f => ({ value: f.fecha.split(' ')[2] }) },
   { header: negrita('Producto'), width: 32, cell: f => ({ value: f.insumo }) },
-  { header: negrita('Categoría'), width: 12, cell: f => ({ value: f.categoria }) },
+  { header: negrita('Categoría'), width: 16, cell: f => ({ value: nombreCategoria(f.categoria) }) },
   { header: negrita('Movimiento'), width: 12, cell: f => ({ value: f.movimiento }) },
   { header: negrita('Cantidad'), width: 10, cell: f => ({ value: cambioDe(f), type: Number }) },
   { header: negrita('Unidad'), width: 10, cell: f => ({ value: f.unidad }) },
   // los movimientos viejos no tienen saldo: la celda queda vacia
   { header: negrita('Quedó'), width: 10, cell: f => (f.saldo != null ? { value: f.saldo, type: Number } : { value: null }) },
+  { header: negrita('Vence'), width: 12, cell: f => (f.vence ? { value: new Date(f.vence + 'T00:00:00'), type: Date, format: 'dd/mm/yyyy' } : { value: null }) },
   { header: negrita('Responsable'), width: 16, cell: f => ({ value: f.responsable }) },
   { header: negrita('Donador'), width: 24, cell: f => ({ value: f.donador || '' }) },
   { header: negrita('Actividad'), width: 22, cell: f => ({ value: f.actividad || '' }) },
   { header: negrita('Para'), width: 18, cell: f => ({ value: f.para || '' }) },
   { header: negrita('Motivo del ajuste'), width: 26, cell: f => ({ value: f.motivo || '' }) },
-  { header: negrita('Detalle'), width: 30, cell: f => ({ value: f.nota || '' }) },
+  { header: negrita('Detalle'), width: 30, cell: f => ({ value: f.nota || (f.corrige ? `Corrige el ajuste del ${f.corrige.fecha}` : '') }) },
 ];
 
 // 'Leche evaporada Gloria' -> 'leche-evaporada-gloria'

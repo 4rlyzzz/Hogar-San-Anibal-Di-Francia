@@ -16,6 +16,18 @@ export function iniciales(nombre) {
   return letras.toUpperCase();
 }
 
+// nombre que se muestra de cada categoria; en los datos se guarda la clave corta
+export const nombresCategoria = { Alimentos: 'Alimentos', Salud: 'Salud e higiene' };
+export const nombreCategoria = categoria => nombresCategoria[categoria] || categoria;
+
+// titulo de columna que ordena al hacer clic; la flecha muestra el orden actual
+// grupo: donde se guarda el orden en el estado ('usuarios', 'alertasOrden')
+export function TituloOrden(texto, orden, filtros, grupo) {
+  const activo = filtros.orden === orden;
+  const flecha = activo ? (filtros.invertido ? '↑' : '↓') : '';
+  return `<button class="titulo-orden ${activo ? 'activo' : ''}" data-accion="ordenar" data-grupo="${grupo}" data-orden="${orden}">${texto} ${flecha}</button>`;
+}
+
 export const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
 
 // Date -> '07 oct 09:05' (asi se guarda en el historial)
@@ -142,10 +154,44 @@ export const motivosAjuste = [
   'Salida no registrada',
   'Ingreso o donación no registrada',
   'Error al registrar un movimiento',
-  'Corrección de un ajuste anterior',
   'Otro',
 ];
+// motivo fijo de los ajustes que corrigen a otro (no esta en la lista de arriba)
 export const motivoCorreccion = 'Corrección de un ajuste anterior';
+
+// movimientos del mismo producto que hubo despues de "viejo" y antes de "nuevo" (null = hasta ahora)
+// el historial va del mas nuevo al mas antiguo; devuelve [{ fila, indice }]
+export function movimientosEntre(historial, viejo, nuevo = null) {
+  const desde = nuevo ? historial.indexOf(nuevo) + 1 : 0;
+  return historial
+    .map((fila, indice) => ({ fila, indice }))
+    .slice(desde, historial.indexOf(viejo))
+    .filter(p => p.fila.insumo === viejo.insumo && p.fila.categoria === viejo.categoria);
+}
+
+// esos movimientos en lista, con lo que sumaron en total
+// navegable: cada fila abre su detalle (en el panel); en un modal se muestran fijas
+export function MovimientosEntre(pasos, unidad, navegable = false) {
+  if (pasos.length === 0) return '<p class="correccion-vacio">No hubo ingresos, salidas ni ajustes en medio.</p>';
+
+  const total = Math.round(pasos.reduce((suma, p) => suma + cambioDe(p.fila), 0) * 100) / 100;
+  const clase = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
+  const etiqueta = navegable ? 'button' : 'div';
+
+  return `
+    <ul class="mov-pasos correccion-lista">
+      ${pasos.map(p => `
+        <li>
+          <${etiqueta} class="mov-paso ${clase[p.fila.movimiento]}" ${navegable ? `data-accion="ver-movimiento" data-indice="${p.indice}"` : ''}>
+            <span class="mov-paso-fecha">${p.fila.fecha}</span>
+            <span class="mov-paso-tipo">● ${p.fila.movimiento} <small>${escapar(p.fila.responsable)}</small></span>
+            <span class="mov-paso-cambio">${escapar(textoCambio(p.fila))}</span>
+          </${etiqueta}>
+        </li>
+      `).join('')}
+    </ul>
+    <p class="correccion-total">En total: ${total > 0 ? '+' : total < 0 ? '−' : ''}${Math.abs(total)} ${escapar(unidad)}</p>`;
+}
 
 // cuanto cambio el stock, con signo: +20, -5
 export function cambioDe(fila) {
@@ -173,6 +219,7 @@ export function textoDetalle(fila) {
     if (fila.donador) return fila.donador + (fila.actividad ? ' · ' + fila.actividad : '') + nota;
     return fila.inicial ? 'Registro inicial' : 'Compra del hogar';
   }
+  if (fila.motivo) return fila.motivo + nota;
   if (fila.para) return 'Para ' + fila.para;
   return fila.categoria === 'Salud' ? 'Uso general' : '';
 }
@@ -183,13 +230,44 @@ export function textoCambio(fila) {
   return `${cambio >= 0 ? '+' : '−'}${Math.abs(cambio)} ${fila.unidad}`;
 }
 
-// dias que faltan para vencer (null si no vence)
-export function diasParaVencer(item) {
-  if (!item.vencimiento) return null;
+// '2026-11-05' -> dias que faltan desde hoy (negativo si ya paso)
+export function diasHasta(iso) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
-  const vence = new Date(item.vencimiento + 'T00:00:00');
+  const vence = new Date(iso + 'T00:00:00');
   return Math.round((vence - hoy) / (1000 * 60 * 60 * 24));
+}
+
+// el vencimiento mas proximo entre los lotes que tienen stock (lo ya vencido tambien cuenta)
+// null si ningun lote tiene fecha; los productos sin lotes (docs viejos) usan su campo vencimiento
+export function vencimientoDe(item) {
+  if (!item.lotes) return item.vencimiento ?? null;
+  const fechas = item.lotes.filter(l => l.quedan > 0 && l.vence).map(l => l.vence).sort();
+  return fechas[0] ?? null;
+}
+
+// cuanto stock esta en lotes ya vencidos
+export function cantidadVencida(item) {
+  const vencida = (item.lotes || [])
+    .filter(l => l.quedan > 0 && l.vence && diasHasta(l.vence) < 0)
+    .reduce((suma, l) => suma + l.quedan, 0);
+  return Math.round(vencida * 100) / 100;
+}
+
+// lo que se puede usar: el stock menos lo vencido
+export function disponible(item) {
+  return Math.round((item.cantidad - cantidadVencida(item)) * 100) / 100;
+}
+
+// stock bajo: lo que se puede usar no llega al minimo
+export function bajoMinimo(item) {
+  return disponible(item) < item.minimo;
+}
+
+// dias que faltan para vencer (null si no vence)
+export function diasParaVencer(item) {
+  const vence = vencimientoDe(item);
+  return vence ? diasHasta(vence) : null;
 }
 
 export function porVencer(item) {
@@ -206,15 +284,28 @@ export function colorVencimiento(item) {
   return 'verde';
 }
 
+// sin fecha: cuantos dias lleva el lote mas antiguo, para que quien revisa decida si sigue bien
 export function textoVencimiento(item) {
-  if (!item.vencimiento) return 'Sin vencimiento';
-  const [anio, mes, dia] = item.vencimiento.split('-');
+  const vence = vencimientoDe(item);
+  if (!vence) {
+    const antiguo = (item.lotes || []).filter(l => l.quedan > 0).sort((a, b) => a.ingreso - b.ingreso)[0];
+    if (!antiguo) return 'Sin vencimiento';
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const desde = new Date(antiguo.ingreso);
+    desde.setHours(0, 0, 0, 0);
+    const dias = Math.round((hoy - desde) / (1000 * 60 * 60 * 24));
+    if (dias === 0) return 'Sin fecha · ingresó hoy';
+    return `Sin fecha · ${dias} ${dias === 1 ? 'día' : 'días'}`;
+  }
+  const [anio, mes, dia] = vence.split('-');
   const texto = `${dia}/${mes}/${anio.slice(2)}`;
-  return diasParaVencer(item) < 0 ? `Venció ${texto}` : `Vence ${texto}`;
+  return diasHasta(vence) < 0 ? `Venció ${texto}` : `Vence ${texto}`;
 }
 
 // conteos: cuantos hay en cada filtro, ej. { 'Por vencer': 3 } (se muestra dentro del boton)
-export function Encabezado(titulo, subtitulo = '', filtroActivo, conteos = {}) {
+// extra: lo que va al lado de los filtros (ej. el boton "Filtros")
+export function Encabezado(titulo, subtitulo = '', filtroActivo, conteos = {}, extra = '') {
   let filtros = '';
   if (filtroActivo) {
     filtros = `
@@ -233,7 +324,7 @@ export function Encabezado(titulo, subtitulo = '', filtroActivo, conteos = {}) {
         <h1>${titulo}</h1>
         ${subtitulo ? `<p>${subtitulo}</p>` : ''}
       </div>
-      ${filtros}
+      ${extra ? `<div class="encabezado-derecha">${filtros}${extra}</div>` : filtros}
     </div>
   `;
 }
@@ -276,8 +367,8 @@ export function filtrarInsumos(lista, estado) {
 
   return lista.filter(item => {
     if (estado.filtro === 'Por vencer' && !porVencer(item)) return false;
-    if (estado.filtro === 'Stock bajo' && item.cantidad >= item.minimo) return false;
-    if (texto && !(item.nombre + ' ' + textoPresentacion(item) + ' ' + item.lote).toLowerCase().includes(texto)) return false;
+    if (estado.filtro === 'Stock bajo' && !bajoMinimo(item)) return false;
+    if (texto && !(item.nombre + ' ' + textoPresentacion(item)).toLowerCase().includes(texto)) return false;
     return true;
   });
 }

@@ -1,4 +1,4 @@
-import { Encabezado, escapar, fechaDe, textoCambio, textoStock, textoDetalle } from '../components/Comunes.js';
+import { Encabezado, nombreCategoria, nombresCategoria, escapar, fechaDe, textoCambio, textoStock, textoDetalle } from '../components/Comunes.js';
 import { iconoDescargar } from '../assets/icons.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, CampoFecha, Chips } from '../components/Filtros.js';
 
@@ -103,7 +103,7 @@ export function paginaHistorial(estado) {
           <span class="fila-insumo">
             ${escapar(fila.insumo)}
           </span>
-          <span class="fila-categoria"><span class="pastilla ${fila.categoria === 'Salud' ? 'azul' : 'verde'}">${fila.categoria}</span></span>
+          <span class="fila-categoria"><span class="pastilla ${fila.categoria === 'Salud' ? 'azul' : 'verde'}">${nombreCategoria(fila.categoria)}</span></span>
           <span class="fila-movimiento">● ${fila.movimiento}</span>
           <span class="fila-cantidad">${escapar(textoCambio(fila))}</span>
           <span class="fila-saldo" title="Stock antes → después de este movimiento">${textoStock(fila)}</span>
@@ -117,7 +117,7 @@ export function paginaHistorial(estado) {
 
     ${abierto ? PanelFiltros('historialFiltros', `
       ${CampoSelect('historialFiltros', 'movimiento', 'Movimiento', { Todos: 'Todos', Ingreso: 'Solo ingresos', Salida: 'Solo salidas', Ajuste: 'Solo ajustes' }, f.movimiento)}
-      ${CampoSelect('historialFiltros', 'categoria', 'Categoría', opcionesCon('Todas', ['Alimentos', 'Salud']), f.categoria)}
+      ${CampoSelect('historialFiltros', 'categoria', 'Categoría', { Todos: 'Todas', ...nombresCategoria }, f.categoria)}
       ${CampoSelect('historialFiltros', 'responsable', 'Responsable', opcionesCon('Todos', opcionesDe(estado.historial, 'responsable')), f.responsable)}
       ${CampoSelect('historialFiltros', 'producto', 'Producto', opcionesCon('Todos', opcionesDe(paraProductos, 'insumo')), f.producto)}
       ${ninos.length ? CampoSelect('historialFiltros', 'para', 'Para (niño/a)', opcionesCon('Todos', ninos), f.para) : ''}

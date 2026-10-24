@@ -79,19 +79,15 @@ export function AlertaSobrestock(item, enPagina = false) {
         </div>
 
         <div class="alerta-acciones">
-          <span class="rotulo">ACCIONES RECOMENDADAS</span>
-          <div class="consejo consejo-naranja">
-            ${iconoObjetivo}
-            <div>
+          <span class="rotulo">RECOMENDACIONES</span>
+          <div class="consejos">
+            <div class="consejo consejo-naranja">
+              ${iconoObjetivo}
               <b>Priorizar consumo interno</b>
-              <span>Incluir avena en el menú de desayuno de los próximos ${dias} días.</span>
             </div>
-          </div>
-          <div class="consejo consejo-verde">
-            ${iconoDonar}
-            <div>
-              <b>Donar excedente a red de hogares</b>
-              <span>Solo un administrador puede derivar los ${excedente} ${item.unidad} a la red de hogares.</span>
+            <div class="consejo consejo-verde">
+              ${iconoDonar}
+              <b>Donar excedente</b>
             </div>
           </div>
         </div>

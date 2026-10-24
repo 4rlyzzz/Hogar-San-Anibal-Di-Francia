@@ -1,12 +1,8 @@
-import { Encabezado, TituloSeccion, Recuadro, escapar, textoCambio, diasParaVencer, porVencer, fechaDe, meses } from '../components/Comunes.js';
+import { Encabezado, TituloSeccion, TituloOrden, nombreCategoria, colorVencimiento, Recuadro, escapar, textoCambio, diasParaVencer, porVencer, bajoMinimo, fechaDe, meses } from '../components/Comunes.js';
 import { AlertaSobrestock, itemSobrestock } from '../components/Alerta.js';
-import { calcularAlertas, coloresPrioridad } from '../components/Alertas.js';
+import { calcularAlertas, ordenarAlertas, coloresPrioridad, PastillasProblemas } from '../components/Alertas.js';
 import { iconoAlimentos, iconoSalud, iconoReloj, iconoCaja } from '../assets/icons.js';
 
-
-function bajoMinimo(item) {
-  return item.cantidad < item.minimo;
-}
 
 // ---------- recuadros de arriba ----------
 function Recuadros(estado) {
@@ -17,7 +13,7 @@ function Recuadros(estado) {
   return `
     <div class="panel-recuadros">
       ${Recuadro('verde', iconoAlimentos, estado.alimentos.length, 'Alimentos', `${estado.alimentos.filter(porVencer).length} por vencer`)}
-      ${Recuadro('azul', iconoSalud, estado.salud.length, 'Salud', `${estado.salud.filter(bajoMinimo).length} bajo mínimo`)}
+      ${Recuadro('azul', iconoSalud, estado.salud.length, 'Salud e higiene', `${estado.salud.filter(bajoMinimo).length} bajo mínimo`)}
       ${Recuadro('naranja', iconoReloj, vencen, 'Por vencer / vencidos', '≤ 15 días')}
       ${Recuadro('rojo', iconoCaja, bajos, 'Bajo stock mínimo', `de ${todos.length}`)}
     </div>
@@ -249,10 +245,37 @@ function PanelSobrestock(estado) {
   const item = itemSobrestock(estado);
   if (item) return AlertaSobrestock(item, true);
 
+  // sin riesgo: el espacio muestra lo que vence antes (lo que conviene usar primero)
+  const proximos = [
+    ...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })),
+    ...estado.salud.map(item => ({ item, categoria: 'Salud' })),
+  ]
+    .filter(p => (diasParaVencer(p.item) ?? -1) >= 0)
+    .sort((a, b) => diasParaVencer(a.item) - diasParaVencer(b.item))
+    .slice(0, 5);
+
   return `
     <div class="panel panel-sin-alerta">
-      ${TituloSeccion('!', 'naranja', 'Riesgo de sobrestock', 'alerta prioritaria')}
-      <div class="vacio">Ningún producto en riesgo de desperdicio por sobrestock</div>
+      ${TituloSeccion('!', 'naranja', 'Riesgo de sobrestock', '')}
+      <p class="sin-riesgo">✓ Ningún producto en riesgo de desperdicio</p>
+
+      <span class="proximos-titulo">Lo próximo en vencer · usar primero</span>
+      <ul class="proximos">
+        ${proximos.map(({ item, categoria }) => {
+          const dias = diasParaVencer(item);
+          return `
+            <li>
+              <button class="proximo fila-boton" data-accion="ver-producto" data-categoria="${categoria}" data-id="${item.id}">
+                <span>
+                  <b>${escapar(item.nombre)}</b>
+                  <small>${nombreCategoria(categoria)} · ${item.cantidad} ${escapar(item.unidad)}</small>
+                </span>
+                <span class="etiqueta ${colorVencimiento(item)}">${dias === 0 ? 'Hoy' : dias === 1 ? '1 día' : `${dias} días`}</span>
+              </button>
+            </li>`;
+        }).join('')}
+      </ul>
+      ${proximos.length === 0 ? '<div class="vacio">Ningún producto con fecha de vencimiento</div>' : ''}
     </div>
   `;
 }
@@ -292,23 +315,27 @@ function MovimientosRecientes(estado) {
 // ---------- otras alertas: vencimiento y stock ----------
 function OtrasAlertas(estado) {
   // el sobrestock ya tiene su recuadro arriba
-  const filas = calcularAlertas(estado, false);
+  const filas = ordenarAlertas(calcularAlertas(estado, false), estado.alertasOrden);
+  const o = estado.alertasOrden;
 
   return `
     <div class="tabla">
       <div class="tabla-header">
-        ${TituloSeccion('AV', 'rojo', 'Otras alertas', `${filas.length} de alimentos y salud`)}
+        ${TituloSeccion('AV', 'rojo', 'Otras alertas', `${filas.length} de alimentos, salud e higiene`)}
       </div>
 
       <div class="alerta-fila fila-titulos">
-        <span>PRODUCTO</span><span>CATEGORÍA</span><span>ALERTA</span><span>PRIORIDAD</span>
+        <span>${TituloOrden('PRODUCTO', 'producto', o, 'alertasOrden')}</span>
+        <span>${TituloOrden('CATEGORÍA', 'categoria', o, 'alertasOrden')}</span>
+        <span>${TituloOrden('ALERTA', 'alerta', o, 'alertasOrden')}</span>
+        <span>${TituloOrden('PRIORIDAD', 'prioridad', o, 'alertasOrden')}</span>
       </div>
 
       ${filas.map(f => `
         <button class="alerta-fila fila-boton" data-accion="ver-producto" data-categoria="${f.categoria}" data-id="${f.item.id}">
           <span class="fila-insumo">${escapar(f.item.nombre)}</span>
-          <span class="alerta-fila-categoria"><span class="pastilla ${f.categoria === 'Salud' ? 'azul' : 'verde'}">${f.categoria}</span></span>
-          <span class="alerta-fila-tipo">${f.tipo}<small>${escapar(f.detalle)}</small></span>
+          <span class="alerta-fila-categoria"><span class="pastilla ${f.categoria === 'Salud' ? 'azul' : 'verde'}">${nombreCategoria(f.categoria)}</span></span>
+          <span class="alerta-fila-tipo">${PastillasProblemas(f.problemas)}</span>
           <span class="alerta-fila-prioridad"><span class="pastilla ${coloresPrioridad[f.prioridad]}">${f.prioridad}</span></span>
         </button>
       `).join('')}

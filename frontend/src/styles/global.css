@@ -562,6 +562,7 @@ button {
 .btn-verde-claro:hover { background: #e2f4ec; }
 .btn-blanco { border: 1px solid #e0e7e4; background: #fff; color: #3d4b46; }
 .btn-verde { border: 1px solid #2d8e6c; background: #3fb98f; color: #fff; font-weight: 700; }
+.btn-rojo { border: 1px solid #b8402f; background: #d9534f; color: #fff; font-weight: 700; }
 .btn-verde:hover { background: #37a982; }
 
 .btn-cerrar {

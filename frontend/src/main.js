@@ -5,7 +5,9 @@ import './styles/login.css';
 
 import { alimentos, salud, historial, donadores, cuentas, actividad, actividadesDonacion, ninos, usuario } from './data/datos.js';
 import { Layout, Menu, MenuMovil, seccionesVisibles } from './layouts/MainLayout.js';
-import { ModalMovimiento, ModalProducto, ModalElegir, ModalDonador, ModalUsuario, ModalAjuste, ConfirmarAjuste, Coincidencias, ModalUnir, ConfirmarMovimiento, fechaActual } from './components/Modal.js';
+import { ModalMovimiento, ModalProducto, ModalElegir, ModalDonador, ModalUsuario, ModalAjuste, ConfirmarAjuste, Coincidencias, ModalUnir, ConfirmarMovimiento, ModalBaja, fechaActual } from './components/Modal.js';
+import { inventarioVacio } from './components/FiltrosInventario.js';
+import { planDescuento, descontar, nuevoLote, disponible, cantidadVencida, lotesVencidos } from './components/Lotes.js';
 import { PanelProducto } from './components/DetalleProducto.js';
 import { calcularAlertas, PanelAlertas } from './components/Alertas.js';
 import { paginaLogin } from './pages/Login.js';
@@ -17,7 +19,7 @@ import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreA
 import { paginaDonadores, listaDonadores, donacionesDe, actividadesDe } from './pages/Donadores.js';
 import { PanelDonador } from './components/DetalleDonador.js';
 import { paginaUsuarios } from './pages/Usuarios.js';
-import { iniciales, motivoCorreccion, palabras, coincideNombre, palabrasEnComun, pluralizar, envaseSingular } from './components/Comunes.js';
+import { iniciales, nombreCategoria, motivoCorreccion, movimientosEntre, palabras, coincideNombre, palabrasEnComun, pluralizar, envaseSingular } from './components/Comunes.js';
 import { actividadDe, PanelActividad } from './components/Actividad.js';
 import { PanelMovimiento } from './components/DetalleMovimiento.js';
 import { activarDeslizar } from './components/Deslizar.js';
@@ -26,9 +28,11 @@ const estado = {
   seccion: 'Inicio',
   grafico: { vista: 'Movimientos', periodo: 'Mes', categoria: 'Alimentos' },
   usuarios: { rol: 'Todos', estado: 'Todos', orden: 'acceso', invertido: false },
+  alertasOrden: { orden: 'prioridad', invertido: false },
   historialFiltros: filtrosHistorialVacios(),
   donadoresFiltros: { actividad: 'Todos', anio: 'Todos' },
-  // que panel de filtros esta abierto: 'historialFiltros', 'usuarios' o null
+  inventarioFiltros: inventarioVacio(),
+  // que panel de filtros esta abierto: 'historialFiltros', 'inventarioFiltros', 'usuarios' o null
   filtrosAbiertos: null,
   filtro: 'Todos',
   busqueda: '',
@@ -404,6 +408,7 @@ function guardarUnion() {
   }
 
   destino.cantidad = redondear(destino.cantidad + item.cantidad);
+  destino.lotes = [...(destino.lotes || []), ...(item.lotes || []).filter(l => l.quedan > 0)];
   if (item.cantidad > 0) {
     estado.historial.unshift({
       fecha: fechaActual(),
@@ -447,16 +452,18 @@ function abrirModalProducto(categoria) {
 // ---------- ajuste de stock (cualquiera; queda guardado quien lo hizo) ----------
 // corrige el stock cuando el conteo fisico no coincide; queda en el historial como 'Ajuste'
 // previo: lo ya escrito (al volver del resumen) o el motivo de una correccion
-function abrirModalAjuste(categoria, id, previo = {}) {
+// correccion: { fila, entre } cuando corrige un ajuste anterior
+function abrirModalAjuste(categoria, id, previo = {}, correccion = null) {
   const item = listaDe(categoria).find(i => i.id === Number(id));
-  seleccionado = { item, categoria };
+  seleccionado = { item, categoria, correccion };
 
-  document.querySelector('#modal').innerHTML = ModalAjuste(item, categoria, previo);
+  document.querySelector('#modal').innerHTML = ModalAjuste(item, categoria, previo, correccion);
   document.querySelector('#contado').focus();
   if (previo.contado != null) mostrarDiferencia();
 }
 
-// desde el detalle de un ajuste: abre uno nuevo ya marcado como correccion
+// desde el detalle de un ajuste: abre uno nuevo enlazado a ese (campo "corrige")
+// muestra lo que entro y salio desde entonces; el nuevo ajuste es sobre el stock actual
 function corregirAjuste(indice) {
   const fila = estado.historial[Number(indice)];
   const item = listaDe(fila.categoria).find(i => i.nombre === fila.insumo);
@@ -464,7 +471,7 @@ function corregirAjuste(indice) {
     mostrarToast('Ese producto ya no está en el inventario');
     return;
   }
-  abrirModalAjuste(fila.categoria, item.id, { motivo: motivoCorreccion, nota: `Corrige el ajuste del ${fila.fecha}` });
+  abrirModalAjuste(fila.categoria, item.id, {}, { fila, entre: movimientosEntre(estado.historial, fila) });
 }
 
 // redondea a 2 decimales para que 42.1 - 40 no de 2.1000000000000014
@@ -496,10 +503,10 @@ function mostrarDiferencia() {
 
 // paso 1 -> 2: valida y muestra el resumen; todavia no cambia nada
 function revisarAjuste() {
-  const { item, categoria } = seleccionado;
+  const { item, categoria, correccion } = seleccionado;
   const error = document.querySelector('#error');
   const contado = numero('contado');
-  const motivo = valor('motivo');
+  const motivo = correccion ? motivoCorreccion : valor('motivo');
   const nota = valor('nota');
 
   if (valor('contado') === '' || isNaN(contado) || contado < 0) {
@@ -518,19 +525,25 @@ function revisarAjuste() {
   }
 
   seleccionado.ajuste = { contado, diferencia, motivo, nota };
-  document.querySelector('#modal').innerHTML = ConfirmarAjuste(item, categoria, seleccionado.ajuste);
+  document.querySelector('#modal').innerHTML = ConfirmarAjuste(item, categoria, seleccionado.ajuste, seleccionado.correccion);
 }
 
 // "Volver y corregir": regresa al paso 1 con lo que ya habia escrito
 function volverAjuste() {
-  const { item, categoria, ajuste } = seleccionado;
-  abrirModalAjuste(categoria, item.id, ajuste);
+  const { item, categoria, ajuste, correccion } = seleccionado;
+  abrirModalAjuste(categoria, item.id, ajuste, correccion);
 }
 
 // paso 2: recien aqui se guarda; queda en el historial con quien lo hizo
 function confirmarAjuste() {
-  const { item, categoria, ajuste } = seleccionado;
+  const { item, categoria, ajuste, correccion } = seleccionado;
   item.cantidad = ajuste.contado;
+
+  // faltan: se descuenta del lote que vence antes (aunque este vencido)
+  // sobran: queda como un lote sin fecha, con la fecha del conteo
+  const lotes = ajuste.diferencia < 0
+    ? { lotes: descontar(planDescuento(item, -ajuste.diferencia, true)) }
+    : { loteId: nuevoLote(item, { cantidad: ajuste.diferencia, origen: 'Sobrante del conteo' }).id };
 
   // cantidad va sin signo como en los demas movimientos; diferencia dice si sumo o resto
   estado.historial.unshift({
@@ -547,11 +560,49 @@ function confirmarAjuste() {
     saldo: ajuste.contado,
     motivo: ajuste.motivo,
     nota: ajuste.nota,
+    // el ajuste que corrige; en la bd va el _id de ese movimiento
+    corrige: correccion?.fila ?? null,
+    ...lotes,
   });
 
   cerrarModal();
   render();
   mostrarToast(`Stock ajustado · ${item.nombre}: ${ajuste.contado} ${item.unidad}`);
+}
+
+// ---------- baja por vencimiento ----------
+// saca todos los lotes vencidos de un producto: es una salida con motivo, no un ajuste
+function abrirModalBaja(categoria, id) {
+  const item = listaDe(categoria).find(i => i.id === Number(id));
+  seleccionado = { item, categoria };
+  document.querySelector('#modal').innerHTML = ModalBaja(item);
+}
+
+function confirmarBaja() {
+  const { item, categoria } = seleccionado;
+  const vencida = cantidadVencida(item);
+  const usados = descontar(lotesVencidos(item).map(lote => ({ lote, cantidad: lote.quedan })));
+  item.cantidad = redondear(item.cantidad - vencida);
+
+  estado.historial.unshift({
+    fecha: fechaActual(),
+    insumo: item.nombre,
+    categoria,
+    movimiento: 'Salida',
+    cantidad: vencida,
+    unidad: item.unidad,
+    responsable: usuario.nombre,
+    donador: '',
+    para: '',
+    saldo: item.cantidad,
+    motivo: 'Baja por vencimiento',
+    nota: valor('nota'),
+    lotes: usados,
+  });
+
+  cerrarModal();
+  render();
+  mostrarToast(`Dado de baja · ${vencida} ${item.unidad} de ${item.nombre}`);
 }
 
 function abrirModalDonador() {
@@ -582,7 +633,15 @@ function verMovimiento(indice) {
     .filter(p => p.fila.insumo === fila.insumo && p.fila.categoria === fila.categoria)
     .slice(0, 40);
 
-  document.querySelector('#modal').innerHTML = PanelMovimiento(fila, Number(indice), pasos);
+  // enlaces de correccion: a que ajuste corrige este, y quien lo corrigio despues
+  const corrige = fila.corrige ? estado.historial.indexOf(fila.corrige) : -1;
+  const corregidoPor = estado.historial.findIndex(f => f.corrige === fila);
+  const enlaces = {
+    corrige: corrige >= 0 ? { fila: fila.corrige, indice: corrige, entre: movimientosEntre(estado.historial, fila.corrige, fila) } : null,
+    corregidoPor: corregidoPor >= 0 ? { fila: estado.historial[corregidoPor], indice: corregidoPor } : null,
+  };
+
+  document.querySelector('#modal').innerHTML = PanelMovimiento(fila, Number(indice), pasos, enlaces);
 }
 
 // "Ver en historial": deja filtrado solo ese producto
@@ -689,6 +748,9 @@ function limpiarFiltros(grupo) {
     estado.historialFiltros = filtrosHistorialVacios();
   } else if (grupo === 'donadoresFiltros') {
     estado.donadoresFiltros = { actividad: 'Todos', anio: 'Todos' };
+  } else if (grupo === 'inventarioFiltros') {
+    // el orden no es un filtro, se mantiene
+    estado.inventarioFiltros = { ...inventarioVacio(), orden: estado.inventarioFiltros.orden };
   } else {
     // en usuarios el orden no es un filtro, se mantiene
     estado.usuarios.rol = 'Todos';
@@ -819,10 +881,17 @@ function revisarMovimiento() {
     error.textContent = 'Ingresa una cantidad mayor que 0.';
     return;
   }
-  if (tipo === 'Salida' && cantidad > item.cantidad) {
-    error.textContent = `No puedes sacar más de lo que hay (${item.cantidad} ${item.unidad}).`;
+  // lo vencido no se usa: se saca con "Dar de baja lo vencido"
+  if (tipo === 'Salida' && cantidad > disponible(item)) {
+    error.textContent = cantidadVencida(item)
+      ? `Solo se pueden usar ${disponible(item)} ${item.unidad}; lo vencido se saca con "Dar de baja" en el detalle del producto.`
+      : `No puedes sacar más de lo que hay (${item.cantidad} ${item.unidad}).`;
     return;
   }
+
+  // cada ingreso es un lote nuevo con su propio vencimiento
+  const vence = tipo === 'Ingreso' ? leerVencimiento(error) : null;
+  if (vence === false) return;
 
   const para = leerPara(error);
   if (para === null) return;
@@ -837,7 +906,8 @@ function revisarMovimiento() {
   }
 
   error.textContent = '';
-  seleccionado.movimiento = { cantidad, lote: valor('lote'), donador, actividad, para, esSalud: categoria === 'Salud' };
+  const plan = tipo === 'Salida' ? planDescuento(item, cantidad) : [];
+  seleccionado.movimiento = { cantidad, vence, plan, donador, actividad, para, esSalud: categoria === 'Salud' };
 
   const formulario = document.querySelector('#form-movimiento');
   formulario.hidden = true;
@@ -855,10 +925,10 @@ function confirmarMovimiento() {
   const { item, categoria, tipo, movimiento } = seleccionado;
   const donador = guardarDonadorElegido(movimiento.donador);
 
-  // ingreso suma, salida resta
+  // ingreso suma un lote; salida descuenta de los lotes que vencen antes
   const cambio = tipo === 'Ingreso' ? movimiento.cantidad : -movimiento.cantidad;
   item.cantidad = Math.round((item.cantidad + cambio) * 100) / 100;
-  item.lote = movimiento.lote;
+  const lote = tipo === 'Ingreso' ? nuevoLote(item, { cantidad: movimiento.cantidad, vence: movimiento.vence }) : null;
 
   estado.historial.unshift({
     fecha: fechaActual(),
@@ -872,11 +942,22 @@ function confirmarMovimiento() {
     actividad: movimiento.actividad,
     para: movimiento.para,
     saldo: item.cantidad,
+    // ingreso: el lote que creo; salida: de que lotes salio
+    ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: descontar(movimiento.plan) }),
   });
 
   cerrarModal();
   render();
   mostrarToast(`${tipo} guardado · ${item.nombre}`);
+}
+
+// fecha de vencimiento del lote que entra: '2026-11-05', null si "No tiene fecha", o false si falta
+function leerVencimiento(error) {
+  const vence = valor('vencimiento');
+  if (vence) return vence;
+  if (document.querySelector('#sin-vencimiento')?.checked) return null;
+  error.textContent = 'Pon la fecha de vencimiento o marca "No tiene fecha".';
+  return false;
 }
 
 function guardarProducto() {
@@ -886,7 +967,6 @@ function guardarProducto() {
   const nombre = valor('nombre');
   const cantidad = numero('cantidad');
   const minimo = numero('minimo');
-  const vencimiento = valor('vencimiento');
 
   if (!nombre) {
     error.textContent = 'Escribe el nombre del producto.';
@@ -894,7 +974,7 @@ function guardarProducto() {
   }
   const igual = productoIgual(nombre);
   if (igual) {
-    error.textContent = `Ya existe "${igual.item.nombre}" en ${igual.categoria}. Para sumar stock, registra un ingreso de ese producto.`;
+    error.textContent = `Ya existe "${igual.item.nombre}" en ${nombreCategoria(igual.categoria)}. Para sumar stock, registra un ingreso de ese producto.`;
     return;
   }
   if (!cantidad || cantidad <= 0) {
@@ -908,13 +988,8 @@ function guardarProducto() {
     error.textContent = 'El stock mínimo debe ser un número.';
     return;
   }
-  const sinVencimiento = document.querySelector('#sin-vencimiento')?.checked;
-  if (!vencimiento && !sinVencimiento) {
-    error.textContent = categoria === 'Alimentos'
-      ? 'Los alimentos necesitan fecha de vencimiento.'
-      : 'Pon la fecha de vencimiento o marca "No tiene fecha de vencimiento".';
-    return;
-  }
+  const vence = leerVencimiento(error);
+  if (vence === false) return;
 
   const actividad = leerActividad(error);
   if (actividad === null) return;
@@ -922,7 +997,7 @@ function guardarProducto() {
   if (donador === null) return;
 
 
-  listaDe(categoria).push({
+  const item = {
     id: Date.now(),
     codigo: nombre.slice(0, 2).toUpperCase(),
     nombre,
@@ -932,9 +1007,9 @@ function guardarProducto() {
     cantidad,
     minimo,
     unidad,
-    vencimiento: vencimiento || null,
-    lote: valor('lote'),
-  });
+  };
+  const lote = nuevoLote(item, { cantidad, vence });
+  listaDe(categoria).push(item);
 
   // el producto nuevo cuenta como su primer ingreso
   estado.historial.unshift({
@@ -950,6 +1025,8 @@ function guardarProducto() {
     para: '',
     saldo: cantidad,
     inicial: true,
+    loteId: lote.id,
+    vence,
   });
 
   cerrarModal();
@@ -991,6 +1068,8 @@ document.addEventListener('click', e => {
     case 'seccion':
       estado.seccion = boton.dataset.seccion;
       estado.filtrosAbiertos = null;
+      // Alimentos y Salud comparten los filtros, pero no sus unidades: se empieza de cero
+      estado.inventarioFiltros = inventarioVacio();
       window.scrollTo(0, 0);
       break;
     case 'filtro':
@@ -999,15 +1078,17 @@ document.addEventListener('click', e => {
     case 'grafico':
       estado.grafico[boton.dataset.campo] = boton.dataset.valor;
       break;
-    case 'ordenar-usuarios':
+    case 'ordenar': {
       // otro clic en la misma columna invierte el orden
-      if (estado.usuarios.orden === boton.dataset.orden) {
-        estado.usuarios.invertido = !estado.usuarios.invertido;
+      const orden = estado[boton.dataset.grupo];
+      if (orden.orden === boton.dataset.orden) {
+        orden.invertido = !orden.invertido;
       } else {
-        estado.usuarios.orden = boton.dataset.orden;
-        estado.usuarios.invertido = false;
+        orden.orden = boton.dataset.orden;
+        orden.invertido = false;
       }
       break;
+    }
     case 'ver-alertas':
       document.querySelector('#modal').innerHTML = PanelAlertas(calcularAlertas(estado));
       return;
@@ -1034,6 +1115,9 @@ document.addEventListener('click', e => {
       break;
     case 'descargar-donadores':
       descargarExcelDonadores(boton);
+      return;
+    case 'dar-baja':
+      abrirModalBaja(boton.dataset.categoria, boton.dataset.id);
       return;
     case 'unir-producto':
       abrirModalUnir(boton.dataset.categoria, boton.dataset.id);
@@ -1116,6 +1200,7 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'form-ajuste') revisarAjuste();
   if (e.target.id === 'form-unir') guardarUnion();
   if (e.target.id === 'form-ajuste-confirmar') confirmarAjuste();
+  if (e.target.id === 'form-baja') confirmarBaja();
   if (e.target.id === 'form-producto') guardarProducto();
   if (e.target.id === 'form-donador') guardarDonador();
   if (e.target.id === 'form-usuario') guardarUsuario();

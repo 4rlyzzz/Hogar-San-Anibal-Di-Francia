@@ -51,17 +51,9 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
 }
 
-.tarjeta-info:hover .tarjeta-nombre {
-  color: #2f7fb5;
-}
+
 
 /* "+" redondo flotante para agregar, en todas las pestañas */
 .btn-flotante {
@@ -369,6 +361,16 @@
   border-radius: 12px;
 }
 
+.consejos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.consejos .consejo {
+  align-items: center;
+}
+
 .consejo svg {
   flex-shrink: 0;
 }
@@ -576,7 +578,8 @@
 
 .fila {
   display: grid;
-  grid-template-columns: 100px 1.3fr 100px 100px 90px 90px 1.4fr 100px;
+  grid-template-columns: 100px 1.3fr 130px 100px 90px 90px 1.4fr 100px;
+  column-gap: 16px;
   gap: 12px;
   align-items: center;
   padding: 13px 20px;
@@ -778,6 +781,62 @@
 
 .panel-sin-alerta .vacio {
   margin: 0;
+}
+
+/* sin sobrestock: aviso corto y lo proximo en vencer */
+.sin-riesgo {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #eef8f3;
+  color: #2d8e6c;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.proximos-titulo {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 11px;
+  color: #8b9a95;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.proximos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.proximo {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border: 0;
+  border-bottom: 1px solid #f2f5f4;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.proximos li:last-child .proximo {
+  border-bottom: 0;
+}
+
+.proximo b {
+  display: block;
+  font-size: 13px;
+}
+
+.proximo small {
+  color: #8b9a95;
+  font-size: 11px;
 }
 
 /* grafico de lineas: ingresos (verde) y salidas (naranja) */
@@ -1161,26 +1220,15 @@
 /* otras alertas */
 .alerta-fila {
   display: grid;
-  grid-template-columns: 1.6fr 110px 1.3fr 90px;
-  gap: 12px;
+  grid-template-columns: minmax(150px, 1.3fr) 130px minmax(0, 1.7fr) 64px;
+  gap: 12px 20px;
   align-items: center;
   padding: 13px 20px;
   border-bottom: 1px solid #f2f5f4;
   font-size: 12px;
 }
 
-.alerta-fila-tipo {
-  font-weight: 600;
-}
 
-.alerta-fila-tipo small {
-  display: block;
-  margin-top: 3px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 400;
-  font-size: 11px;
-  color: #7c8b86;
-}
 
 /* ---------- agregar: categoria y opciones ---------- */
 .selector-categoria {
@@ -1833,21 +1881,59 @@ button.uf-usuario:hover b {
 .ajuste .linea-texto .mono { color: #7253c4; }
 .actividad-punto.morado { background: #8a6ad8; }
 
-/* boton chico de ajustar en la tarjeta (solo admin) */
-.btn-ajustar {
-  flex: none;
-  width: 42px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #e2e8e6;
-  background: #fff;
-  color: #6f7e79;
+/* registrar salida e ingreso: grandes y en tonos suaves */
+.btn-registrar {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 13px;
 }
 
-.btn-ajustar:hover {
+.btn-registrar svg {
+  flex-shrink: 0;
+}
+
+.btn-salida,
+.btn-ingreso { border: 1px solid #e2e8e6; background: #f7faf9; color: #3d4b46; }
+.btn-salida:hover { border-color: #cfe0ee; background: #eef5fb; color: #1f6699; }
+.btn-ingreso:hover { border-color: #cfe9dd; background: #effaf5; color: #22745a; }
+
+/* en el detalle: contar y corregir (ajuste), debajo de sacar e ingresar */
+.btn-contar {
+  width: 100%;
+  min-height: 42px;
+  margin: -10px 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.btn-contar:hover {
   border-color: #d9cdf3;
   background: #f6f2fd;
   color: #7253c4;
+}
+
+/* el unico enlace al detalle desde la tarjeta */
+.tarjeta-ver {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  color: #2f7fb5;
+}
+
+.tarjeta-ver:hover {
+  text-decoration: underline;
 }
 
 /* aviso de cuanto sobra o falta mientras se escribe el conteo */
@@ -2087,6 +2173,234 @@ button.uf-usuario:hover b {
 }
 
 /* en el detalle de un ajuste */
+/* lotes del producto: cada ingreso con su vencimiento y lo que queda */
+.lotes {
+  margin-bottom: 18px !important;
+}
+
+.lote.lote-sale {
+  grid-template-columns: 1fr auto auto;
+}
+
+.lote-menos {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #b9691b;
+}
+
+.lotes-salida .lotes {
+  margin-bottom: 4px !important;
+}
+
+/* los problemas de un producto, una franja de color por cada uno (detalle y tabla de alertas) */
+.lista-alertas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lista-alertas-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-weight: 400;
+  font-size: 12px;
+  color: #4f5d58;
+}
+
+.lista-alertas-item b {
+  color: #2b3935;
+}
+
+.lista-alertas-item.rojo { background: #fdf1f0; }
+.lista-alertas-item.naranja { background: #fff6ea; }
+.lista-alertas-item.azul { background: #eef5fb; }
+
+.lista-alertas .actividad-punto {
+  flex-shrink: 0;
+}
+
+/* en el detalle van debajo del stock */
+.producto-alertas {
+  margin: -6px 0 14px;
+}
+
+/* tabla de alertas: un problema por pastilla, en la misma linea (bajan si no caben) */
+.alerta-fila-tipo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+/* sin recuadro: el texto toma el color de su prioridad
+   (el fondo se quita a proposito: .rojo, .naranja y .azul traen fondo de global.css) */
+.pastilla-alerta {
+  background: none !important;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pastilla-alerta b {
+  font-weight: 700;
+}
+
+.pastilla-alerta.rojo { color: #c1423c; }
+.pastilla-alerta.naranja { color: #b9691b; }
+.pastilla-alerta.azul { color: #2f7fb5; }
+
+/* Alimentos y Salud: filtros rapidos y boton Filtros juntos */
+.encabezado-derecha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.encabezado-derecha .filtros {
+  margin-left: 0;
+}
+
+.chips-inventario {
+  margin: -8px 0 16px;
+}
+
+.con-filtros-inventario .panel-filtros {
+  top: 58px;
+  right: 0;
+}
+
+.lotes-ayuda {
+  font-size: 11px;
+  color: #8b9a95;
+}
+
+.lotes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lote {
+  display: grid;
+  grid-template-columns: 1fr auto 70px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f2f5f4;
+  font-size: 12px;
+}
+
+.lote:last-child {
+  border-bottom: 0;
+}
+
+.lote.vencido {
+  border-radius: 9px;
+  background: #fdf1f0;
+}
+
+.lote-ingreso b {
+  display: block;
+  font-size: 12px;
+}
+
+.lote-ingreso small {
+  color: #8b9a95;
+  font-size: 11px;
+}
+
+.lote-quedan {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.lote-quedan small {
+  font-weight: 400;
+  color: #8b9a95;
+}
+
+.btn-baja {
+  width: 100%;
+  border-color: #f0c9c4;
+  color: #b8402f;
+}
+
+.btn-baja:hover {
+  background: #fdf1f0;
+}
+
+.producto-stock small {
+  display: block;
+  margin-top: 2px;
+  color: #b8402f;
+  font-size: 11px;
+}
+
+/* correccion de un ajuste: a cual corrige y que paso entre medio */
+.correccion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 13px;
+  border: 1px solid #e6def7;
+  border-radius: 11px;
+  background: #f9f7fe;
+  font-size: 13px;
+}
+
+.correccion p {
+  margin: 0;
+  color: #4f5d58;
+}
+
+.correccion-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.correccion-sub {
+  margin-top: 6px;
+  font-weight: 600;
+  font-size: 11px;
+  color: #8b9a95;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.correccion-lista .mov-paso {
+  grid-template-columns: 92px 1fr auto;
+  padding: 5px 4px;
+}
+
+.correccion-lista .mov-paso-tipo small {
+  font-weight: 400;
+  color: #8b9a95;
+}
+
+.correccion-total,
+.correccion-vacio {
+  margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.correccion-vacio {
+  font-weight: 400;
+  color: #6f7d78;
+}
+
+.correccion .correccion-nota {
+  margin: 4px 0 0;
+  color: #7253c4;
+  font-size: 12px;
+}
+
 .btn-corregir {
   width: 100%;
   margin: -6px 0 18px;
