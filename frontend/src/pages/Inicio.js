@@ -20,13 +20,13 @@ function Recuadros(estado) {
   `;
 }
 
-// ---------- grafico de lineas: ingresos vs salidas en el tiempo ----------
+// ---------- grafico de ingresos y salidas ----------
 const diasSemana = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
-// cuantos tramos hacia atras se pueden ver; lo que no entra se desliza
+// cuantos tramos se pueden ver
 const cuantosTramos = { Día: 60, Semana: 26, Mes: 12 };
 
-// ancho minimo de cada columna en px; si no entran todas aparece el scroll
+// ancho minimo de cada columna (px)
 const anchoColumna = { movimientos: 58, stock: 84 };
 
 // tramos de tiempo del grafico hasta hoy, del mas antiguo al mas nuevo
@@ -63,7 +63,7 @@ function tramos(periodo) {
   return lista;
 }
 
-// redondea el tope del eje a un numero facil de leer (4, 8, 20, 40...)
+// redondea el tope del eje
 function topeEje(maximo) {
   const paso = Math.max(1, maximo / 4);
   const base = 10 ** Math.floor(Math.log10(paso));
@@ -81,8 +81,8 @@ function Selector(campo, opciones, actual, clase = '') {
     </div>`;
 }
 
-// el eje y queda fijo a la izquierda y el resto se desliza si no entra
-// alFinal: empieza mostrando lo de la derecha (lo mas reciente)
+// eje fijo y grafico con scroll
+// alFinal: empieza a la derecha
 function Lienzo({ tope, columnas, ancho, contenido, nombres, alFinal = false }) {
   const pasos = [0, 1, 2, 3, 4];
 
@@ -123,7 +123,7 @@ function Grafico(estado) {
   `;
 }
 
-// barras: todos los productos, del mas cerca del minimo al mas lejos
+// barras de stock, del mas bajo al mas alto
 function GraficoStock(estado, categoria) {
   const lista = [...(categoria === 'Salud' ? estado.salud : estado.alimentos)]
     .sort((a, b) => a.cantidad / a.minimo - b.cantidad / b.minimo);
@@ -181,7 +181,7 @@ function GraficoMovimientos(estado, periodo) {
 
   const tope = topeEje(Math.max(...datos.map(d => Math.max(d.ingresos, d.salidas))));
 
-  // el svg va de 0 a 100 en ambos ejes; cada punto cae al centro de su columna
+  // svg de 0 a 100 en ambos ejes
   const x = i => (i + 0.5) / datos.length * 100;
   const y = n => 100 - n / tope * 100;
   const linea = campo => datos.map((d, i) => `${i ? 'L' : 'M'}${x(i)} ${y(d[campo])}`).join(' ');
@@ -245,7 +245,7 @@ function PanelSobrestock(estado) {
   const item = itemSobrestock(estado);
   if (item) return AlertaSobrestock(item, true);
 
-  // sin riesgo: el espacio muestra lo que vence antes (lo que conviene usar primero)
+  // sin riesgo: lo proximo en vencer
   const proximos = [
     ...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })),
     ...estado.salud.map(item => ({ item, categoria: 'Salud' })),
@@ -265,10 +265,10 @@ function PanelSobrestock(estado) {
           const dias = diasParaVencer(item);
           return `
             <li>
-              <button class="proximo fila-boton" data-accion="ver-producto" data-categoria="${categoria}" data-id="${item.id}">
+              <button class="proximo fila-boton" data-accion="ver-producto" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">
                 <span>
                   <b>${escapar(item.nombre)}</b>
-                  <small>${nombreCategoria(categoria)} · ${item.cantidad} ${escapar(item.unidad)}</small>
+                  <small>${escapar(nombreCategoria(categoria))} · ${item.cantidad} ${escapar(item.unidad)}</small>
                 </span>
                 <span class="etiqueta ${colorVencimiento(item)}">${dias === 0 ? 'Hoy' : dias === 1 ? '1 día' : `${dias} días`}</span>
               </button>
@@ -332,9 +332,9 @@ function OtrasAlertas(estado) {
       </div>
 
       ${filas.map(f => `
-        <button class="alerta-fila fila-boton" data-accion="ver-producto" data-categoria="${f.categoria}" data-id="${f.item.id}">
+        <button class="alerta-fila fila-boton" data-accion="ver-producto" data-categoria="${escapar(f.categoria)}" data-id="${escapar(f.item.id)}">
           <span class="fila-insumo">${escapar(f.item.nombre)}</span>
-          <span class="alerta-fila-categoria"><span class="pastilla ${f.categoria === 'Salud' ? 'azul' : 'verde'}">${nombreCategoria(f.categoria)}</span></span>
+          <span class="alerta-fila-categoria"><span class="pastilla ${f.categoria === 'Salud' ? 'azul' : 'verde'}">${escapar(nombreCategoria(f.categoria))}</span></span>
           <span class="alerta-fila-tipo">${PastillasProblemas(f.problemas)}</span>
           <span class="alerta-fila-prioridad"><span class="pastilla ${coloresPrioridad[f.prioridad]}">${f.prioridad}</span></span>
         </button>

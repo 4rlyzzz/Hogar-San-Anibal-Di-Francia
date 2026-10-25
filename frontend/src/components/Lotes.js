@@ -1,7 +1,5 @@
-// lotes: cada ingreso de un producto es un lote, con su fecha de ingreso y su propio vencimiento
-// lote: { id, ingreso: Date, vence: '2026-11-05' o null, cantidad, quedan, origen }
-//   origen: de donde salio si no fue un ingreso, ej. 'Sobrante del conteo'
-// en la bd el lote es el mismo movimiento de ingreso (con vence y quedan); aqui va dentro del producto
+// cada ingreso es un lote con su propio vencimiento
+// lote: { id, ingreso, vence, cantidad, quedan, origen }
 import { meses, diasHasta, escapar, cantidadVencida, disponible } from './Comunes.js';
 
 export { cantidadVencida, disponible };
@@ -28,7 +26,6 @@ export function fechaVence(iso) {
   return `${dia}/${mes}/${anio.slice(2)}`;
 }
 
-// 0 -> 'hoy', 1 -> 'hace 1 día', 5 -> 'hace 5 días'
 const haceDias = n => (n === 0 ? 'hoy' : `hace ${n} ${n === 1 ? 'día' : 'días'}`);
 
 const redondear = n => Math.round(n * 100) / 100;
@@ -45,7 +42,7 @@ export function lotesVencidos(item) {
   return lotesCon(item).filter(estaVencido);
 }
 
-// orden de uso: primero lo que vence antes; lo que no tiene fecha, al final y por orden de llegada
+// primero lo que vence antes; sin fecha, por orden de llegada
 function ordenUso(a, b) {
   if (a.vence && b.vence) return a.vence.localeCompare(b.vence) || a.ingreso - b.ingreso;
   if (a.vence) return -1;
@@ -53,8 +50,8 @@ function ordenUso(a, b) {
   return a.ingreso - b.ingreso;
 }
 
-// de que lotes saldria una cantidad, sin cambiar nada: [{ lote, cantidad }]
-// conVencidos: un faltante del conteo puede salir de cualquier lote; una salida, solo de lo que no vencio
+// de que lotes sale una cantidad (sin cambiar nada)
+// conVencidos: para el faltante de un conteo
 export function planDescuento(item, cantidad, conVencidos = false) {
   const lotes = lotesCon(item).filter(l => conVencidos || !estaVencido(l)).sort(ordenUso);
   const plan = [];
@@ -68,7 +65,7 @@ export function planDescuento(item, cantidad, conVencidos = false) {
   return plan;
 }
 
-// aplica el plan; devuelve lo que se guarda en el movimiento: [{ id, ingreso: '19 oct', cantidad }]
+// descuenta el plan y devuelve lo que se guarda en el movimiento
 export function descontar(plan) {
   return plan.map(({ lote, cantidad }) => {
     lote.quedan = redondear(lote.quedan - cantidad);
@@ -82,7 +79,7 @@ export function nuevoLote(item, { cantidad, vence = null, origen = '', ingreso =
   return lote;
 }
 
-// verde: lejos, naranja: 15 dias o menos, rojo: 3 dias o menos, azul: sin fecha
+// color segun los dias que faltan
 export function colorLote(lote) {
   if (!lote.vence) return 'azul';
   const dias = diasHasta(lote.vence);
@@ -91,7 +88,6 @@ export function colorLote(lote) {
   return 'verde';
 }
 
-// 'Vence 05/11/26' · 'Venció 10/10/26' · 'Sin fecha · lleva 5 días'
 export function textoVenceLote(lote) {
   if (!lote.vence) {
     const dias = diasDesde(lote.ingreso);
@@ -101,7 +97,7 @@ export function textoVenceLote(lote) {
   return `${estaVencido(lote) ? 'Venció' : 'Vence'} ${fechaVence(lote.vence)}`;
 }
 
-// tabla de lotes del detalle del producto, del que se usa primero al ultimo
+// tabla de lotes del detalle del producto
 export function TablaLotes(item, categoria) {
   const lotes = lotesCon(item).sort(ordenUso);
   const vencida = cantidadVencida(item);
@@ -126,7 +122,7 @@ export function TablaLotes(item, categoria) {
       `).join('')}
     </ul>
     ${vencida > 0 ? `
-      <button class="btn btn-blanco btn-baja" data-accion="dar-baja" data-categoria="${categoria}" data-id="${item.id}">
+      <button class="btn btn-blanco btn-baja" data-accion="dar-baja" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">
         Dar de baja lo vencido (${vencida} ${escapar(item.unidad)})
       </button>` : ''}`;
 }

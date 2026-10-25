@@ -5,7 +5,7 @@ import { usuario } from '../data/datos.js';
 
 const roles = ['Usuario', 'Administrador'];
 
-// cada orden tiene su sentido natural; "invertido" lo da vuelta (segundo clic en la columna)
+// ordenes; "invertido" los da vuelta
 const ordenes = {
   nombre: { texto: 'Nombre (A-Z)', comparar: (a, b) => a.cuenta.nombre.localeCompare(b.cuenta.nombre) },
   acceso: { texto: 'Último acceso', comparar: (a, b) => (b.cuenta.ultimoAcceso ?? 0) - (a.cuenta.ultimoAcceso ?? 0) },
@@ -29,7 +29,7 @@ export function paginaUsuarios(estado) {
   const filtros = estado.usuarios;
   const texto = estado.busqueda.toLowerCase();
 
-  // registros de cada uno en el historial (esta ordenado del mas nuevo al mas antiguo)
+  // movimientos de cada cuenta
   const registros = nombre => estado.historial.filter(f => f.responsable === nombre);
 
   const comparar = ordenes[filtros.orden].comparar;
@@ -47,7 +47,6 @@ export function paginaUsuarios(estado) {
   const activos = estado.cuentas.filter(c => c.activo).length;
   const opcionesOrden = Object.fromEntries(Object.entries(ordenes).map(([clave, o]) => [clave, o.texto]));
 
-  // una sola linea: cuantos hay y el boton de filtros; debajo, solo los filtros puestos
   return `
     ${Encabezado(`Usuarios <span class="contador">${estado.cuentas.length}</span>`)}
 
@@ -84,24 +83,24 @@ export function paginaUsuarios(estado) {
   `;
 }
 
-// ultima: lo ultimo que hizo, sea movimiento, donador, usuario o rol (ver Actividad.js)
+// ultima: lo ultimo que hizo
 function FilaUsuario(c, registros, ultima) {
-  // nadie puede quitarse a si mismo el rol de administrador ni desactivarse
+  // no puede cambiarse el rol ni desactivarse a si mismo
   const esYo = c.id === usuario.id;
 
   const rol = esYo
-    ? `<span class="pastilla azul">${c.rol}</span>`
-    : `<select class="selector-rol" data-id="${c.id}" aria-label="Rol de ${escapar(c.nombre)}">
+    ? `<span class="pastilla azul">${escapar(c.rol)}</span>`
+    : `<select class="selector-rol" data-id="${escapar(c.id)}" aria-label="Rol de ${escapar(c.nombre)}">
         ${roles.map(r => `<option ${r === c.rol ? 'selected' : ''}>${r}</option>`).join('')}
       </select>`;
 
   return `
     <div class="usuario-fila ${c.activo ? '' : 'inactivo'}">
-      <button class="uf-usuario" data-accion="ver-actividad" data-id="${c.id}" title="Ver su actividad">
+      <button class="uf-usuario" data-accion="ver-actividad" data-id="${escapar(c.id)}" title="Ver su actividad">
         <span class="avatar ${c.rol === 'Administrador' ? '' : 'avatar-verde'}">${iniciales(c.nombre)}</span>
         <span>
           <b>${escapar(c.nombre)}</b>
-          <small>@${escapar(c.usuario)}${esYo ? ' · tú' : ''}<span class="solo-movil"> · ${c.rol}</span></small>
+          <small>@${escapar(c.usuario)}${esYo ? ' · tú' : ''}<span class="solo-movil"> · ${escapar(c.rol)}</span></small>
         </span>
       </button>
 
@@ -131,7 +130,7 @@ function FilaUsuario(c, registros, ultima) {
       </span>
 
       <span class="uf-acciones">${esYo ? '' : `
-        <button class="btn-mini ${c.activo ? 'btn-mini-rojo' : ''}" data-accion="activar-usuario" data-id="${c.id}">
+        <button class="btn-mini ${c.activo ? 'btn-mini-rojo' : ''}" data-accion="activar-usuario" data-id="${escapar(c.id)}">
           ${c.activo ? 'Desactivar' : 'Activar'}
         </button>
       `}</span>

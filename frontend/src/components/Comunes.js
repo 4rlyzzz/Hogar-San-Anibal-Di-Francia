@@ -1,6 +1,6 @@
 // partes que se repiten en las paginas
 
-// evita que el texto que escribe el usuario se interprete como html
+// evita que un texto se lea como html
 export function escapar(texto) {
   return String(texto ?? '')
     .replaceAll('&', '&amp;')
@@ -10,18 +10,20 @@ export function escapar(texto) {
 }
 
 // 'Administración' -> 'AD', 'María López' -> 'ML'
+// solo letras y numeros
 export function iniciales(nombre) {
-  const partes = nombre.trim().split(/\s+/);
-  const letras = partes.length > 1 ? partes[0][0] + partes[1][0] : nombre.slice(0, 2);
+  const partes = String(nombre ?? '').split(/\s+/).map(p => p.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+  if (partes.length === 0) return '?';
+  const letras = partes.length > 1 ? partes[0][0] + partes[1][0] : partes[0].slice(0, 2);
   return letras.toUpperCase();
 }
 
-// nombre que se muestra de cada categoria; en los datos se guarda la clave corta
+// nombre visible de cada categoria
 export const nombresCategoria = { Alimentos: 'Alimentos', Salud: 'Salud e higiene' };
 export const nombreCategoria = categoria => nombresCategoria[categoria] || categoria;
 
-// titulo de columna que ordena al hacer clic; la flecha muestra el orden actual
-// grupo: donde se guarda el orden en el estado ('usuarios', 'alertasOrden')
+// titulo de columna que ordena
+// grupo: donde se guarda el orden en el estado
 export function TituloOrden(texto, orden, filtros, grupo) {
   const activo = filtros.orden === orden;
   const flecha = activo ? (filtros.invertido ? '↑' : '↓') : '';
@@ -54,7 +56,7 @@ export function tiempoRelativo(d) {
   return fechaLarga(d);
 }
 
-// '07 oct 09:05' -> Date. no trae año: si quedaria en el futuro es del año pasado
+// '07 oct 09:05' -> Date (sin año: si queda en el futuro, es del año pasado)
 export function fechaDe(texto) {
   const [dia, mes, hora] = texto.split(' ');
   const [h, m] = hora.split(':');
@@ -65,18 +67,18 @@ export function fechaDe(texto) {
 }
 
 // ---------- productos ----------
-// envases: se guarda el plural (es en lo que se cuenta: "12 bolsas") y se muestra el singular ("Bolsa x 1 kg")
+// envases: plural -> singular
 export const envases = {
   bolsas: 'Bolsa', latas: 'Lata', sacos: 'Saco', cajas: 'Caja', paquetes: 'Paquete', botellas: 'Botella',
   frascos: 'Frasco', sobres: 'Sobre', blísters: 'Blíster', ampollas: 'Ampolla', tubos: 'Tubo',
 };
 
-// 'bolsas' -> 'Bolsa'; los envases escritos a mano ('bidones') se muestran tal cual con mayuscula
+// 'bolsas' -> 'Bolsa'
 export function envaseSingular(unidad) {
   return envases[unidad] || unidad.charAt(0).toUpperCase() + unidad.slice(1);
 }
 
-// 'Bidón' -> 'bidones', 'Galonera' -> 'galoneras' (para un envase nuevo escrito a mano)
+// 'Bidón' -> 'bidones'
 export function pluralizar(singular) {
   const s = singular.trim().toLowerCase();
   if (/[aeiou]$/.test(s)) return s + 's';
@@ -84,14 +86,13 @@ export function pluralizar(singular) {
   return s + 'es';
 }
 
-// presentacion como en la etiqueta: 'Bolsa x 1 kg', 'Caja x 10 tabletas'; '' si es suelto (se cuenta en kg, L...)
-// item.envase: el singular tal como se escribio (para envases que no estan en la lista, ej. 'Bidón')
+// 'Bolsa x 1 kg'; '' si es suelto
 export function textoPresentacion(item) {
   if (!item.contenido || !item.medida) return '';
   return `${item.envase || envaseSingular(item.unidad)} x ${item.contenido} ${item.medida}`;
 }
 
-// cuanto suma todo lo que hay: '60 kg en total', '60 cápsulas en total'; '' si no viene en envases
+// '60 kg en total'; '' si no viene en envases
 export function textoTotal(item) {
   if (!item.contenido || !item.medida) return '';
   let total = item.cantidad * item.contenido;
@@ -104,12 +105,12 @@ export function textoTotal(item) {
   return `${Math.round(total * 100) / 100} ${medida} en total`;
 }
 
-// 'Leche Évaporada' -> ['leche', 'evaporada']: sin tildes, mayusculas ni signos
+// 'Leche Évaporada' -> ['leche', 'evaporada']
 export function palabras(texto) {
   return texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
 }
 
-// cuantas letras hay que cambiar, agregar o quitar para pasar de una palabra a otra
+// distancia entre dos palabras (letras distintas)
 function distancia(a, b) {
   const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
@@ -124,14 +125,14 @@ function distancia(a, b) {
   return fila[b.length];
 }
 
-// 'lentjas' se parece a 'lentejas': empieza igual o tiene 1 error (2 si la palabra es larga)
+// parecidas: empiezan igual o tienen 1 o 2 errores
 function palabraParecida(escrita, otra) {
   if (otra.startsWith(escrita)) return true;
   if (escrita.length < 4) return false;
   return distancia(escrita, otra) <= (escrita.length >= 8 ? 2 : 1);
 }
 
-// al buscar: todas las palabras escritas estan en el nombre (en cualquier orden, con algun error de tipeo)
+// todas las palabras buscadas estan en el nombre
 export function coincideNombre(buscado, nombre) {
   const buscadas = palabras(buscado).filter(p => p.length >= 2);
   if (buscadas.length === 0) return false;
@@ -139,15 +140,14 @@ export function coincideNombre(buscado, nombre) {
   return buscadas.every(b => delNombre.some(p => palabraParecida(b, p)));
 }
 
-// al unir: cuantas palabras importantes comparten dos nombres (0 = nada que ver, como Lentejas y Manzana)
+// cuantas palabras comparten dos nombres
 export function palabrasEnComun(a, b) {
   const deB = palabras(b);
   return palabras(a).filter(p => p.length >= 4 && deB.some(q => palabraParecida(p, q) || palabraParecida(q, p))).length;
 }
 
 // ---------- movimientos ----------
-// tipos: Ingreso suma, Salida resta, Ajuste corrige el stock tras un conteo (puede sumar o restar)
-// todo ajuste viene de un conteo fisico; el motivo dice por que no coincidia con el sistema
+// Ingreso suma, Salida resta, Ajuste corrige tras un conteo
 export const motivosAjuste = [
   'Sin identificar',
   'Producto malogrado o vencido',
@@ -156,11 +156,10 @@ export const motivosAjuste = [
   'Error al registrar un movimiento',
   'Otro',
 ];
-// motivo fijo de los ajustes que corrigen a otro (no esta en la lista de arriba)
+// motivo de los ajustes que corrigen a otro
 export const motivoCorreccion = 'Corrección de un ajuste anterior';
 
-// movimientos del mismo producto que hubo despues de "viejo" y antes de "nuevo" (null = hasta ahora)
-// el historial va del mas nuevo al mas antiguo; devuelve [{ fila, indice }]
+// movimientos del producto entre "viejo" y "nuevo" (null = hasta ahora)
 export function movimientosEntre(historial, viejo, nuevo = null) {
   const desde = nuevo ? historial.indexOf(nuevo) + 1 : 0;
   return historial
@@ -169,8 +168,8 @@ export function movimientosEntre(historial, viejo, nuevo = null) {
     .filter(p => p.fila.insumo === viejo.insumo && p.fila.categoria === viejo.categoria);
 }
 
-// esos movimientos en lista, con lo que sumaron en total
-// navegable: cada fila abre su detalle (en el panel); en un modal se muestran fijas
+// lista de esos movimientos con su total
+// navegable: cada fila abre su detalle
 export function MovimientosEntre(pasos, unidad, navegable = false) {
   if (pasos.length === 0) return '<p class="correccion-vacio">No hubo ingresos, salidas ni ajustes en medio.</p>';
 
@@ -183,7 +182,7 @@ export function MovimientosEntre(pasos, unidad, navegable = false) {
       ${pasos.map(p => `
         <li>
           <${etiqueta} class="mov-paso ${clase[p.fila.movimiento]}" ${navegable ? `data-accion="ver-movimiento" data-indice="${p.indice}"` : ''}>
-            <span class="mov-paso-fecha">${p.fila.fecha}</span>
+            <span class="mov-paso-fecha">${escapar(p.fila.fecha)}</span>
             <span class="mov-paso-tipo">● ${p.fila.movimiento} <small>${escapar(p.fila.responsable)}</small></span>
             <span class="mov-paso-cambio">${escapar(textoCambio(p.fila))}</span>
           </${etiqueta}>
@@ -199,8 +198,8 @@ export function cambioDe(fila) {
   return fila.movimiento === 'Ingreso' ? fila.cantidad : -fila.cantidad;
 }
 
-// cuanto habia antes del movimiento: lo que quedo menos lo que cambio
-// null si el movimiento es de antes de que se guardara el saldo
+// stock antes del movimiento
+// null si no tiene saldo guardado
 export function stockAntes(fila) {
   if (fila.saldo == null) return null;
   return Math.round((fila.saldo - cambioDe(fila)) * 100) / 100;
@@ -211,7 +210,7 @@ export function textoStock(fila) {
   return fila.saldo == null ? '—' : `${stockAntes(fila)} → ${fila.saldo}`;
 }
 
-// lo importante de cada movimiento segun su tipo: de donde vino, a quien fue o por que cambio
+// texto de la columna DETALLE
 export function textoDetalle(fila) {
   const nota = fila.nota ? ' · ' + fila.nota : '';
   if (fila.movimiento === 'Ajuste') return (fila.motivo || 'Ajuste') + nota;
@@ -238,8 +237,7 @@ export function diasHasta(iso) {
   return Math.round((vence - hoy) / (1000 * 60 * 60 * 24));
 }
 
-// el vencimiento mas proximo entre los lotes que tienen stock (lo ya vencido tambien cuenta)
-// null si ningun lote tiene fecha; los productos sin lotes (docs viejos) usan su campo vencimiento
+// vencimiento mas proximo de los lotes con stock
 export function vencimientoDe(item) {
   if (!item.lotes) return item.vencimiento ?? null;
   const fechas = item.lotes.filter(l => l.quedan > 0 && l.vence).map(l => l.vence).sort();
@@ -275,7 +273,7 @@ export function porVencer(item) {
   return dias !== null && dias <= 15;
 }
 
-// verde: lejos, naranja: 15 dias o menos, rojo: 3 dias o menos, azul: no vence
+// color segun los dias que faltan
 export function colorVencimiento(item) {
   const dias = diasParaVencer(item);
   if (dias === null) return 'azul';
@@ -284,7 +282,7 @@ export function colorVencimiento(item) {
   return 'verde';
 }
 
-// sin fecha: cuantos dias lleva el lote mas antiguo, para que quien revisa decida si sigue bien
+// sin fecha: dias que lleva el lote mas antiguo
 export function textoVencimiento(item) {
   const vence = vencimientoDe(item);
   if (!vence) {
@@ -303,8 +301,8 @@ export function textoVencimiento(item) {
   return diasHasta(vence) < 0 ? `Venció ${texto}` : `Vence ${texto}`;
 }
 
-// conteos: cuantos hay en cada filtro, ej. { 'Por vencer': 3 } (se muestra dentro del boton)
-// extra: lo que va al lado de los filtros (ej. el boton "Filtros")
+// conteos: numero que va en cada boton de filtro
+// extra: lo que va al lado (boton Filtros)
 export function Encabezado(titulo, subtitulo = '', filtroActivo, conteos = {}, extra = '') {
   let filtros = '';
   if (filtroActivo) {
@@ -340,7 +338,7 @@ export function TituloSeccion(codigo, color, titulo, detalle, extra = '') {
   `;
 }
 
-// recuadro de resumen (Inicio, Usuarios); unidad: [singular, plural]
+// recuadro de resumen; unidad: [singular, plural]
 export function Recuadro(color, icono, numero, titulo, detalle, unidad = ['producto', 'productos']) {
   return `
     <div class="recuadro">
@@ -361,7 +359,7 @@ export function SinResultados(texto = 'Sin insumos en este filtro') {
   return `<div class="vacio">${texto}</div>`;
 }
 
-// aplica el filtro de las pestañas y lo que se escribio en el buscador
+// filtro rapido y buscador
 export function filtrarInsumos(lista, estado) {
   const texto = estado.busqueda.toLowerCase();
 

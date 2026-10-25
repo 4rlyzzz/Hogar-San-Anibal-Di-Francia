@@ -5,12 +5,12 @@ import { problemasDe, ListaProblemas } from './Alertas.js';
 
 const clases = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
 
-// campos que se muestran con su nombre; los que la bd agregue despues salen con su nombre tal cual
+// nombre visible de cada campo
 const etiquetas = { unidad: 'Se cuenta en', minimo: 'Stock mínimo', consumoDiario: 'Consumo diario', unidos: 'Se le unió' };
-// lotes van en su propia tabla; vencimiento y lote son de los documentos de antes de los lotes
+// campos que no se listan
 const internos = ['id', 'codigo', 'nombre', 'cantidad', 'lotes', 'vencimiento', 'lote', 'contenido', 'medida', '_id', '_rev', 'tipo', 'categoria'];
 
-// cuantos movimientos recientes se muestran (el resto, en el historial)
+// movimientos recientes que se muestran
 const ultimos = 8;
 
 // cuenta solo lo que se puede usar (sin lo vencido)
@@ -42,8 +42,8 @@ function DatosProducto(item) {
 }
 
 // todo el producto: stock, sus datos y lo ultimo que le paso
-// movimientos: [{ fila, indice }] de este producto, del mas nuevo al mas antiguo
-// esAdmin: solo el administrador puede unir un producto repetido con otro
+// movimientos: [{ fila, indice }] de este producto
+// esAdmin: puede unir productos
 export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
   const estado = estadoStock(item);
   const problemas = problemasDe(item);
@@ -55,7 +55,7 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
           <span class="tarjeta-codigo ${colorVencimiento(item)}">${escapar(item.codigo)}</span>
           <div>
             <div class="modal-titulo">${escapar(item.nombre)}</div>
-            <div class="modal-sub">${nombreCategoria(categoria)}</div>
+            <div class="modal-sub">${escapar(nombreCategoria(categoria))}</div>
           </div>
           <button type="button" class="btn-cerrar" data-accion="cerrar-modal" aria-label="Cerrar">×</button>
         </div>
@@ -64,7 +64,7 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
           <div class="producto-stock">
             <div>
               <b>${item.cantidad} <small>${escapar(item.unidad)}</small></b>
-              ${textoPresentacion(item) ? `<span class="producto-total">${escapar(textoPresentacion(item))} · ${textoTotal(item)}</span>` : ''}
+              ${textoPresentacion(item) ? `<span class="producto-total">${escapar(textoPresentacion(item))} · ${escapar(textoTotal(item))}</span>` : ''}
             </div>
             ${problemas.length ? '' : `<span class="texto-${estado.color}">● ${estado.texto}</span>`}
           </div>
@@ -72,10 +72,10 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
           ${problemas.length ? `<div class="producto-alertas">${ListaProblemas(problemas)}</div>` : ''}
 
           <div class="botones producto-botones">
-            <button class="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" data-categoria="${categoria}" data-id="${item.id}">${iconoSalida} Registrar salida</button>
-            <button class="btn btn-registrar btn-ingreso" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">${iconoIngreso} Registrar ingreso</button>
+            <button class="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">${iconoSalida} Registrar salida</button>
+            <button class="btn btn-registrar btn-ingreso" data-accion="registrar" data-tipo="Ingreso" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">${iconoIngreso} Registrar ingreso</button>
           </div>
-          <button class="btn btn-blanco btn-contar" data-accion="ajustar" data-categoria="${categoria}" data-id="${item.id}">
+          <button class="btn btn-blanco btn-contar" data-accion="ajustar" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">
             ${iconoAjustar} Contar y corregir stock
           </button>
 
@@ -85,13 +85,13 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
 
           <div class="mov-pasos-titulo">
             <b>Últimos movimientos</b>
-            ${movimientos.length ? `<button class="link" data-accion="historial-producto" data-categoria="${categoria}" data-id="${item.id}">Ver todo en historial</button>` : ''}
+            ${movimientos.length ? `<button class="link" data-accion="historial-producto" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">Ver todo en historial</button>` : ''}
           </div>
           <ul class="mov-pasos">
             ${movimientos.slice(0, ultimos).map(p => `
               <li>
                 <button class="mov-paso ${clases[p.fila.movimiento]}" data-accion="ver-movimiento" data-indice="${p.indice}">
-                  <span class="mov-paso-fecha">${p.fila.fecha}</span>
+                  <span class="mov-paso-fecha">${escapar(p.fila.fecha)}</span>
                   <span class="mov-paso-tipo">● ${p.fila.inicial ? 'Registro inicial' : p.fila.movimiento}${p.fila.insumo !== item.nombre ? ` <small>de "${escapar(p.fila.insumo)}"</small>` : ''}</span>
                   <span class="mov-paso-cambio">${escapar(textoCambio(p.fila))}</span>
                   <span class="mov-paso-stock">${textoStock(p.fila)}</span>
@@ -101,7 +101,7 @@ export function PanelProducto(item, categoria, movimientos, esAdmin = false) {
           </ul>
 
           ${esAdmin ? `
-            <button class="btn btn-blanco btn-unir" data-accion="unir-producto" data-categoria="${categoria}" data-id="${item.id}">
+            <button class="btn btn-blanco btn-unir" data-accion="unir-producto" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">
               ¿Está repetido? Unir con otro producto
             </button>` : ''}
         </div>

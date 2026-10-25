@@ -1,5 +1,5 @@
-// en celular las ventanas suben desde abajo; aqui se cierran arrastrandolas hacia abajo
-// solo se arrastra desde la parte de arriba (rayita y titulo) para no pelear con el scroll
+// celular: cerrar paneles arrastrando hacia abajo
+// solo desde la parte de arriba, para no chocar con el scroll
 
 const hojas = '.modal, .panel-actividad, .panel-filtros';
 const zonaArrastre = 80;      // px desde el borde de arriba de la hoja
@@ -8,7 +8,7 @@ const velocidadCierre = 0.6;  // px/ms: un deslizon rapido tambien la cierra
 
 const esCelular = () => window.matchMedia('(max-width: 767px)').matches;
 
-// alCerrar(hoja): lo que hay que hacer cuando se suelta abajo (cerrar modal o filtros)
+// alCerrar(hoja): que hacer al soltar abajo
 export function activarDeslizar(alCerrar) {
   let arrastre = null;
 

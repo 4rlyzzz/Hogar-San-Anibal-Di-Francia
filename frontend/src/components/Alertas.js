@@ -2,18 +2,18 @@ import { escapar, diasParaVencer, diasHasta, nombreCategoria } from './Comunes.j
 import { lotesCon, lotesVencidos, cantidadVencida, disponible, estaVencido } from './Lotes.js';
 import { itemSobrestock, calcularExcedente } from './Alerta.js';
 
-// color de cada prioridad y orden en que se muestran
+// color y orden de cada prioridad
 export const coloresPrioridad = { Alta: 'rojo', Media: 'naranja', Baja: 'azul' };
 const orden = Object.keys(coloresPrioridad);
 const grupos = { Alta: 'Urgente', Media: 'Pronto', Baja: 'Para revisar' };
 
-// de la alerta mas grave a la menos; sirve para ordenar por la columna ALERTA
+// de la mas grave a la menos
 const tipos = ['Vencido', 'Sobrestock', 'Por vencer', 'Stock bajo', 'Cerca del mínimo'];
 
 const dias = n => `${n} ${n === 1 ? 'día' : 'días'}`;
 
-// los problemas de un producto, mirando cada lote: lo vencido, lo proximo a vencer y el stock
-// el stock que cuenta es el que se puede usar (sin lo vencido); si todo vencio, solo se dice eso
+// problemas de un producto: vencido, por vencer y stock
+// el stock se cuenta sin lo vencido
 export function problemasDe(item) {
   const u = item.unidad;
   const vencidos = lotesVencidos(item);
@@ -27,7 +27,7 @@ export function problemasDe(item) {
     if (vencida >= item.cantidad) return problemas;
   }
 
-  // el proximo lote en vencer que todavia sirve
+  // proximo lote en vencer
   const proximo = lotesCon(item)
     .filter(l => l.vence && !estaVencido(l))
     .sort((a, b) => a.vence.localeCompare(b.vence))[0];
@@ -39,7 +39,7 @@ export function problemasDe(item) {
     problemas.push({ tipo: 'Por vencer', detalle: `${cuanto} ${cuando}`, corto: `${cuanto} ${enCuanto}`, prioridad: vence <= 3 ? 'Alta' : 'Media' });
   }
 
-  // cerca del minimo: hasta un 20% sobre el minimo; avisa antes de que falte
+  // cerca del minimo: hasta 20% sobre el minimo
   const sirve = disponible(item);
   const quedan = `Quedan ${sirve} ${u}${vencida ? ' que sirven' : ''} · mín. ${item.minimo}`;
   const deMinimo = `${sirve} de ${item.minimo} ${u}`;
@@ -51,7 +51,7 @@ export function problemasDe(item) {
   return problemas;
 }
 
-// una fila por producto con todos sus problemas juntos; la prioridad es la mas alta de ellos
+// una fila por producto, con la prioridad mas alta
 function alertasDe(lista, categoria) {
   return lista.flatMap(item => {
     const problemas = problemasDe(item);
@@ -59,7 +59,6 @@ function alertasDe(lista, categoria) {
     return [{
       item,
       categoria,
-      // 'Vencido', 'Vencido y Stock bajo', 'Vencido, Por vencer y Cerca del mínimo'
       tipo: problemas.map(p => p.tipo).join(', ').replace(/, ([^,]*)$/, ' y $1'),
       detalle: problemas.map(p => p.detalle).join(' · '),
       prioridad: orden.find(o => problemas.some(p => p.prioridad === o)),
@@ -68,12 +67,12 @@ function alertasDe(lista, categoria) {
   });
 }
 
-// todas las alertas, de la mas urgente a la menos
-// conSobrestock: Inicio ya muestra el sobrestock en su propio recuadro, ahi va sin el
+// todas las alertas ordenadas por prioridad
+// en Inicio va sin sobrestock porque tiene su recuadro
 export function calcularAlertas(estado, conSobrestock = true) {
   let filas = [...alertasDe(estado.alimentos, 'Alimentos'), ...alertasDe(estado.salud, 'Salud')];
 
-  // el sobrestock reemplaza la fila de "por vencer" de ese producto, para no repetirlo
+  // el sobrestock reemplaza la fila de ese producto
   const sobra = conSobrestock ? itemSobrestock(estado) : null;
   if (sobra) {
     const detalle = `Vence en ${dias(diasParaVencer(sobra))} y sobrarían ${calcularExcedente(sobra)} ${sobra.unidad}`;
@@ -87,7 +86,7 @@ export function calcularAlertas(estado, conSobrestock = true) {
 const rangoTipo = f => tipos.findIndex(t => f.tipo.startsWith(t));
 const porPrioridad = (a, b) => orden.indexOf(a.prioridad) - orden.indexOf(b.prioridad) || rangoTipo(a) - rangoTipo(b);
 
-// columnas de la tabla de alertas que ordenan; empatados quedan por prioridad
+// orden de cada columna; si empatan, por prioridad
 const comparar = {
   producto: (a, b) => a.item.nombre.localeCompare(b.item.nombre),
   categoria: (a, b) => nombreCategoria(a.categoria).localeCompare(nombreCategoria(b.categoria)),
@@ -95,14 +94,12 @@ const comparar = {
   prioridad: porPrioridad,
 };
 
-// { orden: 'categoria', invertido: true } -> las filas ya ordenadas
 export function ordenarAlertas(filas, { orden: columna, invertido }) {
   const sentido = invertido ? -1 : 1;
   return [...filas].sort((a, b) => sentido * comparar[columna](a, b) || porPrioridad(a, b));
 }
 
-// los problemas de un producto, uno por franja con el color de su prioridad
-// (con span y no ul: tambien va dentro de las filas de la tabla, que son botones)
+// problemas en franjas de color (detalle del producto)
 export function ListaProblemas(problemas) {
   return `
     <span class="lista-alertas">
@@ -114,13 +111,13 @@ export function ListaProblemas(problemas) {
     </span>`;
 }
 
-// los mismos problemas en pastillas de una linea (tabla de alertas de Inicio); el detalle completo, al pasar el mouse
+// problemas en una linea (tabla de Inicio)
 export function PastillasProblemas(problemas) {
   return problemas.map(p => `
     <span class="pastilla-alerta ${coloresPrioridad[p.prioridad]}" title="${escapar(p.tipo + ': ' + p.detalle)}"><b>${p.tipo}</b> · ${escapar(p.corto)}</span>`).join('');
 }
 
-// panel de la campanita: todas las alertas en cualquier pestaña; tocar una abre ese producto
+// panel de la campanita
 export function PanelAlertas(alertas) {
   const urgentes = alertas.filter(a => a.prioridad === 'Alta').length;
 
@@ -132,13 +129,13 @@ export function PanelAlertas(alertas) {
       <li class="actividad-dia">${grupos[prioridad]} · ${delGrupo.length}</li>
       ${delGrupo.map(a => `
         <li>
-          <button class="actividad-item alerta-item" data-accion="ver-producto" data-categoria="${a.categoria}" data-id="${a.item.id}">
+          <button class="actividad-item alerta-item" data-accion="ver-producto" data-categoria="${escapar(a.categoria)}" data-id="${escapar(a.item.id)}">
             <span class="actividad-punto ${coloresPrioridad[a.prioridad]}"></span>
             <span>
               <b>${escapar(a.item.nombre)}</b>
               <small>${a.tipo} · ${escapar(a.detalle)}</small>
             </span>
-            <span class="actividad-hora">${nombreCategoria(a.categoria)}</span>
+            <span class="actividad-hora">${escapar(nombreCategoria(a.categoria))}</span>
           </button>
         </li>
       `).join('')}

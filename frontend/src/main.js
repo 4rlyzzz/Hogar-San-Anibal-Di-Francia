@@ -5,8 +5,10 @@ import './styles/login.css';
 
 import { alimentos, salud, historial, donadores, cuentas, actividad, actividadesDonacion, ninos, usuario } from './data/datos.js';
 import { Layout, Menu, MenuMovil, seccionesVisibles } from './layouts/MainLayout.js';
-import { ModalMovimiento, ModalProducto, ModalElegir, ModalDonador, ModalUsuario, ModalAjuste, ConfirmarAjuste, Coincidencias, ModalUnir, ConfirmarMovimiento, ModalBaja, fechaActual } from './components/Modal.js';
+import { ModalMovimiento, ModalProducto, ModalElegir, ModalDonador, ModalUsuario, ModalAjuste, ConfirmarAjuste, Coincidencias, ModalUnir, ConfirmarMovimiento, ModalBaja, fechaActual,
+  envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud } from './components/Modal.js';
 import { inventarioVacio } from './components/FiltrosInventario.js';
+import { reglas, cantidadDe, numero as reglaNumero, opcion, limpiarTexto, fechaFiltro, largos, decimalesDe } from './validacion.js';
 import { planDescuento, descontar, nuevoLote, disponible, cantidadVencida, lotesVencidos } from './components/Lotes.js';
 import { PanelProducto } from './components/DetalleProducto.js';
 import { calcularAlertas, PanelAlertas } from './components/Alertas.js';
@@ -19,7 +21,7 @@ import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreA
 import { paginaDonadores, listaDonadores, donacionesDe, actividadesDe } from './pages/Donadores.js';
 import { PanelDonador } from './components/DetalleDonador.js';
 import { paginaUsuarios } from './pages/Usuarios.js';
-import { iniciales, nombreCategoria, motivoCorreccion, movimientosEntre, palabras, coincideNombre, palabrasEnComun, pluralizar, envaseSingular } from './components/Comunes.js';
+import { iniciales, nombreCategoria, motivoCorreccion, motivosAjuste, movimientosEntre, palabras, coincideNombre, palabrasEnComun, pluralizar, envaseSingular } from './components/Comunes.js';
 import { actividadDe, PanelActividad } from './components/Actividad.js';
 import { PanelMovimiento } from './components/DetalleMovimiento.js';
 import { activarDeslizar } from './components/Deslizar.js';
@@ -32,7 +34,7 @@ const estado = {
   historialFiltros: filtrosHistorialVacios(),
   donadoresFiltros: { actividad: 'Todos', anio: 'Todos' },
   inventarioFiltros: inventarioVacio(),
-  // que panel de filtros esta abierto: 'historialFiltros', 'inventarioFiltros', 'usuarios' o null
+  // panel de filtros abierto (o null)
   filtrosAbiertos: null,
   filtro: 'Todos',
   busqueda: '',
@@ -60,13 +62,13 @@ const paginas = {
 // lo que se esta registrando en el modal abierto
 let seleccionado = null;
 
-// cuenta cuyo panel de actividad esta abierto (para refrescarlo si cambia su rol)
+// cuenta con el panel de actividad abierto
 let panelActividadId = null;
 
 iniciar();
 quitarPantallaCarga();
 
-// celular: las hojas que suben desde abajo se cierran deslizandolas hacia abajo
+// celular: deslizar hacia abajo cierra el panel
 activarDeslizar(hoja => {
   if (hoja.classList.contains('panel-filtros')) {
     estado.filtrosAbiertos = null;
@@ -77,18 +79,17 @@ activarDeslizar(hoja => {
 });
 
 // ---------- sesion ----------
-// si ya habia entrado en esta pestaña sigue adentro; si no, va al inicio de sesion
 function iniciar() {
-  // si lo desactivaron mientras tenia la sesion abierta, vuelve al login
-  const cuenta = cuentas.find(c => c.id === leerSesion() && c.activo);
+  // si la cuenta se desactivo, vuelve al login
+  const cuenta = cuentas.find(c => mismoId(c.id, leerSesion()) && c.activo);
   if (cuenta) entrar(cuenta);
   else mostrarLogin();
 }
 
-// la sesion dura hasta cerrar el navegador (sessionStorage), por si la compu es compartida
+// la sesion dura hasta cerrar el navegador
 function leerSesion() {
   try {
-    return Number(sessionStorage.getItem('sesion'));
+    return sessionStorage.getItem('sesion');
   } catch {
     return null;
   }
@@ -107,22 +108,35 @@ function mostrarLogin() {
   document.querySelector('#app').innerHTML = paginaLogin();
 }
 
+// 5 intentos fallidos: esperar 30 segundos
+const intentos = { fallidos: 0, esperarHasta: 0 };
+
 function iniciarSesion() {
-  const nombre = valor('login-usuario').toLowerCase();
-  const clave = document.querySelector('#login-clave').value;
   const error = document.querySelector('#error');
 
-  if (!nombre || !clave) {
-    error.textContent = 'Escribe tu usuario y contraseña.';
+  const espera = Math.ceil((intentos.esperarHasta - Date.now()) / 1000);
+  if (espera > 0) {
+    error.textContent = `Demasiados intentos. Espera ${espera} segundos y vuelve a probar.`;
     return;
   }
 
+  const nombre = leer('login-usuario', reglas.nombreUsuario, error);
+  if (nombre === null) return;
+  const clave = leer('login-clave', reglas.claveLogin, error);
+  if (clave === null) return;
+
   const cuenta = cuentas.find(c => c.usuario === nombre && c.clave === clave);
   if (!cuenta) {
+    intentos.fallidos++;
+    if (intentos.fallidos >= 5) {
+      intentos.fallidos = 0;
+      intentos.esperarHasta = Date.now() + 30000;
+    }
     error.textContent = 'Usuario o contraseña incorrectos.';
     document.querySelector('#login-clave').select();
     return;
   }
+  intentos.fallidos = 0;
   if (!cuenta.activo) {
     error.textContent = 'Esta cuenta está desactivada. Comunicarse con el administrador.';
     return;
@@ -162,8 +176,7 @@ function verClave(boton) {
   boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
 }
 
-// la pantalla de carga se va cuando la app ya esta dibujada detras,
-// pero se queda un minimo para que el logo alcance a verse
+// quita la pantalla de carga (minimo 1.4 s)
 function quitarPantallaCarga() {
   const pantalla = document.querySelector('#pantalla-carga');
   const minimo = 1400;
@@ -174,7 +187,7 @@ function quitarPantallaCarga() {
   }, Math.max(0, minimo - performance.now()));
 }
 
-// menu lateral: fijo abierto o que se abra al pasar el mouse; se recuerda en este navegador
+// menu lateral fijo o no (se guarda en el navegador)
 function leerMenuFijo() {
   try {
     return localStorage.getItem('menu-fijo') === 'si';
@@ -194,23 +207,23 @@ function fijarMenu(fijo) {
 }
 
 function render() {
-  // si la seccion no es para su rol (ej. Usuarios sin ser admin) vuelve a Inicio
+  // si no puede ver la seccion, vuelve a Inicio
   if (!seccionesVisibles().some(s => s.nombre === estado.seccion)) estado.seccion = 'Inicio';
 
   document.querySelector('#menu').innerHTML = Menu(estado.seccion);
   document.querySelector('#menu-movil').innerHTML = MenuMovil(estado.seccion);
   document.querySelector('#contenido').innerHTML = paginas[estado.seccion](estado);
 
-  // campanita: cuantas alertas urgentes hay (vencidos, por vencer en 3 dias, stock bajo, sobrestock)
+  // numero de la campanita: alertas urgentes
   const urgentes = calcularAlertas(estado).filter(a => a.prioridad === 'Alta').length;
   const numero = document.querySelector('#campana-numero');
   numero.hidden = urgentes === 0;
   numero.textContent = urgentes > 9 ? '9+' : urgentes;
 
-  // el css usa la seccion actual (en celular, Inicio no muestra el buscador)
+  // el css usa la seccion actual
   document.body.dataset.seccion = estado.seccion;
 
-  // los graficos de tiempo empiezan mostrando lo mas reciente (a la derecha)
+  // los graficos empiezan en lo mas reciente
   document.querySelectorAll('[data-al-final]').forEach(s => (s.scrollLeft = s.scrollWidth));
 }
 
@@ -227,8 +240,52 @@ function valor(id) {
   return input ? input.value.trim() : '';
 }
 
+// solo para vistas previas (para guardar se usa leer)
 function numero(id) {
-  return Number(valor(id).replace(',', '.'));
+  const resultado = reglaNumero({ max: Infinity, decimales: 2 })(valor(id));
+  return resultado.ok ? resultado.valor : NaN;
+}
+
+// lee un input y lo valida con su regla
+// si no pasa, muestra el error y devuelve null
+function leer(id, regla, error) {
+  const input = document.querySelector('#' + id);
+  const resultado = regla(input ? input.value : '');
+  if (input) input.toggleAttribute('aria-invalid', !resultado.ok);
+  if (!resultado.ok) {
+    error.textContent = resultado.error;
+    input?.focus();
+    return null;
+  }
+  return resultado.valor;
+}
+
+// en campos de numeros borra lo que no es numero
+// data-numero: decimales permitidos
+function filtrarNumero(input) {
+  const decimales = Number(input.dataset.numero) || 0;
+  let limpio = input.value.replace(/[^\d.,]/g, '');
+  const coma = limpio.search(/[.,]/);
+  if (coma >= 0) {
+    const entero = limpio.slice(0, coma);
+    const resto = limpio.slice(coma + 1).split(/[.,]/)[0];
+    limpio = decimales === 0 ? entero : `${entero}${limpio[coma]}${resto.slice(0, decimales)}`;
+  }
+  if (limpio === input.value) return;
+
+  input.value = limpio;
+  const error = document.querySelector('#error');
+  if (error) error.textContent = decimales ? `Aquí solo van números, con hasta ${decimales} decimales.` : 'Aquí solo van números enteros.';
+}
+
+// compara ids como texto (en CouchDB los _id son texto)
+function mismoId(a, b) {
+  return a != null && b != null && String(a) === String(b);
+}
+
+// el valor tiene que estar en la lista
+function permitido(valorElegido, permitidos) {
+  return permitidos.includes(valorElegido);
 }
 
 function listaDe(categoria) {
@@ -236,14 +293,14 @@ function listaDe(categoria) {
 }
 
 function abrirModal(categoria, id, tipo) {
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(i => mismoId(i.id, id));
   seleccionado = { item, categoria, tipo };
 
   document.querySelector('#modal').innerHTML = ModalMovimiento(item, categoria, tipo, estado.donadores, opcionesActividad(), opcionesNinos());
   document.querySelector('#cantidad').focus();
 }
 
-// las actividades del hogar primero; despues las que se agregaron con "Otra actividad"
+// actividades de la lista y las agregadas
 function opcionesActividad() {
   const agregadas = estado.historial
     .map(f => f.actividad)
@@ -251,41 +308,37 @@ function opcionesActividad() {
   return [...actividadesDonacion, ...[...new Set(agregadas)].sort((a, b) => a.localeCompare(b))];
 }
 
-// los niños de la lista y los que se agregaron con "Otro niño/a"
+// niños de la lista y los agregados
 function opcionesNinos() {
   const agregados = estado.historial.map(f => f.para).filter(n => n && !ninos.includes(n));
   return [...ninos, ...[...new Set(agregados)].sort((a, b) => a.localeCompare(b))];
 }
 
-// para quien fue una salida de Salud: '' es uso general, null si eligio "otro" y no escribio
+// para quien es la salida ('' = uso general, null = error)
 function leerPara(error) {
   const elegido = valor('para');
-  if (elegido !== 'otro') return elegido;
-
-  const nombre = valor('para-otro');
-  if (!nombre) {
-    error.textContent = 'Escribe el nombre del niño o niña.';
+  if (elegido === 'otro') return leer('para-otro', reglas.nino, error);
+  if (!permitido(elegido, ['', ...opcionesNinos()])) {
+    error.textContent = 'Elige para quién es de la lista.';
     return null;
   }
-  return nombre;
+  return elegido;
 }
 
-// actividad de la donacion: '' si no hay donador, null si falta elegirla (y muestra el error)
+// actividad de la donacion ('' sin donador, null = error)
 function leerActividad(error) {
   if (valor('donador') === '') return '';
 
   const elegida = valor('actividad');
-  const actividad = elegida === 'otra' ? valor('actividad-otra') : elegida;
-  if (!actividad) {
-    error.textContent = elegida === 'otra' ? 'Escribe cuál fue la actividad.' : 'Elige la actividad o motivo de la donación.';
+  if (elegida === 'otra') return leer('actividad-otra', reglas.actividadOtra, error);
+  if (!permitido(elegida, opcionesActividad())) {
+    error.textContent = 'Elige la actividad o motivo de la donación.';
     return null;
   }
-  return actividad;
+  return elegida;
 }
 
-// ---------- productos parecidos (para no crear uno repetido) ----------
-// los que tienen todas las palabras escritas, en cualquier orden y aunque haya un error de tipeo
-// 'leche gloria' encuentra 'Leche evaporada Gloria'; 'lentjas' encuentra 'Lentejas'
+// ---------- productos parecidos ----------
 function productosParecidos(nombre) {
   const todos = [
     ...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })),
@@ -294,50 +347,78 @@ function productosParecidos(nombre) {
   return todos.filter(({ item }) => coincideNombre(nombre, item.nombre)).slice(0, 3);
 }
 
-// el mismo nombre (sin contar tildes ni mayusculas) en cualquier categoria
+// mismo nombre sin contar tildes ni mayusculas
 function productoIgual(nombre) {
   const buscado = palabras(nombre).join(' ');
   return productosParecidos(nombre).find(({ item }) => palabras(item.nombre).join(' ') === buscado);
 }
 
 // ---------- presentacion del producto nuevo ----------
-// lee como viene y cuanto trae: { unidad, contenido, medida } o null si falta algo (y muestra el error)
-// unidad es en lo que se cuenta: 'bolsas' si viene en bolsas, 'kg' si es suelto
-function leerPresentacion(error) {
+// { unidad, envase, contenido, medida } o null si hay error
+function leerPresentacion(error, categoria) {
   const envase = valor('envase');
-  if (!envase) {
+  const envasesPermitidos = [
+    ...(categoria === 'Salud' ? envasesSalud : envasesAlimentos),
+    'otro',
+    ...medidasSuelto.map(m => 'suelto:' + m),
+  ];
+  if (!permitido(envase, envasesPermitidos)) {
     error.textContent = 'Elige en qué viene el producto.';
     return null;
   }
-  // suelto: se cuenta directo en la medida (kg, L...)
+  // suelto: se cuenta en la medida
   if (envase.startsWith('suelto:')) return { unidad: envase.slice(7), envase: null, contenido: null, medida: null };
 
-  if (envase === 'otro' && !valor('envase-otro')) {
-    error.textContent = 'Escribe cómo se llama el envase (ej. Bidón).';
-    return null;
+  let singular = envaseSingular(envase);
+  if (envase === 'otro') {
+    singular = leer('envase-otro', reglas.envaseOtro, error);
+    if (singular === null) return null;
   }
-  const unidad = envase === 'otro' ? pluralizar(valor('envase-otro')) : envase;
-  const singular = envase === 'otro' ? valor('envase-otro') : envaseSingular(envase);
+  const unidad = envase === 'otro' ? pluralizar(singular) : envase;
 
-  const contenido = numero('contenido');
-  if (!contenido || contenido <= 0) {
-    error.textContent = `Escribe cuánto trae cada ${singular.toLowerCase()} (ej. 10 tabletas, 1 kg).`;
+  const medida = valor('medida');
+  if (!permitido(medida, categoria === 'Salud' ? medidasSalud : medidasAlimentos)) {
+    error.textContent = 'Elige la medida de la lista.';
     return null;
   }
-  return { unidad, envase: singular, contenido, medida: valor('medida') };
+  // 'unidades' va entero; las demas medidas, 2 decimales
+  const reglaContenido = reglaNumero({
+    min: 0, max: 10000, decimales: medida === 'unidades' ? 0 : 2, minimoExcluido: true,
+    que: `cuánto trae cada ${singular.toLowerCase()}`,
+  });
+  const contenido = leer('contenido-envase', reglaContenido, error);
+  if (contenido === null) return null;
+
+  return { unidad, envase: singular, contenido, medida };
 }
 
-// muestra u oculta "de [10] [tabletas]" y como va a quedar: "Caja x 10 tabletas · 100 tabletas en total"
+// muestra los campos de presentacion y la vista previa
 function actualizarPresentacion() {
   const envase = valor('envase');
   const suelto = envase.startsWith('suelto:');
-  // sin envase elegido o suelto: solo [cantidad] [en que viene]
+
+  // decimales segun lo elegido
+  const decimalesCantidad = suelto ? decimalesDe(envase.slice(7)) : envase ? 0 : 2;
+  for (const id of ['cantidad', 'minimo']) {
+    const input = document.querySelector('#' + id);
+    if (input) {
+      input.dataset.numero = decimalesCantidad;
+      input.inputMode = decimalesCantidad ? 'decimal' : 'numeric';
+      filtrarNumero(input);
+    }
+  }
+  const inputContenido = document.querySelector('#contenido-envase');
+  if (inputContenido) {
+    inputContenido.dataset.numero = valor('medida') === 'unidades' ? 0 : 2;
+    filtrarNumero(inputContenido);
+  }
+  // sin envase o suelto: solo cantidad
   document.querySelector('#fila-presentacion').classList.toggle('sin-envase', !envase || suelto);
   document.querySelector('#envase-otro').hidden = envase !== 'otro';
 
   const previa = document.querySelector('#presentacion-previa');
   const cantidad = numero('cantidad');
-  const contenido = numero('contenido');
+  const contenido = numero('contenido-envase');
   const nombre = envase === 'otro' ? valor('envase-otro') : envaseSingular(envase);
 
   if (suelto) {
@@ -358,7 +439,7 @@ function mostrarCoincidencias() {
 
 // ---------- detalle de un producto ----------
 function verProducto(categoria, id) {
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(i => mismoId(i.id, id));
   const movimientos = estado.historial
     .map((f, i) => ({ fila: f, indice: i }))
     .filter(p => p.fila.categoria === categoria && [item.nombre, ...(item.unidos || [])].includes(p.fila.insumo));
@@ -369,9 +450,9 @@ function verProducto(categoria, id) {
 // ---------- unir un producto repetido (solo administrador) ----------
 function abrirModalUnir(categoria, id) {
   if (!esAdmin()) return;
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(i => mismoId(i.id, id));
   const opciones = listaDe(categoria)
-    .filter(o => o.id !== item.id && o.unidad === item.unidad && o.contenido === item.contenido && o.medida === item.medida)
+    .filter(o => sePuedenUnir(item, o))
     .map(o => ({ o, comunes: palabrasEnComun(item.nombre, o.nombre) }))
     .filter(x => x.comunes > 0)
     .sort((a, b) => b.comunes - a.comunes)
@@ -383,7 +464,7 @@ function abrirModalUnir(categoria, id) {
 // al elegir con cual se une, dice como va a quedar
 function mostrarResumenUnion() {
   const { item, categoria } = seleccionado;
-  const destino = listaDe(categoria).find(o => o.id === Number(valor('unir-con')));
+  const destino = listaDe(categoria).find(o => mismoId(o.id, valor('unir-con')));
   const resumen = document.querySelector('#unir-resumen');
 
   if (!destino) {
@@ -396,13 +477,17 @@ function mostrarResumenUnion() {
   resumen.textContent = `"${destino.nombre}" quedará con ${destino.cantidad} + ${item.cantidad} = ${total} ${item.unidad}`;
 }
 
-// el stock del repetido se suma como un ajuste del que se queda (asi su cadena de stock sigue cuadrando)
-// y el repetido sale del inventario; sus movimientos viejos quedan en el historial con su nombre
+// otro producto con la misma unidad y presentacion
+function sePuedenUnir(item, otro) {
+  return !mismoId(item.id, otro.id) && otro.unidad === item.unidad && otro.contenido === item.contenido && otro.medida === item.medida;
+}
+
+// el stock del repetido entra como ajuste del que se queda
 function guardarUnion() {
   const { item, categoria } = seleccionado;
   const lista = listaDe(categoria);
-  const destino = lista.find(o => o.id === Number(valor('unir-con')));
-  if (!destino) {
+  const destino = lista.find(o => mismoId(o.id, valor('unir-con')));
+  if (!destino || !sePuedenUnir(item, destino)) {
     document.querySelector('#error').textContent = 'Elige con qué producto se une.';
     return;
   }
@@ -437,7 +522,7 @@ function guardarUnion() {
 
 // "Ver todo en historial": el historial filtrado por ese producto
 function historialProducto(categoria, id) {
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(i => mismoId(i.id, id));
   estado.historialFiltros = { ...filtrosHistorialVacios(), categoria, producto: item.nombre };
   estado.seccion = 'Historial';
   cerrarModal();
@@ -449,12 +534,11 @@ function abrirModalProducto(categoria) {
   document.querySelector('#nombre').focus();
 }
 
-// ---------- ajuste de stock (cualquiera; queda guardado quien lo hizo) ----------
-// corrige el stock cuando el conteo fisico no coincide; queda en el historial como 'Ajuste'
-// previo: lo ya escrito (al volver del resumen) o el motivo de una correccion
-// correccion: { fila, entre } cuando corrige un ajuste anterior
+// ---------- ajuste de stock ----------
+// previo: lo ya escrito al volver
+// correccion: { fila, entre } si corrige otro ajuste
 function abrirModalAjuste(categoria, id, previo = {}, correccion = null) {
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(i => mismoId(i.id, id));
   seleccionado = { item, categoria, correccion };
 
   document.querySelector('#modal').innerHTML = ModalAjuste(item, categoria, previo, correccion);
@@ -462,8 +546,7 @@ function abrirModalAjuste(categoria, id, previo = {}, correccion = null) {
   if (previo.contado != null) mostrarDiferencia();
 }
 
-// desde el detalle de un ajuste: abre uno nuevo enlazado a ese (campo "corrige")
-// muestra lo que entro y salio desde entonces; el nuevo ajuste es sobre el stock actual
+// abre un ajuste nuevo enlazado al anterior
 function corregirAjuste(indice) {
   const fila = estado.historial[Number(indice)];
   const item = listaDe(fila.categoria).find(i => i.nombre === fila.insumo);
@@ -474,22 +557,23 @@ function corregirAjuste(indice) {
   abrirModalAjuste(fila.categoria, item.id, {}, { fila, entre: movimientosEntre(estado.historial, fila) });
 }
 
-// redondea a 2 decimales para que 42.1 - 40 no de 2.1000000000000014
+// redondea a 2 decimales
 function redondear(n) {
   return Math.round(n * 100) / 100;
 }
 
-// mientras se escribe la cantidad contada, dice si sobra o falta
+// muestra si sobra o falta mientras se escribe
 function mostrarDiferencia() {
   const { item } = seleccionado;
   const aviso = document.querySelector('#ajuste-diferencia');
-  const contado = numero('contado');
+  const resultado = cantidadDe(item.unidad, { que: 'la cantidad contada', puedeSerCero: true })(valor('contado'));
+  const contado = resultado.valor;
 
   aviso.className = 'ajuste-diferencia';
   if (valor('contado') === '') {
     aviso.textContent = 'Escribe cuánto hay realmente en el almacén';
-  } else if (isNaN(contado) || contado < 0) {
-    aviso.textContent = 'Escribe un número de 0 o más';
+  } else if (!resultado.ok) {
+    aviso.textContent = resultado.error;
   } else {
     const diferencia = redondear(contado - item.cantidad);
     if (diferencia === 0) {
@@ -501,51 +585,48 @@ function mostrarDiferencia() {
   }
 }
 
-// paso 1 -> 2: valida y muestra el resumen; todavia no cambia nada
+// paso 1: valida y muestra el resumen
 function revisarAjuste() {
   const { item, categoria, correccion } = seleccionado;
   const error = document.querySelector('#error');
-  const contado = numero('contado');
-  const motivo = correccion ? motivoCorreccion : valor('motivo');
-  const nota = valor('nota');
+  const contado = leer('contado', cantidadDe(item.unidad, { que: 'la cantidad contada', puedeSerCero: true }), error);
+  if (contado === null) return;
 
-  if (valor('contado') === '' || isNaN(contado) || contado < 0) {
-    error.textContent = 'Escribe la cantidad contada (0 o más).';
+  const motivo = correccion ? motivoCorreccion : valor('motivo');
+  if (!correccion && !permitido(motivo, motivosAjuste)) {
+    error.textContent = 'Elige el motivo de la lista.';
     return;
   }
+  // con "Otro" el detalle es obligatorio
+  const nota = leer('nota', motivo === 'Otro' ? reglas.notaObligatoria : reglas.nota, error);
+  if (nota === null) return;
 
   const diferencia = redondear(contado - item.cantidad);
   if (diferencia === 0) {
     error.textContent = 'La cantidad contada coincide con el sistema: no hay nada que ajustar.';
     return;
   }
-  if (motivo === 'Otro' && !nota) {
-    error.textContent = 'Si el motivo es "Otro", escribe el detalle.';
-    return;
-  }
-
   seleccionado.ajuste = { contado, diferencia, motivo, nota };
   document.querySelector('#modal').innerHTML = ConfirmarAjuste(item, categoria, seleccionado.ajuste, seleccionado.correccion);
 }
 
-// "Volver y corregir": regresa al paso 1 con lo que ya habia escrito
+// vuelve al paso 1
 function volverAjuste() {
   const { item, categoria, ajuste, correccion } = seleccionado;
   abrirModalAjuste(categoria, item.id, ajuste, correccion);
 }
 
-// paso 2: recien aqui se guarda; queda en el historial con quien lo hizo
+// paso 2: guarda el ajuste
 function confirmarAjuste() {
   const { item, categoria, ajuste, correccion } = seleccionado;
   item.cantidad = ajuste.contado;
 
-  // faltan: se descuenta del lote que vence antes (aunque este vencido)
-  // sobran: queda como un lote sin fecha, con la fecha del conteo
+  // si falta, se descuenta de los lotes; si sobra, es un lote nuevo
   const lotes = ajuste.diferencia < 0
     ? { lotes: descontar(planDescuento(item, -ajuste.diferencia, true)) }
     : { loteId: nuevoLote(item, { cantidad: ajuste.diferencia, origen: 'Sobrante del conteo' }).id };
 
-  // cantidad va sin signo como en los demas movimientos; diferencia dice si sumo o resto
+  // diferencia: con signo
   estado.historial.unshift({
     fecha: fechaActual(),
     insumo: item.nombre,
@@ -560,7 +641,7 @@ function confirmarAjuste() {
     saldo: ajuste.contado,
     motivo: ajuste.motivo,
     nota: ajuste.nota,
-    // el ajuste que corrige; en la bd va el _id de ese movimiento
+    // ajuste que corrige (en la bd, su _id)
     corrige: correccion?.fila ?? null,
     ...lotes,
   });
@@ -571,16 +652,23 @@ function confirmarAjuste() {
 }
 
 // ---------- baja por vencimiento ----------
-// saca todos los lotes vencidos de un producto: es una salida con motivo, no un ajuste
+// saca los lotes vencidos como una salida
 function abrirModalBaja(categoria, id) {
-  const item = listaDe(categoria).find(i => i.id === Number(id));
+  const item = listaDe(categoria).find(i => mismoId(i.id, id));
+  if (!item || cantidadVencida(item) <= 0) {
+    mostrarToast('Este producto no tiene nada vencido');
+    return;
+  }
   seleccionado = { item, categoria };
   document.querySelector('#modal').innerHTML = ModalBaja(item);
 }
 
 function confirmarBaja() {
   const { item, categoria } = seleccionado;
+  const nota = leer('nota', reglas.nota, document.querySelector('#error'));
+  if (nota === null) return;
   const vencida = cantidadVencida(item);
+  if (vencida <= 0) return;
   const usados = descontar(lotesVencidos(item).map(lote => ({ lote, cantidad: lote.quedan })));
   item.cantidad = redondear(item.cantidad - vencida);
 
@@ -596,7 +684,7 @@ function confirmarBaja() {
     para: '',
     saldo: item.cantidad,
     motivo: 'Baja por vencimiento',
-    nota: valor('nota'),
+    nota,
     lotes: usados,
   });
 
@@ -611,7 +699,7 @@ function abrirModalDonador() {
   document.querySelector('#nuevo-nombre').focus();
 }
 
-// el "+" depende de la pestaña: abre su formulario, o pregunta que agregar en Inicio e Historial
+// boton "+" segun la pestaña
 function agregar() {
   if (estado.seccion === 'Alimentos' || estado.seccion === 'Salud') {
     abrirModalProducto(estado.seccion);
@@ -625,7 +713,6 @@ function agregar() {
 }
 
 // ---------- detalle de un movimiento ----------
-// antes y despues, todos sus datos y los pasos del mismo producto (para ir hacia atras)
 function verMovimiento(indice) {
   const fila = estado.historial[Number(indice)];
   const pasos = estado.historial
@@ -633,7 +720,7 @@ function verMovimiento(indice) {
     .filter(p => p.fila.insumo === fila.insumo && p.fila.categoria === fila.categoria)
     .slice(0, 40);
 
-  // enlaces de correccion: a que ajuste corrige este, y quien lo corrigio despues
+  // ajuste que corrige y quien lo corrigio
   const corrige = fila.corrige ? estado.historial.indexOf(fila.corrige) : -1;
   const corregidoPor = estado.historial.findIndex(f => f.corrige === fila);
   const enlaces = {
@@ -653,21 +740,20 @@ function filtrarProducto(indice) {
 }
 
 // ---------- donadores ----------
-// su historial: que dono, cuando y para que actividad
 function verDonador(id) {
-  const d = estado.donadores.find(x => x.id === Number(id));
+  const d = estado.donadores.find(x => mismoId(x.id, id));
   document.querySelector('#modal').innerHTML = PanelDonador(d, donacionesDe(estado, d.nombre));
 }
 
-// "Ver sus donaciones en el historial": deja el historial filtrado por ese donador
+// historial filtrado por ese donador
 function historialDonador(id) {
-  const d = estado.donadores.find(x => x.id === Number(id));
+  const d = estado.donadores.find(x => mismoId(x.id, id));
   estado.historialFiltros = { ...filtrosHistorialVacios(), donador: d.nombre };
   estado.seccion = 'Historial';
   cerrarModal();
 }
 
-// la lista tal como se ve (con filtros de actividad y año) para agradecer o contactar
+// descarga la lista como se ve
 async function descargarExcelDonadores(boton) {
   const filas = listaDonadores(estado).map(x => ({ ...x, actividades: actividadesDe(x.donaciones) }));
   if (filas.length === 0) return;
@@ -685,7 +771,7 @@ async function descargarExcelDonadores(boton) {
 }
 
 // ---------- descarga del historial ----------
-// baja a Excel justo lo que se ve con los filtros puestos
+// descarga lo filtrado
 async function descargarExcel(boton) {
   const filas = filtrarHistorial(estado);
   if (filas.length === 0) return;
@@ -703,7 +789,7 @@ async function descargarExcel(boton) {
 }
 
 // ---------- actividad ----------
-// lo que no es ingreso ni salida queda anotado aqui (en la bd: tipo 'actividad')
+// acciones que no son movimientos
 function registrarActividad(accion, texto, detalle) {
   estado.actividad.unshift({
     id: Date.now(),
@@ -721,7 +807,7 @@ function nuevoDonador(nombre, telefono) {
   return { id: Date.now(), nombre, telefono, creadoPor: usuario.nombre, creadoPorId: usuario.id, creado: new Date() };
 }
 
-// el admin ve la de cualquiera (desde Usuarios); los demas solo la suya (menu del usuario)
+// el admin ve la de todos; los demas solo la suya
 function verActividad(id) {
   const cuenta = cuentaPorId(id);
   const esPropio = cuenta.id === usuario.id;
@@ -732,13 +818,13 @@ function verActividad(id) {
   document.querySelector('#modal').innerHTML = PanelActividad(cuenta, actividadDe(estado, cuenta), esPropio, !esPropio && esAdmin());
 }
 
-// despues de cambiar rol o estado desde el panel, se vuelve a dibujar con los datos nuevos
+// vuelve a dibujar el panel abierto
 function refrescarPanelActividad() {
   if (panelActividadId) verActividad(panelActividadId);
 }
 
-// ---------- filtros (Historial y Usuarios) ----------
-// valor de "sin filtro" de cada campo
+// ---------- filtros ----------
+// valor sin filtro
 function sinFiltro(campo) {
   return campo === 'desde' || campo === 'hasta' ? '' : 'Todos';
 }
@@ -749,10 +835,10 @@ function limpiarFiltros(grupo) {
   } else if (grupo === 'donadoresFiltros') {
     estado.donadoresFiltros = { actividad: 'Todos', anio: 'Todos' };
   } else if (grupo === 'inventarioFiltros') {
-    // el orden no es un filtro, se mantiene
+    // el orden se mantiene
     estado.inventarioFiltros = { ...inventarioVacio(), orden: estado.inventarioFiltros.orden };
   } else {
-    // en usuarios el orden no es un filtro, se mantiene
+    // el orden se mantiene
     estado.usuarios.rol = 'Todos';
     estado.usuarios.estado = 'Todos';
   }
@@ -769,35 +855,32 @@ function abrirModalUsuario() {
   document.querySelector('#cuenta-nombre').focus();
 }
 
-function guardarUsuario() {
-  const error = document.querySelector('#error');
-  const nombre = valor('cuenta-nombre');
-  const nombreUsuario = valor('cuenta-usuario').toLowerCase();
-  const clave = document.querySelector('#cuenta-clave').value;
+// roles validos
+const roles = ['Usuario', 'Administrador'];
 
-  if (!nombre || !nombreUsuario || !clave) {
-    error.textContent = 'Completa nombre, usuario y contraseña.';
-    return;
-  }
-  if (nombreUsuario.includes(' ')) {
-    error.textContent = 'El usuario no puede tener espacios.';
-    return;
-  }
+function guardarUsuario() {
+  if (!esAdmin()) return;
+  const error = document.querySelector('#error');
+
+  const nombre = leer('cuenta-nombre', reglas.nombreCuenta, error);
+  if (nombre === null) return;
+  const nombreUsuario = leer('cuenta-usuario', reglas.nombreUsuario, error);
+  if (nombreUsuario === null) return;
   if (estado.cuentas.some(c => c.usuario === nombreUsuario)) {
     error.textContent = `Ya existe el usuario "${nombreUsuario}".`;
     return;
   }
-  if (clave.length < 6) {
-    error.textContent = 'La contraseña debe tener al menos 6 caracteres.';
-    return;
-  }
+  const clave = leer('cuenta-clave', reglas.claveNueva, error);
+  if (clave === null) return;
+  const rol = leer('cuenta-rol', opcion(roles, 'el rol'), error);
+  if (rol === null) return;
 
   estado.cuentas.push({
     id: Date.now(),
     usuario: nombreUsuario,
     clave,
     nombre,
-    rol: valor('cuenta-rol'),
+    rol,
     activo: true,
     creado: new Date(),
     creadoPor: usuario.nombre,
@@ -811,11 +894,12 @@ function guardarUsuario() {
 }
 
 function cuentaPorId(id) {
-  return estado.cuentas.find(c => c.id === Number(id));
+  return estado.cuentas.find(c => mismoId(c.id, id));
 }
 
 function cambiarActivo(id) {
   const cuenta = cuentaPorId(id);
+  if (!esAdmin() || !cuenta || mismoId(cuenta.id, usuario.id)) return;
   cuenta.activo = !cuenta.activo;
   registrarActividad('estado', cuenta.activo ? 'Activó a' : 'Desactivó a', cuenta.nombre);
   render();
@@ -825,6 +909,7 @@ function cambiarActivo(id) {
 
 function cambiarRol(id, rol) {
   const cuenta = cuentaPorId(id);
+  if (!esAdmin() || !cuenta || mismoId(cuenta.id, usuario.id) || !permitido(rol, roles)) return;
   cuenta.rol = rol;
   registrarActividad('rol', 'Cambió el rol de', `${cuenta.nombre} a ${rol}`);
   render();
@@ -839,23 +924,36 @@ function cerrarModal() {
   if (modal) modal.innerHTML = '';
 }
 
-// el donador elegido, sin crearlo todavia: { nombre, nuevo } (nombre '' si no hay)
-// nuevo: { nombre, telefono } si se eligio "+ Nuevo donador"; null si falta completarlo (y muestra el error)
+// donador elegido, sin crearlo todavia
+// devuelve null si hay error
 function elegirDonador(error) {
   const elegido = valor('donador');
   if (elegido === '') return { nombre: '', nuevo: null };
 
   if (elegido !== 'nuevo') {
-    return { nombre: estado.donadores.find(d => d.id === Number(elegido)).nombre, nuevo: null };
+    const donador = estado.donadores.find(d => String(d.id) === elegido);
+    if (!donador) {
+      error.textContent = 'Elige el donador de la lista.';
+      return null;
+    }
+    return { nombre: donador.nombre, nuevo: null };
   }
 
-  const nombre = valor('donador-nombre');
-  const telefono = valor('donador-telefono');
-  if (!nombre || !telefono) {
-    error.textContent = 'Completa el nombre y el número de contacto del donador.';
+  const nuevo = leerDonadorNuevo('donador-nombre', 'donador-telefono', error);
+  return nuevo ? { nombre: nuevo.nombre, nuevo } : null;
+}
+
+// datos del donador nuevo (sin repetir)
+function leerDonadorNuevo(idNombre, idTelefono, error) {
+  const nombre = leer(idNombre, reglas.nombreDonador, error);
+  if (nombre === null) return null;
+  if (estado.donadores.some(d => d.nombre.toLowerCase() === nombre.toLowerCase())) {
+    error.textContent = `"${nombre}" ya está registrado: elígelo de la lista.`;
     return null;
   }
-  return { nombre, nuevo: { nombre, telefono } };
+  const telefono = leer(idTelefono, reglas.telefono, error);
+  if (telefono === null) return null;
+  return { nombre, telefono };
 }
 
 // agrega el donador si era nuevo y devuelve su nombre
@@ -864,24 +962,21 @@ function guardarDonadorElegido(donador) {
   return donador.nombre;
 }
 
-// devuelve el nombre del donador elegido, '' si no hay, o null si falta completar el nuevo
+// nombre del donador ('' si no hay, null si hay error)
 function leerDonador(error) {
   const donador = elegirDonador(error);
   return donador ? guardarDonadorElegido(donador) : null;
 }
 
 // ---------- ingreso o salida: revisar y confirmar ----------
-// paso 1 -> 2: valida y muestra el resumen encima del formulario; todavia no cambia nada
+// paso 1: valida y muestra el resumen
 function revisarMovimiento() {
   const { item, categoria, tipo } = seleccionado;
-  const cantidad = numero('cantidad');
   const error = document.querySelector('#error');
+  const cantidad = leer('cantidad', cantidadDe(item.unidad), error);
+  if (cantidad === null) return;
 
-  if (!cantidad || cantidad <= 0) {
-    error.textContent = 'Ingresa una cantidad mayor que 0.';
-    return;
-  }
-  // lo vencido no se usa: se saca con "Dar de baja lo vencido"
+  // lo vencido no cuenta para salidas
   if (tipo === 'Salida' && cantidad > disponible(item)) {
     error.textContent = cantidadVencida(item)
       ? `Solo se pueden usar ${disponible(item)} ${item.unidad}; lo vencido se saca con "Dar de baja" en el detalle del producto.`
@@ -889,7 +984,7 @@ function revisarMovimiento() {
     return;
   }
 
-  // cada ingreso es un lote nuevo con su propio vencimiento
+  // vencimiento del lote nuevo
   const vence = tipo === 'Ingreso' ? leerVencimiento(error) : null;
   if (vence === false) return;
 
@@ -914,18 +1009,17 @@ function revisarMovimiento() {
   formulario.insertAdjacentHTML('afterend', ConfirmarMovimiento(item, tipo, seleccionado.movimiento));
 }
 
-// "Volver y corregir": quita el resumen y vuelve el formulario tal como estaba
+// vuelve al formulario
 function volverMovimiento() {
   document.querySelector('#form-movimiento-confirmar').remove();
   document.querySelector('#form-movimiento').hidden = false;
 }
 
-// paso 2: recien aqui se guarda (y se crea el donador si era nuevo)
+// paso 2: guarda el movimiento
 function confirmarMovimiento() {
   const { item, categoria, tipo, movimiento } = seleccionado;
   const donador = guardarDonadorElegido(movimiento.donador);
 
-  // ingreso suma un lote; salida descuenta de los lotes que vencen antes
   const cambio = tipo === 'Ingreso' ? movimiento.cantidad : -movimiento.cantidad;
   item.cantidad = Math.round((item.cantidad + cambio) * 100) / 100;
   const lote = tipo === 'Ingreso' ? nuevoLote(item, { cantidad: movimiento.cantidad, vence: movimiento.vence }) : null;
@@ -942,7 +1036,7 @@ function confirmarMovimiento() {
     actividad: movimiento.actividad,
     para: movimiento.para,
     saldo: item.cantidad,
-    // ingreso: el lote que creo; salida: de que lotes salio
+    // lote creado o lotes usados
     ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: descontar(movimiento.plan) }),
   });
 
@@ -951,43 +1045,37 @@ function confirmarMovimiento() {
   mostrarToast(`${tipo} guardado · ${item.nombre}`);
 }
 
-// fecha de vencimiento del lote que entra: '2026-11-05', null si "No tiene fecha", o false si falta
+// fecha, null si no tiene, false si hay error
 function leerVencimiento(error) {
-  const vence = valor('vencimiento');
-  if (vence) return vence;
   if (document.querySelector('#sin-vencimiento')?.checked) return null;
-  error.textContent = 'Pon la fecha de vencimiento o marca "No tiene fecha".';
-  return false;
+  if (!valor('vencimiento')) {
+    error.textContent = 'Pon la fecha de vencimiento o marca "No tiene fecha".';
+    return false;
+  }
+  return leer('vencimiento', reglas.vencimiento, error) ?? false;
 }
 
 function guardarProducto() {
   const { categoria } = seleccionado;
   const error = document.querySelector('#error');
 
-  const nombre = valor('nombre');
-  const cantidad = numero('cantidad');
-  const minimo = numero('minimo');
+  if (!permitido(categoria, ['Alimentos', 'Salud'])) return;
 
-  if (!nombre) {
-    error.textContent = 'Escribe el nombre del producto.';
-    return;
-  }
+  const nombre = leer('nombre', reglas.nombreProducto, error);
+  if (nombre === null) return;
   const igual = productoIgual(nombre);
   if (igual) {
     error.textContent = `Ya existe "${igual.item.nombre}" en ${nombreCategoria(igual.categoria)}. Para sumar stock, registra un ingreso de ese producto.`;
     return;
   }
-  if (!cantidad || cantidad <= 0) {
-    error.textContent = 'Ingresa una cantidad mayor que 0.';
-    return;
-  }
-  const presentacion = leerPresentacion(error);
+  const presentacion = leerPresentacion(error, categoria);
   if (!presentacion) return;
   const { unidad, envase, contenido, medida } = presentacion;
-  if (isNaN(minimo) || minimo < 0) {
-    error.textContent = 'El stock mínimo debe ser un número.';
-    return;
-  }
+
+  const cantidad = leer('cantidad', cantidadDe(unidad), error);
+  if (cantidad === null) return;
+  const minimo = leer('minimo', cantidadDe(unidad, { que: 'el stock mínimo', puedeSerCero: true }), error);
+  if (minimo === null) return;
   const vence = leerVencimiento(error);
   if (vence === false) return;
 
@@ -1036,13 +1124,9 @@ function guardarProducto() {
 }
 
 function guardarDonador() {
-  const nombre = valor('nuevo-nombre');
-  const telefono = valor('nuevo-telefono');
-
-  if (!nombre || !telefono) {
-    document.querySelector('#error').textContent = 'Completa el nombre y el número de contacto.';
-    return;
-  }
+  const nuevo = leerDonadorNuevo('nuevo-nombre', 'nuevo-telefono', document.querySelector('#error'));
+  if (!nuevo) return;
+  const { nombre, telefono } = nuevo;
 
   estado.donadores.push(nuevoDonador(nombre, telefono));
   cerrarModal();
@@ -1050,14 +1134,39 @@ function guardarDonador() {
   mostrarToast('Donador agregado · ' + nombre);
 }
 
+// grupos y ordenes que se pueden cambiar
+const gruposFiltro = { historialFiltros: true, donadoresFiltros: true, inventarioFiltros: true, usuarios: true };
+const ordenesPermitidos = {
+  usuarios: ['nombre', 'acceso', 'movimientos', 'agregado'],
+  alertasOrden: ['producto', 'categoria', 'alerta', 'prioridad'],
+};
+
+// atrapa errores para que la app no se trabe
+function seguro(manejar) {
+  return e => {
+    try {
+      manejar(e);
+    } catch (error) {
+      console.error(error);
+      mostrarToast('Ocurrió un error inesperado. Revisa el historial antes de volver a intentarlo.');
+    }
+  };
+}
+
+// errores de promesas (descargas, bd)
+window.addEventListener('unhandledrejection', e => {
+  console.error(e.reason);
+  mostrarToast('Ocurrió un error inesperado. Vuelve a intentarlo.');
+});
+
 // todos los botones tienen data-accion
-document.addEventListener('click', e => {
+document.addEventListener('click', seguro(e => {
   if (e.target.classList.contains('fondo-modal')) {
     cerrarModal();
     return;
   }
 
-  // el menu del usuario se cierra al hacer clic en cualquier otro lado
+  // cierra el menu del usuario
   const menuUsuario = document.querySelector('#usuario-menu');
   if (menuUsuario && !e.target.closest('.usuario-caja')) menuUsuario.hidden = true;
 
@@ -1068,7 +1177,7 @@ document.addEventListener('click', e => {
     case 'seccion':
       estado.seccion = boton.dataset.seccion;
       estado.filtrosAbiertos = null;
-      // Alimentos y Salud comparten los filtros, pero no sus unidades: se empieza de cero
+      // limpia los filtros al cambiar de pestaña
       estado.inventarioFiltros = inventarioVacio();
       window.scrollTo(0, 0);
       break;
@@ -1079,7 +1188,8 @@ document.addEventListener('click', e => {
       estado.grafico[boton.dataset.campo] = boton.dataset.valor;
       break;
     case 'ordenar': {
-      // otro clic en la misma columna invierte el orden
+      if (!permitido(boton.dataset.orden, ordenesPermitidos[boton.dataset.grupo] ?? [])) return;
+      // otro clic invierte el orden
       const orden = estado[boton.dataset.grupo];
       if (orden.orden === boton.dataset.orden) {
         orden.invertido = !orden.invertido;
@@ -1166,6 +1276,7 @@ document.addEventListener('click', e => {
       limpiarFiltros(boton.dataset.panel);
       break;
     case 'quitar-filtro':
+      if (!Object.hasOwn(gruposFiltro, boton.dataset.panel) || !Object.hasOwn(estado[boton.dataset.panel], boton.dataset.campo)) return;
       estado[boton.dataset.panel][boton.dataset.campo] = sinFiltro(boton.dataset.campo);
       break;
     case 'ver-actividad':
@@ -1189,10 +1300,10 @@ document.addEventListener('click', e => {
   }
 
   render();
-});
+}));
 
 // cada formulario tiene su id
-document.addEventListener('submit', e => {
+document.addEventListener('submit', seguro(e => {
   e.preventDefault();
   if (e.target.id === 'form-login') iniciarSesion();
   if (e.target.id === 'form-movimiento') revisarMovimiento();
@@ -1204,19 +1315,24 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'form-producto') guardarProducto();
   if (e.target.id === 'form-donador') guardarDonador();
   if (e.target.id === 'form-usuario') guardarUsuario();
-});
+}));
 
-// mostrar los campos extra solo si se elige "+ Nuevo donador" u "Otro"; y el rol en Usuarios
-document.addEventListener('change', e => {
+// cambios en selects y filtros
+document.addEventListener('change', seguro(e => {
   if (e.target.classList.contains('selector-rol')) {
     cambiarRol(e.target.dataset.id, e.target.value);
   }
-  // filtros de Usuarios e Historial: data-grupo dice que parte del estado cambia
+  // filtros: solo grupos, campos y valores validos
   if (e.target.dataset.grupo) {
     const { grupo, campo } = e.target.dataset;
+    if (!Object.hasOwn(gruposFiltro, grupo) || !Object.hasOwn(estado[grupo], campo)) return;
+    const elegido = e.target.tagName === 'SELECT'
+      ? [...e.target.options].some(o => o.value === e.target.value)
+      : fechaFiltro(e.target.value).ok;
+    if (!elegido) return;
     estado[grupo][campo] = e.target.value;
     if (grupo === 'usuarios' && campo === 'orden') estado.usuarios.invertido = false;
-    // al cambiar de categoria, el producto y el niño elegidos pueden no estar en la nueva
+    // al cambiar de categoria se limpian producto y niño
     if (grupo === 'historialFiltros' && campo === 'categoria') {
       estado.historialFiltros.producto = 'Todos';
       estado.historialFiltros.para = 'Todos';
@@ -1247,19 +1363,20 @@ document.addEventListener('change', e => {
     actualizarPresentacion();
     if (e.target.id === 'envase' && e.target.value === 'otro') document.querySelector('#envase-otro').focus();
   }
-});
+}));
 
-document.addEventListener('input', e => {
+document.addEventListener('input', seguro(e => {
+  if (e.target.dataset.numero !== undefined) filtrarNumero(e.target);
   if (e.target.id === 'contado') mostrarDiferencia();
-  if (['contenido', 'envase-otro'].includes(e.target.id) || (e.target.id === 'cantidad' && document.querySelector('#fila-presentacion'))) actualizarPresentacion();
+  if (['contenido-envase', 'envase-otro'].includes(e.target.id) || (e.target.id === 'cantidad' && document.querySelector('#fila-presentacion'))) actualizarPresentacion();
   if (e.target.id === 'nombre' && document.querySelector('#coincidencias')) mostrarCoincidencias();
   if (e.target.id === 'buscador') {
-    estado.busqueda = e.target.value;
+    estado.busqueda = limpiarTexto(e.target.value).slice(0, largos.busqueda);
     render();
   }
-});
+}));
 
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', seguro(e => {
   if (e.key === 'Escape') {
     cerrarModal();
     if (estado.filtrosAbiertos) {
@@ -1269,4 +1386,4 @@ document.addEventListener('keydown', e => {
     const menuUsuario = document.querySelector('#usuario-menu');
     if (menuUsuario) menuUsuario.hidden = true;
   }
-});
+}));

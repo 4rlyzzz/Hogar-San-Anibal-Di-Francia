@@ -1,12 +1,13 @@
 /* ---------- tarjetas ---------- */
 .grilla {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin-bottom: 38px;
 }
 
 .tarjeta {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 15px;
@@ -1640,7 +1641,7 @@ button.uf-usuario:hover b {
   text-align: center;
 }
 
-/* fondo invisible en desktop: solo sirve para cerrar al hacer clic afuera */
+/* fondo para cerrar al hacer clic afuera */
 .filtros-fondo {
   position: fixed;
   inset: 0;
@@ -2192,7 +2193,7 @@ button.uf-usuario:hover b {
   margin-bottom: 4px !important;
 }
 
-/* los problemas de un producto, una franja de color por cada uno (detalle y tabla de alertas) */
+/* problemas de un producto en franjas */
 .lista-alertas {
   display: flex;
   flex-direction: column;
@@ -2227,7 +2228,7 @@ button.uf-usuario:hover b {
   margin: -6px 0 14px;
 }
 
-/* tabla de alertas: un problema por pastilla, en la misma linea (bajan si no caben) */
+/* tabla de alertas */
 .alerta-fila-tipo {
   display: flex;
   flex-wrap: wrap;
@@ -2483,7 +2484,7 @@ button.uf-usuario:hover b {
   text-decoration: none;
 }
 
-/* columna DETALLE del historial: de donde vino, a quien fue o por que cambio */
+/* columna DETALLE del historial */
 .fila-detalle {
   font-size: 12px;
   color: #54635e;
@@ -2647,7 +2648,7 @@ button.uf-usuario:hover b {
 }
 
 /* ---------- panel de alertas (campanita) ---------- */
-/* cada alerta usa la fila de .actividad-item; aqui solo se le quita el aspecto de boton */
+/* alertas de la campanita */
 .alerta-item {
   width: 100%;
   padding: 10px 4px;
@@ -2669,7 +2670,7 @@ button.uf-usuario:hover b {
   background: #f9fbfa;
 }
 
-/* cantidad y presentacion en una fila: [5] [blísters] de [10] [unidades] */
+/* cantidad y presentacion en una fila */
 .fila-presentacion {
   display: flex;
   align-items: center;
@@ -2690,7 +2691,7 @@ button.uf-usuario:hover b {
   flex: 1 1 120px;
 }
 
-.fila-presentacion #contenido {
+.fila-presentacion #contenido-envase {
   flex: 0 0 64px;
 }
 
@@ -2705,9 +2706,9 @@ button.uf-usuario:hover b {
   color: #6f7e79;
 }
 
-/* antes de elegir un envase, o si es suelto: solo cantidad y "en que viene" */
+/* sin envase o suelto */
 .fila-presentacion.sin-envase .fila-presentacion-de,
-.fila-presentacion.sin-envase #contenido,
+.fila-presentacion.sin-envase #contenido-envase,
 .fila-presentacion.sin-envase #medida {
   display: none;
 }

@@ -3,14 +3,13 @@ import { escapar, nombreCategoria, textoCambio, stockAntes, textoStock, Movimien
 
 const clases = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
 
-// campos que ya se muestran arriba o que son internos de la bd
+// campos que no se listan
 const yaMostrados = ['fecha', 'insumo', 'categoria', 'movimiento', 'cantidad', 'diferencia', 'unidad', 'saldo', 'inicial', 'corrige', 'loteId', '_id', '_rev', 'tipo', 'fechaOrden'];
 
-// nombre lindo de los campos conocidos; los demas se muestran con su nombre tal cual
-// (la bd no es relacional: un movimiento puede traer campos nuevos y igual se ven aqui)
+// nombre visible de cada campo
 const etiquetas = { responsable: 'Responsable', donador: 'Donado por', actividad: 'Actividad', para: 'Para (niño/a)', motivo: 'Motivo', nota: 'Detalle', lote: 'Lote', vence: 'Vence', lotes: 'Salió de' };
 
-// los campos que no son texto se escriben aqui
+// campos que necesitan formato
 function textoCampo(campo, valor, fila) {
   if (campo === 'lotes') return valor.map(l => `Lote del ${l.ingreso}: ${l.cantidad} ${fila.unidad}`).join(' · ');
   if (campo === 'vence') return fechaVence(valor);
@@ -18,7 +17,7 @@ function textoCampo(campo, valor, fila) {
 }
 
 function DatosMovimiento(fila) {
-  // una salida sin lotes (de antes de los lotes) no muestra "Salió de"
+  // no muestra listas vacias
   const filas = Object.entries(fila)
     .filter(([campo, valor]) => !yaMostrados.includes(campo) && valor !== '' && valor != null && !(Array.isArray(valor) && !valor.length))
     .map(([campo, valor]) => `
@@ -56,8 +55,7 @@ function AntesDespues(fila) {
     </div>`;
 }
 
-// pasos: [{ fila, indice }] del mismo producto, del mas nuevo al mas antiguo
-// cada paso se puede abrir para ir "hacia atras"
+// otros movimientos del mismo producto
 function PasosProducto(fila, indiceActual, pasos) {
   return `
     <div class="mov-pasos-titulo">
@@ -68,7 +66,7 @@ function PasosProducto(fila, indiceActual, pasos) {
       ${pasos.map(p => `
         <li>
           <button class="mov-paso ${clases[p.fila.movimiento]} ${p.indice === indiceActual ? 'actual' : ''}" data-accion="ver-movimiento" data-indice="${p.indice}">
-            <span class="mov-paso-fecha">${p.fila.fecha}</span>
+            <span class="mov-paso-fecha">${escapar(p.fila.fecha)}</span>
             <span class="mov-paso-tipo">● ${p.fila.inicial ? 'Registro inicial' : p.fila.movimiento}</span>
             <span class="mov-paso-cambio">${escapar(textoCambio(p.fila))}</span>
             <span class="mov-paso-stock">${textoStock(p.fila)}</span>
@@ -78,8 +76,7 @@ function PasosProducto(fila, indiceActual, pasos) {
     </ul>`;
 }
 
-// un ajuste corregido muestra quien lo corrigio; una correccion muestra que ajuste corrige
-// y lo que entro o salio entre los dos (por eso el numero no es solo "contado - contado")
+// enlaces entre un ajuste y su correccion
 function Correccion(fila, enlaces) {
   const { corrige, corregidoPor } = enlaces;
   const u = escapar(fila.unidad);
@@ -89,7 +86,7 @@ function Correccion(fila, enlaces) {
     html += `
       <div class="correccion">
         <div class="correccion-titulo">
-          <b>Corrige el conteo del ${corrige.fila.fecha}</b>
+          <b>Corrige el conteo del ${escapar(corrige.fila.fecha)}</b>
           <button class="link" data-accion="ver-movimiento" data-indice="${corrige.indice}">Ver ese conteo</button>
         </div>
         <p>Ese día el sistema decía <b>${stockAntes(corrige.fila)} ${u}</b> y ${escapar(corrige.fila.responsable)} contó <b>${corrige.fila.saldo} ${u}</b>.</p>
@@ -106,14 +103,14 @@ function Correccion(fila, enlaces) {
           <b>Este conteo estaba mal</b>
           <button class="link" data-accion="ver-movimiento" data-indice="${corregidoPor.indice}">Ver corrección</button>
         </div>
-        <p>${escapar(corregidoPor.fila.responsable)} volvió a contar el ${corregidoPor.fila.fecha} y había <b>${corregidoPor.fila.saldo} ${u}</b>.</p>
+        <p>${escapar(corregidoPor.fila.responsable)} volvió a contar el ${escapar(corregidoPor.fila.fecha)} y había <b>${corregidoPor.fila.saldo} ${u}</b>.</p>
       </div>`;
   }
 
   return html;
 }
 
-// enlaces: { corrige, corregidoPor } (ver verMovimiento en main.js)
+// enlaces: { corrige, corregidoPor }
 export function PanelMovimiento(fila, indice, pasos, enlaces) {
   return `
     <div class="fondo-modal fondo-panel">
@@ -122,7 +119,7 @@ export function PanelMovimiento(fila, indice, pasos, enlaces) {
           <span class="pastilla mov-tipo ${clases[fila.movimiento]}">${fila.inicial ? 'Registro inicial' : fila.movimiento}</span>
           <div>
             <div class="modal-titulo">${escapar(fila.insumo)}</div>
-            <div class="modal-sub">${fila.fecha} · ${nombreCategoria(fila.categoria)}</div>
+            <div class="modal-sub">${escapar(fila.fecha)} · ${escapar(nombreCategoria(fila.categoria))}</div>
           </div>
           <button type="button" class="btn-cerrar" data-accion="cerrar-modal" aria-label="Cerrar">×</button>
         </div>

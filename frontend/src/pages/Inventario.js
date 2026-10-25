@@ -1,9 +1,9 @@
-import { Encabezado, SinResultados, filtrarInsumos, porVencer, bajoMinimo, nombreCategoria } from '../components/Comunes.js';
+import { Encabezado, SinResultados, filtrarInsumos, porVencer, bajoMinimo, nombreCategoria, escapar } from '../components/Comunes.js';
 import { Tarjeta } from '../components/Tarjetas.js';
 import { BotonFiltros, Chips } from '../components/Filtros.js';
 import { filtrarInventario, chipsInventario, PanelInventario } from '../components/FiltrosInventario.js';
 
-// misma pagina para Alimentos y Salud e higiene: botones rapidos, boton Filtros y las tarjetas
+// pagina de Alimentos y de Salud e higiene
 export function paginaInventario(estado, categoria, productos) {
   const f = estado.inventarioFiltros;
   const lista = filtrarInventario(filtrarInsumos(productos, estado), f);
@@ -14,7 +14,7 @@ export function paginaInventario(estado, categoria, productos) {
     'Por vencer': productos.filter(porVencer).length,
     'Stock bajo': productos.filter(bajoMinimo).length,
   };
-  const titulo = `${nombreCategoria(categoria)} <span class="contador">${productos.length}</span>`;
+  const titulo = `${escapar(nombreCategoria(categoria))} <span class="contador">${productos.length}</span>`;
 
   return `
     <div class="con-filtros con-filtros-inventario">

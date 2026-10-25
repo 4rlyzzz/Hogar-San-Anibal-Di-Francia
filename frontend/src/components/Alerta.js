@@ -1,5 +1,5 @@
 import { iconoAlerta, iconoObjetivo, iconoDonar } from '../assets/icons.js';
-import { diasParaVencer, textoVencimiento } from './Comunes.js';
+import { diasParaVencer, textoVencimiento, escapar } from './Comunes.js';
 
 // excedente = stock - consumo diario * dias que faltan para vencer
 export function calcularExcedente(item) {
@@ -18,7 +18,7 @@ export function itemSobrestock(estado) {
   return avena;
 }
 
-// enPagina: en Inicio va dentro de la pagina, sin flotar ni boton de cerrar
+// enPagina: dentro de Inicio, sin flotar
 export function AlertaSobrestock(item, enPagina = false) {
   const dias = diasParaVencer(item);
   const consumo = item.consumoDiario * dias;
@@ -42,8 +42,8 @@ export function AlertaSobrestock(item, enPagina = false) {
           <div class="producto">
             <div class="producto-foto">foto</div>
             <div>
-              <div class="producto-nombre">${item.nombre}</div>
-              <div class="producto-meta">${item.cantidad} ${item.unidad}</div>
+              <div class="producto-nombre">${escapar(item.nombre)}</div>
+              <div class="producto-meta">${item.cantidad} ${escapar(item.unidad)}</div>
             </div>
             <div class="vencimiento">
               <div class="anillo" style="background: conic-gradient(#e07b28 0deg ${grados}deg, #f4e3cf ${grados}deg 360deg)">
@@ -62,19 +62,19 @@ export function AlertaSobrestock(item, enPagina = false) {
           <div class="comparacion">
             <div class="comparacion-titulo">
               <span>Consumo estimado vs. excedente</span>
-              <span class="mono">en ${item.unidad}</span>
+              <span class="mono">en ${escapar(item.unidad)}</span>
             </div>
             <div class="comparacion-fila">
               <span class="comparacion-label">Consumo del hogar</span>
               <div class="comparacion-barra"><div class="verde" style="width: ${pctConsumo}%"></div></div>
-              <span class="comparacion-valor texto-verde">${consumo} ${item.unidad}</span>
+              <span class="comparacion-valor texto-verde">${consumo} ${escapar(item.unidad)}</span>
             </div>
             <div class="comparacion-fila">
               <span class="comparacion-label">Excedente en riesgo</span>
               <div class="comparacion-barra"><div class="naranja-fuerte" style="width: ${100 - pctConsumo}%"></div></div>
-              <span class="comparacion-valor texto-naranja">${excedente} ${item.unidad}</span>
+              <span class="comparacion-valor texto-naranja">${excedente} ${escapar(item.unidad)}</span>
             </div>
-            <p>Al ritmo actual de consumo, ${excedente} ${item.unidad} vencerían sin usarse.</p>
+            <p>Al ritmo actual de consumo, ${excedente} ${escapar(item.unidad)} vencerían sin usarse.</p>
           </div>
         </div>
 

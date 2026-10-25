@@ -1,7 +1,7 @@
 /* tablet */
 @media (max-width: 1100px) {
   .grilla {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .usuario-datos {
@@ -27,7 +27,7 @@
 
   /* inicio: todo en una columna */
   .panel-recuadros {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .panel-medio,
@@ -190,7 +190,7 @@
     font-size: 11px;
   }
 
-  /* estado del stock como una linea de color: "● Sobre el mínimo · mín. 40 latas" */
+  /* estado del stock en una linea */
   .aviso-minimo-linea {
     display: none;
   }
@@ -364,7 +364,7 @@
     display: none;
   }
 
-  /* historial en dos lineas: producto y cantidad / movimiento, responsable y fecha */
+  /* historial en dos lineas */
   .fila {
     grid-template-columns: auto 1fr auto;
     grid-template-areas:
@@ -513,7 +513,7 @@
     flex-basis: 150px;
   }
 
-  /* pasos del producto: las mismas 4 columnas que en computador, un poco mas angostas */
+  /* pasos del producto mas angostos */
   .mov-paso {
     grid-template-columns: 82px 1fr auto 62px;
     gap: 6px;

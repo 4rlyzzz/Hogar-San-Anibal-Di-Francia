@@ -7,7 +7,7 @@ const colores = { ingreso: 'verde', salida: 'naranja', ajuste: 'morado', donador
 const limite = 60;
 
 // todo lo que hizo una cuenta, del mas nuevo al mas antiguo:
-// sus movimientos (historial) + el resto de acciones (actividad), sin duplicar nada en la bd
+// movimientos del historial + otras acciones
 export function actividadDe(estado, cuenta) {
   const movimientos = estado.historial
     .filter(f => f.responsable === cuenta.nombre)
@@ -40,24 +40,24 @@ function nombreDia(fecha) {
 
 const roles = ['Usuario', 'Administrador'];
 
-// rol y activar/desactivar: lo usa el admin con otras cuentas (en celular la tabla no los muestra)
+// rol y activar/desactivar (solo admin)
 function ControlesCuenta(cuenta) {
   return `
     <div class="panel-actividad-controles">
       <label>
         <span>Rol</span>
-        <select class="selector-rol" data-id="${cuenta.id}">
+        <select class="selector-rol" data-id="${escapar(cuenta.id)}">
           ${roles.map(r => `<option ${r === cuenta.rol ? 'selected' : ''}>${r}</option>`).join('')}
         </select>
       </label>
-      <button class="btn-mini ${cuenta.activo ? 'btn-mini-rojo' : ''}" data-accion="activar-usuario" data-id="${cuenta.id}">
+      <button class="btn-mini ${cuenta.activo ? 'btn-mini-rojo' : ''}" data-accion="activar-usuario" data-id="${escapar(cuenta.id)}">
         ${cuenta.activo ? 'Desactivar cuenta' : 'Activar cuenta'}
       </button>
     </div>`;
 }
 
-// panel que sale por la derecha; esPropio: "Mi actividad" del que inicio sesion
-// administrar: el admin viendo a otra persona (muestra rol y activar/desactivar)
+// panel de actividad; esPropio: "Mi actividad"
+// administrar: el admin viendo otra cuenta
 export function PanelActividad(cuenta, items, esPropio, administrar = false) {
   const ingresos = items.filter(i => i.accion === 'ingreso').length;
   const salidas = items.filter(i => i.accion === 'salida').length;
@@ -90,7 +90,7 @@ export function PanelActividad(cuenta, items, esPropio, administrar = false) {
           <span class="avatar ${cuenta.rol === 'Administrador' ? '' : 'avatar-verde'}">${iniciales(cuenta.nombre)}</span>
           <div>
             <div class="modal-titulo">${esPropio ? 'Mi actividad' : escapar(cuenta.nombre)}</div>
-            <div class="modal-sub">@${escapar(cuenta.usuario)} · ${cuenta.rol}${cuenta.activo ? '' : ' · desactivado'}</div>
+            <div class="modal-sub">@${escapar(cuenta.usuario)} · ${escapar(cuenta.rol)}${cuenta.activo ? '' : ' · desactivado'}</div>
           </div>
           <button type="button" class="btn-cerrar" data-accion="cerrar-modal" aria-label="Cerrar">×</button>
         </div>

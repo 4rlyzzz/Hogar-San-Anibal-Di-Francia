@@ -2,7 +2,7 @@ import { iconoSalida, iconoIngreso } from '../assets/icons.js';
 import { escapar, colorVencimiento, textoVencimiento, textoPresentacion, disponible, cantidadVencida } from './Comunes.js';
 
 // misma tarjeta para alimentos y salud
-// solo sacar e ingresar: el conteo (ajuste) esta en el detalle, es menos comun y mas delicado
+// el ajuste esta en el detalle del producto
 export function Tarjeta(item, categoria) {
   const sirve = disponible(item);
   const vencida = cantidadVencida(item);
@@ -25,7 +25,7 @@ export function Tarjeta(item, categoria) {
         <div class="tarjeta-info">
           <span class="tarjeta-nombre">${escapar(item.nombre)}</span>
           ${textoPresentacion(item) ? `<span class="tarjeta-descripcion">${escapar(textoPresentacion(item))}</span>` : ''}
-          <button class="tarjeta-ver" data-accion="ver-producto" data-categoria="${categoria}" data-id="${item.id}">Ver detalle ›</button>
+          <button class="tarjeta-ver" data-accion="ver-producto" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">Ver detalle ›</button>
         </div>
         <span class="etiqueta ${colorVence}">${textoVencimiento(item)}</span>
       </div>
@@ -40,8 +40,8 @@ export function Tarjeta(item, categoria) {
       </div>
 
       <div class="botones">
-        <button class="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" data-categoria="${categoria}" data-id="${item.id}">${iconoSalida} Registrar salida</button>
-        <button class="btn btn-registrar btn-ingreso" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">${iconoIngreso} Registrar ingreso</button>
+        <button class="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">${iconoSalida} Registrar salida</button>
+        <button class="btn btn-registrar btn-ingreso" data-accion="registrar" data-tipo="Ingreso" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">${iconoIngreso} Registrar ingreso</button>
       </div>
     </div>
   `;

@@ -2,19 +2,19 @@ import { Encabezado, SinResultados, escapar, meses, fechaDe } from '../component
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips } from '../components/Filtros.js';
 import { iconoDescargar } from '../assets/icons.js';
 
-// 'Agregado por Cocina · 20 oct'; los documentos viejos pueden no traer estos campos
+// 'Agregado por Cocina · 20 oct'
 function textoAgregado(d) {
   if (!d.creadoPor) return '';
   const fecha = d.creado ? ` · ${d.creado.getDate()} ${meses[d.creado.getMonth()]}` : '';
   return `Agregado por ${escapar(d.creadoPor)}${fecha}`;
 }
 
-// todas las donaciones de un donador (ingresos que lo nombran), de la mas nueva a la mas antigua
+// donaciones de un donador
 export function donacionesDe(estado, nombre) {
   return estado.historial.filter(f => f.movimiento === 'Ingreso' && f.donador === nombre);
 }
 
-// { 'Aniversario del hogar': 3, 'Navidad': 1 }, de la que mas apoyo a la que menos
+// cuantas veces apoyo cada actividad
 export function actividadesDe(donaciones) {
   const cuenta = {};
   for (const d of donaciones) {
@@ -30,7 +30,7 @@ function pasaFiltros(donacion, f) {
 }
 
 // donadores con sus donaciones (ya filtradas por actividad y año)
-// con filtros puestos solo quedan los que donaron en esa actividad o año: sirve para agradecer o volver a llamar
+// con filtros, solo los que donaron en esa actividad o año
 export function listaDonadores(estado) {
   const f = estado.donadoresFiltros;
   const hayFiltros = f.actividad !== 'Todos' || f.anio !== 'Todos';
@@ -65,7 +65,7 @@ export function paginaDonadores(estado) {
   const chips = chipsDonadores(f);
   const abierto = estado.filtrosAbiertos === 'donadoresFiltros';
 
-  // opciones de los filtros: las actividades y años que aparecen en las donaciones
+  // opciones de los filtros
   const todas = estado.historial.filter(x => x.movimiento === 'Ingreso' && x.donador);
   const actividades = [...new Set(todas.map(x => x.actividad).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const anios = [...new Set(todas.map(x => String(fechaDe(x.fecha).getFullYear())))].sort().reverse();
@@ -94,7 +94,7 @@ export function paginaDonadores(estado) {
         const n = donaciones.length;
         const ultima = donaciones[0];
         return `
-          <button class="donador-fila fila-boton" data-accion="ver-donador" data-id="${d.id}">
+          <button class="donador-fila fila-boton" data-accion="ver-donador" data-id="${escapar(d.id)}">
             <span class="donador-nombre">
               ${escapar(d.nombre)}
               ${d.creadoPor ? `<small>${textoAgregado(d)}</small>` : ''}

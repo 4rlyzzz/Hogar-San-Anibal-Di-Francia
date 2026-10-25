@@ -2,7 +2,7 @@ import { escapar } from './Comunes.js';
 import { iconoFiltro } from '../assets/icons.js';
 
 // filtros guardados en estado[grupo]; en vez de mostrarlos siempre:
-// - un boton "Filtros" abre un panel (desktop: debajo del boton; celular: sube desde abajo)
+// - un boton "Filtros" abre el panel
 // - los que estan puestos se ven como pastillas que se quitan con ×
 
 export function BotonFiltros(grupo, activos, abierto) {
@@ -12,7 +12,7 @@ export function BotonFiltros(grupo, activos, abierto) {
     </button>`;
 }
 
-// resultados: cuantos quedan con los filtros puestos (para el boton "Ver ...")
+// resultados: cuantos quedan
 export function PanelFiltros(grupo, campos, resultados) {
   return `
     <div class="filtros-fondo" data-accion="cerrar-filtros"></div>
@@ -26,7 +26,7 @@ export function PanelFiltros(grupo, campos, resultados) {
     </div>`;
 }
 
-// desplegable con su titulo encima; el cambio lo maneja main.js por data-grupo y data-campo
+// select con titulo (lo maneja main.js por data-grupo y data-campo)
 export function CampoSelect(grupo, campo, titulo, opciones, actual) {
   return `
     <label class="campo-filtro">

@@ -1,4 +1,4 @@
-// filtros de Alimentos y Salud e higiene (boton "Filtros"), ademas de Todos / Por vencer / Stock bajo
+// filtros de Alimentos y Salud e higiene
 import { escapar, disponible, cantidadVencida, diasHasta } from './Comunes.js';
 import { lotesCon, estaVencido, diasDesde } from './Lotes.js';
 import { PanelFiltros, CampoSelect } from './Filtros.js';
@@ -19,13 +19,13 @@ const opcionesLleva = { Todos: 'Todos', 7: 'Más de 7 días', 15: 'Más de 15 d�
 const opcionesStock = { Todos: 'Todos', bajo: 'Bajo el mínimo', cerca: 'Cerca del mínimo', normal: 'Sobre el mínimo' };
 const ordenes = { nombre: 'Nombre (A-Z)', vence: 'Vence primero', stock: 'Menos stock', lleva: 'Lleva más días sin fecha' };
 
-// dias para el proximo vencimiento de lo que todavia sirve (Infinity si nada vence)
+// dias para el proximo vencimiento (Infinity si no vence)
 function proximoVence(item) {
   const dias = lotesCon(item).filter(l => l.vence && !estaVencido(l)).map(l => diasHasta(l.vence));
   return dias.length ? Math.min(...dias) : Infinity;
 }
 
-// dias que lleva el lote sin fecha mas antiguo (-1 si no tiene lotes sin fecha)
+// dias del lote sin fecha mas antiguo (-1 si no hay)
 function diasSinFecha(item) {
   const dias = lotesCon(item).filter(l => !l.vence).map(l => diasDesde(l.ingreso));
   return dias.length ? Math.max(...dias) : -1;
@@ -48,7 +48,7 @@ function pasaFiltros(item, f) {
   return true;
 }
 
-// "menos stock" es relativo al minimo: 5 de 40 va antes que 10 de 12
+// menos stock: comparado con su minimo
 const comparar = {
   nombre: (a, b) => a.nombre.localeCompare(b.nombre),
   vence: (a, b) => Math.min(proximoVence(a), 1e9) - Math.min(proximoVence(b), 1e9),
@@ -62,7 +62,7 @@ export function filtrarInventario(lista, f) {
     .sort((a, b) => comparar[f.orden](a, b) || a.nombre.localeCompare(b.nombre));
 }
 
-// el orden no es un filtro: no tiene pastilla
+// el orden no lleva pastilla
 export function chipsInventario(f) {
   const chips = [];
   if (f.vencimiento !== 'Todos') chips.push({ campo: 'vencimiento', texto: opcionesVence[f.vencimiento] });
@@ -72,7 +72,6 @@ export function chipsInventario(f) {
   return chips;
 }
 
-// unidades: las que hay en esta categoria (latas, kg, frascos...)
 export function PanelInventario(f, unidades, resultados) {
   return PanelFiltros('inventarioFiltros', `
     ${CampoSelect('inventarioFiltros', 'vencimiento', 'Vencimiento', opcionesVence, f.vencimiento)}

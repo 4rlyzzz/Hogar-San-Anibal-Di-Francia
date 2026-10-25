@@ -2,7 +2,7 @@ import { fechaDe, cambioDe, nombreCategoria } from './Comunes.js';
 
 const negrita = texto => ({ value: texto, fontWeight: 'bold' });
 
-// columnas del Excel del historial; fecha y cantidad van como fecha y numero reales
+// columnas del Excel del historial
 const columnasHistorial = [
   { header: negrita('Fecha'), width: 12, cell: f => ({ value: fechaDe(f.fecha), type: Date, format: 'dd/mm/yyyy' }) },
   { header: negrita('Hora'), width: 8, cell: f => ({ value: f.fecha.split(' ')[2] }) },
@@ -27,7 +27,7 @@ function paraArchivo(texto) {
   return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-// el nombre dice que se filtro: historial_salidas_cocina_manzana_2026-10-20.xlsx
+// nombre del archivo segun los filtros
 export function nombreArchivoHistorial(filtros) {
   const partes = ['historial'];
   if (filtros.movimiento !== 'Todos') partes.push({ Ingreso: 'ingresos', Salida: 'salidas', Ajuste: 'ajustes' }[filtros.movimiento]);
@@ -47,14 +47,14 @@ export function nombreArchivoHistorial(filtros) {
   return partes.map(paraArchivo).join('_') + '.xlsx';
 }
 
-// la libreria se carga recien al descargar, para no hacer mas pesada la app al abrir
+// la libreria se carga al descargar
 export async function descargarHistorial(filas, nombreArchivo) {
   const { default: writeExcelFile } = await import('write-excel-file/browser');
   await writeExcelFile(filas, { columns: columnasHistorial, sheet: 'Historial', stickyRowsCount: 1 }).toFile(nombreArchivo);
 }
 
 // ---------- donadores: para agradecer o volver a contactar ----------
-// filas: [{ donador, donaciones, actividades }] tal como se ven con los filtros puestos
+// filas: [{ donador, donaciones, actividades }]
 const columnasDonadores = [
   { header: negrita('Donador'), width: 30, cell: x => ({ value: x.donador.nombre }) },
   { header: negrita('Teléfono'), width: 16, cell: x => ({ value: x.donador.telefono }) },

@@ -2,10 +2,10 @@ import { Encabezado, nombreCategoria, nombresCategoria, escapar, fechaDe, textoC
 import { iconoDescargar } from '../assets/icons.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, CampoFecha, Chips } from '../components/Filtros.js';
 
-// filtros que se combinan; la descarga a Excel usa exactamente el mismo resultado
+// filtros del historial (tambien para el Excel)
 export function filtrarHistorial(estado) {
   const f = estado.historialFiltros;
-  // un producto que absorbio a otros (al unir) tambien muestra los movimientos de esos nombres
+  // incluye los nombres de productos unidos
   const producto = [...estado.alimentos, ...estado.salud].find(p => p.nombre === f.producto);
   const nombresProducto = [f.producto, ...(producto?.unidos || [])];
   const texto = estado.busqueda.toLowerCase();
@@ -39,7 +39,7 @@ function opcionesDe(filas, campo) {
 const clases = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
 const plurales = { Ingreso: 'Ingresos', Salida: 'Salidas', Ajuste: 'Ajustes' };
 
-// { 'Ingreso': 'Ingreso', ... } con la opcion "todos" primero, para CampoSelect
+// opciones para CampoSelect
 function opcionesCon(todos, valores) {
   return { Todos: todos, ...Object.fromEntries(valores.map(v => [v, v])) };
 }
@@ -73,7 +73,7 @@ export function paginaHistorial(estado) {
   // los productos se acotan a la categoria elegida
   const paraProductos = f.categoria === 'Todos' ? estado.historial : estado.historial.filter(x => x.categoria === f.categoria);
   const chips = chipsHistorial(f);
-  // "para que niño" solo existe en Salud: el filtro aparece si hay alguno y no se eligio Alimentos
+  // "para quien" solo en Salud
   const ninos = f.categoria === 'Alimentos' ? [] : opcionesDe(estado.historial, 'para');
   const abierto = estado.filtrosAbiertos === 'historialFiltros';
 
@@ -99,11 +99,11 @@ export function paginaHistorial(estado) {
 
       ${filas.map(fila => `
         <button class="fila fila-boton ${clases[fila.movimiento]}" data-accion="ver-movimiento" data-indice="${estado.historial.indexOf(fila)}">
-          <span class="fila-fecha">${fila.fecha}</span>
+          <span class="fila-fecha">${escapar(fila.fecha)}</span>
           <span class="fila-insumo">
             ${escapar(fila.insumo)}
           </span>
-          <span class="fila-categoria"><span class="pastilla ${fila.categoria === 'Salud' ? 'azul' : 'verde'}">${nombreCategoria(fila.categoria)}</span></span>
+          <span class="fila-categoria"><span class="pastilla ${fila.categoria === 'Salud' ? 'azul' : 'verde'}">${escapar(nombreCategoria(fila.categoria))}</span></span>
           <span class="fila-movimiento">● ${fila.movimiento}</span>
           <span class="fila-cantidad">${escapar(textoCambio(fila))}</span>
           <span class="fila-saldo" title="Stock antes → después de este movimiento">${textoStock(fila)}</span>

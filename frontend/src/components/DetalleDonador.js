@@ -2,7 +2,7 @@ import { escapar, iniciales, fechaDe, fechaLarga } from './Comunes.js';
 import { actividadesDe } from '../pages/Donadores.js';
 
 // historial de un donador: que dono, cuando y para que actividad
-// mismo panel que la actividad de usuarios (de lado en desktop, hoja desde abajo en celular)
+// panel del donador
 export function PanelDonador(d, donaciones) {
   const actividades = actividadesDe(donaciones);
   const ultima = donaciones[0];
@@ -62,7 +62,7 @@ export function PanelDonador(d, donaciones) {
 
         ${donaciones.length ? `
           <div class="panel-donador-pie">
-            <button class="link" data-accion="historial-donador" data-id="${d.id}">Ver sus donaciones en el historial →</button>
+            <button class="link" data-accion="historial-donador" data-id="${escapar(d.id)}">Ver sus donaciones en el historial →</button>
           </div>` : ''}
       </aside>
     </div>

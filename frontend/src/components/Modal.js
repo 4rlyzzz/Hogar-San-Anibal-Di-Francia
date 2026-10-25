@@ -1,32 +1,32 @@
 import { usuario } from '../data/datos.js';
+import { largos, decimalesDe } from '../validacion.js';
 import { iconoAlimentos, iconoSalud, iconoDonadores, iconoUsuarios } from '../assets/icons.js';
 import { cantidadVencida, disponible, lotesVencidos, fechaLote, fechaVence, textoVenceLote, colorLote } from './Lotes.js';
-import { escapar, nombreCategoria, colorVencimiento, textoFecha, motivosAjuste, motivoCorreccion, MovimientosEntre, stockAntes, textoPresentacion, envases } from './Comunes.js';
+import { escapar, nombreCategoria, colorVencimiento, textoFecha, motivosAjuste, motivoCorreccion, MovimientosEntre, stockAntes, textoPresentacion } from './Comunes.js';
 
-// como viene cada producto (los valores son el plural, en lo que se cuenta)
-const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes', 'botellas', 'frascos', 'sobres'];
-const envasesSalud = ['cajas', 'blísters', 'frascos', 'sobres', 'ampollas', 'tubos', 'paquetes', 'botellas'];
+// envases (en plural)
+export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes', 'botellas', 'frascos', 'sobres'];
+export const envasesSalud = ['cajas', 'blísters', 'frascos', 'sobres', 'ampollas', 'tubos', 'paquetes', 'botellas'];
 
-// suelto o a granel: se cuenta directo en una medida
-const medidasSuelto = ['kg', 'g', 'L', 'unidades'];
+// suelto o a granel
+export const medidasSuelto = ['kg', 'g', 'L', 'unidades'];
 
-// cuanto trae cada envase: 1 kg, 400 g, 60 ml, 10 tabletas...
-const medidasAlimentos = ['kg', 'g', 'L', 'ml', 'unidades'];
-const medidasSalud = ['unidades', 'ml', 'L', 'g'];
+// medidas del contenido
+export const medidasAlimentos = ['kg', 'g', 'L', 'ml', 'unidades'];
+export const medidasSalud = ['unidades', 'ml', 'L', 'g'];
 
 export function fechaActual() {
   return textoFecha(new Date());
 }
 
-// lista de donadores + opcion para registrar uno nuevo ahi mismo
-// actividades: las opciones de la lista (las del hogar y las que se agregaron con "Otra")
+// donador de la lista o uno nuevo
 function CampoDonador(donadores, actividades = []) {
   return `
     <div class="campo">
       <label>DONADOR</label>
       <select id="donador">
         <option value="">Sin donador (compra del hogar)</option>
-        ${donadores.map(d => `<option value="${d.id}">${escapar(d.nombre)}</option>`).join('')}
+        ${donadores.map(d => `<option value="${escapar(d.id)}">${escapar(d.nombre)}</option>`).join('')}
         <option value="nuevo">+ Nuevo donador</option>
       </select>
     </div>
@@ -34,15 +34,15 @@ function CampoDonador(donadores, actividades = []) {
     <div class="dos-columnas" id="nuevo-donador" hidden>
       <div class="campo">
         <label>NOMBRE DEL DONADOR</label>
-        <input id="donador-nombre" type="text" placeholder="Nombre o institución">
+        <input id="donador-nombre" type="text" maxlength="${largos.nombreDonador}" placeholder="Nombre o institución">
       </div>
       <div class="campo">
         <label>NÚMERO DE CONTACTO</label>
-        <input id="donador-telefono" type="tel" placeholder="987 654 321">
+        <input id="donador-telefono" type="tel" maxlength="${largos.telefono}" inputmode="tel" placeholder="987 654 321">
       </div>
     </div>
 
-    <!-- solo si hay donador: para que actividad o por que dono (obligatorio) -->
+    <!-- solo si hay donador -->
     <div class="campo" id="campo-actividad" hidden>
       <label for="actividad">ACTIVIDAD O MOTIVO</label>
       <select id="actividad">
@@ -50,7 +50,7 @@ function CampoDonador(donadores, actividades = []) {
         ${actividades.map(a => `<option value="${escapar(a)}">${escapar(a)}</option>`).join('')}
         <option value="otra">+ Otra actividad…</option>
       </select>
-      <input id="actividad-otra" type="text" placeholder="Ej. Colecta parroquial, Kermés" hidden>
+      <input id="actividad-otra" type="text" maxlength="${largos.actividadOtra}" placeholder="Ej. Colecta parroquial, Kermés" hidden>
     </div>
 
   `;
@@ -66,12 +66,12 @@ function CampoPara(ninos = []) {
         ${ninos.map(n => `<option value="${escapar(n)}">${escapar(n)}</option>`).join('')}
         <option value="otro">+ Otro niño/a…</option>
       </select>
-      <input id="para-otro" type="text" placeholder="Nombre del niño o niña" hidden>
+      <input id="para-otro" type="text" maxlength="${largos.nino}" placeholder="Nombre del niño o niña" hidden>
     </div>
   `;
 }
 
-// 'Lata de 400 g · se cuenta en latas': para saber de que producto y en que unidad se esta contando
+// subtitulo con la presentacion del producto
 function sobreProducto(item, antes = '') {
   const partes = [antes, textoPresentacion(item) || `suelto, en ${item.unidad}`].filter(Boolean);
   return escapar(partes.join(' · '));
@@ -99,7 +99,7 @@ function Botones(textoGuardar) {
   `;
 }
 
-// vencimiento del lote que entra; si no tiene o no se ve, se marca y se cuentan los dias que lleva
+// fecha de vencimiento o "No tiene fecha"
 function CampoVencimiento() {
   return `
     <div class="campo">
@@ -112,14 +112,14 @@ function CampoVencimiento() {
     </div>`;
 }
 
-// en una salida: cuanto se puede sacar (lo vencido no cuenta, se da de baja aparte)
+// cuanto se puede sacar
 function TextoDisponible(item) {
   const vencida = cantidadVencida(item);
   if (!vencida) return `En stock: ${item.cantidad} ${escapar(item.unidad)} · sale primero lo que vence antes`;
   return `Se pueden usar ${disponible(item)} ${escapar(item.unidad)} · ${vencida} vencidos no cuentan`;
 }
 
-// tipo: 'Salida' o 'Ingreso', segun el boton que se apreto en la tarjeta
+// tipo: 'Salida' o 'Ingreso'
 export function ModalMovimiento(item, categoria, tipo, donadores, actividades, ninos) {
   const esIngreso = tipo === 'Ingreso';
   const esSalud = categoria === 'Salud';
@@ -139,14 +139,14 @@ export function ModalMovimiento(item, categoria, tipo, donadores, actividades, n
             <div class="dos-columnas">
               <div class="campo">
                 <label for="cantidad">CANTIDAD</label>
-                <input id="cantidad" type="text" inputmode="decimal" placeholder="0">
+                <input id="cantidad" type="text" inputmode="${decimalesDe(item.unidad) ? 'decimal' : 'numeric'}" data-numero="${decimalesDe(item.unidad)}" maxlength="${largos.numero}" autocomplete="off" placeholder="0">
                 <small>En stock: ${item.cantidad} ${escapar(item.unidad)}</small>
               </div>
               ${CampoVencimiento()}
             </div>` : `
             <div class="campo">
               <label for="cantidad">CANTIDAD</label>
-              <input id="cantidad" type="text" inputmode="decimal" placeholder="0">
+              <input id="cantidad" type="text" inputmode="${decimalesDe(item.unidad) ? 'decimal' : 'numeric'}" data-numero="${decimalesDe(item.unidad)}" maxlength="${largos.numero}" autocomplete="off" placeholder="0">
               <small>${TextoDisponible(item)}</small>
             </div>`}
 
@@ -156,7 +156,7 @@ export function ModalMovimiento(item, categoria, tipo, donadores, actividades, n
           <div class="dos-columnas">
             <div class="campo">
               <label>RESPONSABLE</label>
-              <div class="input-fijo">${usuario.nombre}</div>
+              <div class="input-fijo">${escapar(usuario.nombre)}</div>
             </div>
             <div class="campo">
               <label>FECHA Y HORA</label>
@@ -180,29 +180,29 @@ export function ModalProducto(categoria, donadores, actividades) {
   return `
     <div class="fondo-modal">
       <form class="modal" id="form-producto">
-        ${Cabecera('+', esSalud ? 'azul' : 'verde', 'Agregar producto', nombreCategoria(categoria))}
+        ${Cabecera('+', esSalud ? 'azul' : 'verde', 'Agregar producto', escapar(nombreCategoria(categoria)))}
 
         <div class="modal-cuerpo">
           <div class="campo">
             <label>CATEGORÍA</label>
             <div class="filtros selector-categoria">
               ${['Alimentos', 'Salud'].map(c => `
-                <button type="button" class="${c === categoria ? 'activo' : ''}" data-accion="agregar-producto" data-categoria="${c}">${c}</button>
+                <button type="button" class="${c === categoria ? 'activo' : ''}" data-accion="agregar-producto" data-categoria="${escapar(c)}">${c}</button>
               `).join('')}
             </div>
           </div>
 
           <div class="campo">
             <label>NOMBRE</label>
-            <input id="nombre" type="text" autocomplete="off" placeholder="${esSalud ? 'Ej. Ibuprofeno 400 mg' : 'Ej. Fideos Don Vittorio'}">
+            <input id="nombre" type="text" maxlength="${largos.nombreProducto}" autocomplete="off" placeholder="${esSalud ? 'Ej. Ibuprofeno 400 mg' : 'Ej. Fideos Don Vittorio'}">
             <div id="coincidencias"></div>
           </div>
 
-          <!-- se lee como una frase: "10 cajas de 10 tabletas"; si es suelto, "25 kg" -->
+          <!-- "10 cajas de 10 tabletas" o "25 kg" -->
           <div class="campo">
             <label for="cantidad">CANTIDAD QUE ENTRA</label>
             <div class="fila-presentacion sin-envase" id="fila-presentacion">
-              <input id="cantidad" type="text" inputmode="decimal" placeholder="0" aria-label="Cantidad">
+              <input id="cantidad" type="text" inputmode="decimal" data-numero="2" maxlength="${largos.numero}" autocomplete="off" placeholder="0" aria-label="Cantidad">
               <select id="envase" aria-label="En qué viene">
                 <option value="">en qué viene…</option>
                 <optgroup label="Envase">
@@ -214,12 +214,12 @@ export function ModalProducto(categoria, donadores, actividades) {
                 </optgroup>
               </select>
               <span class="fila-presentacion-de">de</span>
-              <input id="contenido" type="text" inputmode="decimal" placeholder="${esSalud ? '10' : '1'}" aria-label="Cuánto trae cada uno">
+              <input id="contenido-envase" type="text" inputmode="decimal" data-numero="2" maxlength="${largos.numero}" autocomplete="off" placeholder="${esSalud ? '10' : '1'}" aria-label="Cuánto trae cada uno">
               <select id="medida" aria-label="Medida">
                 ${(esSalud ? medidasSalud : medidasAlimentos).map(m => `<option>${m}</option>`).join('')}
               </select>
             </div>
-            <input id="envase-otro" type="text" placeholder="¿Cómo se llama el envase? Ej. Bidón" hidden>
+            <input id="envase-otro" type="text" maxlength="${largos.envaseOtro}" placeholder="¿Cómo se llama el envase? Ej. Bidón" hidden>
             <small>${esSalud ? 'Ej. 5 blísters de 10 unidades · 3 frascos de 60 ml · 4 paquetes de 40 unidades' : 'Ej. 12 bolsas de 1 kg · 24 latas de 400 g · 25 kg sueltos'}</small>
           </div>
 
@@ -228,7 +228,7 @@ export function ModalProducto(categoria, donadores, actividades) {
           <div class="dos-columnas">
             <div class="campo">
               <label>STOCK MÍNIMO</label>
-              <input id="minimo" type="text" placeholder="0">
+              <input id="minimo" type="text" inputmode="decimal" data-numero="2" maxlength="${largos.numero}" autocomplete="off" placeholder="0">
             </div>
             ${CampoVencimiento()}
           </div>
@@ -244,8 +244,7 @@ export function ModalProducto(categoria, donadores, actividades) {
   `;
 }
 
-// desde Inicio o Historial el "+" pregunta que se quiere agregar
-// esAdmin: el administrador tambien puede agregar usuarios
+// "+" en Inicio e Historial: que agregar
 export function ModalElegir(esAdmin) {
   const opciones = [
     { accion: 'agregar-producto', categoria: 'Alimentos', color: 'verde', icono: iconoAlimentos, titulo: 'Alimento', detalle: 'Producto perecible' },
@@ -263,7 +262,7 @@ export function ModalElegir(esAdmin) {
 
         <div class="modal-cuerpo">
           ${opciones.map(o => `
-            <button type="button" class="opcion-agregar" data-accion="${o.accion}" data-categoria="${o.categoria}">
+            <button type="button" class="opcion-agregar" data-accion="${o.accion}" data-categoria="${escapar(o.categoria)}">
               <span class="tarjeta-codigo ${o.color}">${o.icono}</span>
               <span>
                 <b>${o.titulo}</b>
@@ -287,11 +286,11 @@ export function ModalDonador() {
         <div class="modal-cuerpo">
           <div class="campo">
             <label>NOMBRE</label>
-            <input id="nuevo-nombre" type="text" placeholder="Nombre o institución">
+            <input id="nuevo-nombre" type="text" maxlength="${largos.nombreDonador}" placeholder="Nombre o institución">
           </div>
           <div class="campo">
             <label>NÚMERO DE CONTACTO</label>
-            <input id="nuevo-telefono" type="tel" placeholder="987 654 321">
+            <input id="nuevo-telefono" type="tel" maxlength="${largos.telefono}" inputmode="tel" placeholder="987 654 321">
           </div>
           <p class="error" id="error"></p>
         </div>
@@ -312,18 +311,18 @@ export function ModalUsuario() {
         <div class="modal-cuerpo">
           <div class="campo">
             <label>NOMBRE</label>
-            <input id="cuenta-nombre" type="text" placeholder="Ej. Cocina, María López">
+            <input id="cuenta-nombre" type="text" maxlength="${largos.nombreCuenta}" placeholder="Ej. Cocina, María López">
             <small>Así aparecerá como responsable en el historial</small>
           </div>
 
           <div class="dos-columnas">
             <div class="campo">
               <label>USUARIO</label>
-              <input id="cuenta-usuario" type="text" autocapitalize="none" autocomplete="off" placeholder="Ej. cocina">
+              <input id="cuenta-usuario" type="text" maxlength="${largos.nombreUsuario}" autocapitalize="none" autocomplete="off" placeholder="Ej. cocina">
             </div>
             <div class="campo">
               <label>CONTRASEÑA</label>
-              <input id="cuenta-clave" type="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+              <input id="cuenta-clave" type="password" maxlength="${largos.clave}" autocomplete="new-password" placeholder="Mínimo 8, con letras y números">
             </div>
           </div>
 
@@ -344,17 +343,14 @@ export function ModalUsuario() {
   `;
 }
 
-// paso 1: se corrige el stock cuando el conteo fisico no coincide con el sistema
-// la diferencia se va mostrando mientras se escribe (ver mostrarDiferencia en main.js)
-// previo: lo ya escrito al volver del paso 2, o el motivo puesto al corregir un ajuste
-// al corregir un ajuste: cual se corrige y que paso con el producto desde entonces
-// el nuevo ajuste igual se hace sobre el stock de ahora (ya incluye esos movimientos)
+// paso 1 del ajuste
+// datos del ajuste que se corrige
 function BloqueCorreccion(correccion, item) {
   const { fila, entre } = correccion;
   const u = escapar(item.unidad);
   return `
     <div class="correccion">
-      <b>Estás corrigiendo el conteo del ${fila.fecha}</b>
+      <b>Estás corrigiendo el conteo del ${escapar(fila.fecha)}</b>
       <p>Ese día el sistema decía <b>${stockAntes(fila)} ${u}</b> y ${escapar(fila.responsable)} contó <b>${fila.saldo} ${u}</b>.</p>
       <span class="correccion-sub">Después de ese conteo hubo</span>
       ${MovimientosEntre(entre, item.unidad)}
@@ -363,7 +359,7 @@ function BloqueCorreccion(correccion, item) {
     </div>`;
 }
 
-// correccion: { fila, entre } si se esta corrigiendo un ajuste anterior
+// correccion: { fila, entre } si corrige otro ajuste
 export function ModalAjuste(item, categoria, previo = {}, correccion = null) {
   const motivo = previo.motivo || motivosAjuste[0];
 
@@ -382,7 +378,7 @@ export function ModalAjuste(item, categoria, previo = {}, correccion = null) {
             </div>
             <div class="campo">
               <label for="contado">CANTIDAD CONTADA</label>
-              <input id="contado" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${previo.contado ?? ''}">
+              <input id="contado" type="text" inputmode="decimal" data-numero="${decimalesDe(item.unidad)}" maxlength="${largos.numero}" autocomplete="off" placeholder="0" value="${previo.contado ?? ''}">
             </div>
           </div>
 
@@ -396,7 +392,7 @@ export function ModalAjuste(item, categoria, previo = {}, correccion = null) {
 
             <div class="campo">
               <label for="nota">¿QUÉ PASÓ EN EL CONTEO ANTERIOR? (OPCIONAL)</label>
-              <input id="nota" type="text" placeholder="Ej. se contó una caja dos veces" value="${escapar(previo.nota ?? '')}">
+              <input id="nota" type="text" maxlength="${largos.nota}" placeholder="Ej. se contó una caja dos veces" value="${escapar(previo.nota ?? '')}">
             </div>` : `
             <div class="campo">
               <label for="motivo">¿POR QUÉ NO COINCIDÍA?</label>
@@ -408,7 +404,7 @@ export function ModalAjuste(item, categoria, previo = {}, correccion = null) {
 
             <div class="campo">
               <label for="nota">DETALLE ${motivo === 'Otro' ? '' : '(OPCIONAL)'}</label>
-              <input id="nota" type="text" placeholder="Ej. 3 latas abolladas" value="${escapar(previo.nota ?? '')}">
+              <input id="nota" type="text" maxlength="${largos.nota}" placeholder="Ej. 3 latas abolladas" value="${escapar(previo.nota ?? '')}">
             </div>`}
 
           <p class="error" id="error"></p>
@@ -420,8 +416,8 @@ export function ModalAjuste(item, categoria, previo = {}, correccion = null) {
   `;
 }
 
-// paso 2: resumen para confirmar; no se guarda nada hasta apretar "Confirmar"
-// grande: la diferencia es mas del 25% del stock, se pide volver a contar
+// paso 2: resumen para confirmar
+// grande: diferencia de mas del 25%
 export function ConfirmarAjuste(item, categoria, ajuste, correccion = null) {
   const antes = item.cantidad;
   const grande = Math.abs(ajuste.diferencia) > antes * 0.25;
@@ -464,7 +460,7 @@ export function ConfirmarAjuste(item, categoria, ajuste, correccion = null) {
           <dl class="mov-datos">
             <div><dt>Motivo</dt><dd>${escapar(ajuste.motivo)}</dd></div>
             ${ajuste.nota ? `<div><dt>Detalle</dt><dd>${escapar(ajuste.nota)}</dd></div>` : ''}
-            <div><dt>Responsable</dt><dd>${usuario.nombre}</dd></div>
+            <div><dt>Responsable</dt><dd>${escapar(usuario.nombre)}</dd></div>
             <div><dt>Fecha y hora</dt><dd>${fechaActual()}</dd></div>
           </dl>
 
@@ -483,18 +479,17 @@ export function ConfirmarAjuste(item, categoria, ajuste, correccion = null) {
   `;
 }
 
-// aviso bajo el nombre al agregar un producto: los que ya existen y se parecen
-// parecidos: [{ item, categoria }]; tocar uno lleva a registrar su ingreso (no se crea repetido)
+// productos parecidos al que se agrega
 export function Coincidencias(parecidos) {
   if (parecidos.length === 0) return '';
   return `
     <div class="coincidencias">
       <span>Ya existe algo parecido. ¿Es alguno de estos?</span>
       ${parecidos.map(({ item, categoria }) => `
-        <button type="button" class="coincidencia" data-accion="registrar" data-tipo="Ingreso" data-categoria="${categoria}" data-id="${item.id}">
+        <button type="button" class="coincidencia" data-accion="registrar" data-tipo="Ingreso" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">
           <span>
             <b>${escapar(item.nombre)}</b>
-            <small>${nombreCategoria(categoria)} · ${item.cantidad} ${escapar(item.unidad)}${textoPresentacion(item) ? ' · ' + escapar(textoPresentacion(item)) : ''}</small>
+            <small>${escapar(nombreCategoria(categoria))} · ${item.cantidad} ${escapar(item.unidad)}${textoPresentacion(item) ? ' · ' + escapar(textoPresentacion(item)) : ''}</small>
           </span>
           <em>Registrar ingreso →</em>
         </button>
@@ -503,7 +498,7 @@ export function Coincidencias(parecidos) {
 }
 
 // unir un producto repetido con el que se queda (solo administrador)
-// opciones: los otros productos de la categoria con la misma unidad (no se suman kg con latas)
+// opciones: productos con la misma unidad
 export function ModalUnir(item, categoria, opciones) {
   return `
     <div class="fondo-modal">
@@ -522,13 +517,13 @@ export function ModalUnir(item, categoria, opciones) {
               <select id="unir-con">
                 <option value="">Elige el producto que se queda</option>
                 ${opciones.map(o => `
-                  <option value="${o.id}">${escapar(o.nombre)} · ${o.cantidad} ${escapar(o.unidad)}</option>
+                  <option value="${escapar(o.id)}">${escapar(o.nombre)} · ${o.cantidad} ${escapar(o.unidad)}</option>
                 `).join('')}
               </select>
             </div>
             <p class="ajuste-diferencia" id="unir-resumen">Elige el producto que se queda</p>
           ` : `
-            <p class="ajuste-diferencia">No hay otro producto en ${nombreCategoria(categoria)} que se cuente en ${escapar(item.unidad)}.</p>
+            <p class="ajuste-diferencia">No hay otro producto en ${escapar(nombreCategoria(categoria))} que se cuente en ${escapar(item.unidad)}.</p>
           `}
 
           <p class="error" id="error"></p>
@@ -543,7 +538,7 @@ export function ModalUnir(item, categoria, opciones) {
   `;
 }
 
-// dar de baja lo vencido: sale del stock como una salida con motivo, y queda en el historial
+// dar de baja lo vencido
 export function ModalBaja(item) {
   const vencidos = lotesVencidos(item);
   const vencida = cantidadVencida(item);
@@ -576,14 +571,16 @@ export function ModalBaja(item) {
             ${vencidos.map(l => `
               <div><dt>Lote del ${fechaLote(l.ingreso)}</dt><dd>${l.quedan} ${escapar(item.unidad)} · venció ${fechaVence(l.vence)}</dd></div>`).join('')}
             <div><dt>Motivo</dt><dd>Baja por vencimiento</dd></div>
-            <div><dt>Responsable</dt><dd>${usuario.nombre}</dd></div>
+            <div><dt>Responsable</dt><dd>${escapar(usuario.nombre)}</dd></div>
             <div><dt>Fecha y hora</dt><dd>${fechaActual()}</dd></div>
           </dl>
 
           <div class="campo">
             <label for="nota">DETALLE (OPCIONAL)</label>
-            <input id="nota" type="text" placeholder="Ej. se botó, olía mal">
+            <input id="nota" type="text" maxlength="${largos.nota}" placeholder="Ej. se botó, olía mal">
           </div>
+
+          <p class="error" id="error"></p>
 
           <p class="ajuste-nota">Confirma solo cuando ya lo hayas sacado del almacén.</p>
         </div>
@@ -597,7 +594,7 @@ export function ModalBaja(item) {
   `;
 }
 
-// en la confirmacion de una salida: cuanto queda en cada lote que se toca
+// lotes que se usan en una salida
 function LotesSalida(plan, unidad) {
   return `
     <div class="lotes-salida">
@@ -619,9 +616,7 @@ function LotesSalida(plan, unidad) {
     </div>`;
 }
 
-// paso 2 de un ingreso o salida: se muestra encima del formulario (que queda escondido, sin perder lo escrito)
-// datos: { cantidad, vence, plan, donador: { nombre, nuevo }, actividad, para }
-// plan: de que lotes sale una salida (ver planDescuento en Lotes.js)
+// paso 2 de un ingreso o salida
 export function ConfirmarMovimiento(item, tipo, datos) {
   const esIngreso = tipo === 'Ingreso';
   const despues = Math.round((item.cantidad + (esIngreso ? datos.cantidad : -datos.cantidad)) * 100) / 100;

@@ -1,4 +1,6 @@
 import { usuario } from '../data/datos.js';
+import { escapar } from '../components/Comunes.js';
+import { largos } from '../validacion.js';
 import {
   iconoBuscar, iconoCampana, iconoInicio, iconoAlimentos, iconoSalud, iconoHistorial, iconoDonadores, iconoFijar, iconoSalir, iconoUsuarios,
 } from '../assets/icons.js';
@@ -27,7 +29,7 @@ function Marca() {
       <img class="marca-logo" src="${logo}" alt="Logo Hogar San Aníbal di Francia">
       <div>
         <div class="marca-nombre">Hogar San Aníbal</div>
-        <div class="marca-sub-movil">${usuario.nombre} · ${usuario.rol}</div>
+        <div class="marca-sub-movil">${escapar(usuario.nombre)} · ${escapar(usuario.rol)}</div>
       </div>
     </div>
   `;
@@ -54,7 +56,7 @@ export function Layout() {
 
         <div class="buscador">
           ${iconoBuscar}
-          <input id="buscador" type="text" placeholder="Buscar insumo o categoría">
+          <input id="buscador" type="search" maxlength="${largos.busqueda}" autocomplete="off" placeholder="Buscar insumo o categoría">
         </div>
 
         <div class="topbar-derecha">
@@ -64,17 +66,17 @@ export function Layout() {
           </button>
           <div class="usuario-caja">
             <button class="usuario" data-accion="menu-usuario" aria-haspopup="true">
-              <div class="avatar">${usuario.iniciales}</div>
+              <div class="avatar">${escapar(usuario.iniciales)}</div>
               <div class="usuario-datos">
-                <span class="usuario-nombre">${usuario.nombre}</span>
-                <span class="usuario-rol">${usuario.rol}</span>
+                <span class="usuario-nombre">${escapar(usuario.nombre)}</span>
+                <span class="usuario-rol">${escapar(usuario.rol)}</span>
               </div>
             </button>
 
             <div class="usuario-menu" id="usuario-menu" hidden>
               <div class="usuario-menu-datos">
-                <b>${usuario.nombre}</b>
-                <span>${usuario.rol}</span>
+                <b>${escapar(usuario.nombre)}</b>
+                <span>${escapar(usuario.rol)}</span>
               </div>
               <button class="usuario-menu-opcion" data-accion="mi-actividad">${iconoHistorial} Mi actividad</button>
               <button data-accion="salir">${iconoSalir} Cerrar sesión</button>

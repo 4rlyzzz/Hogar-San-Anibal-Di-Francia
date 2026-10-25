@@ -7,6 +7,8 @@ body {
   background: #f5f8f7;
   color: #17211f;
   font-family: 'Manrope', sans-serif;
+  /* textos largos sin espacios bajan de linea */
+  overflow-wrap: anywhere;
 }
 
 h1, h2, p {
@@ -48,7 +50,7 @@ button {
 }
 
 /* ---------- menu lateral (desktop) ---------- */
-/* cerrado muestra solo iconos; al pasar el mouse se abre encima del contenido */
+/* cerrado: solo iconos; se abre al pasar el mouse */
 .lateral {
   position: fixed;
   top: 0;
@@ -170,7 +172,7 @@ button {
   transition: transform 0.2s ease;
 }
 
-/* menu fijo: siempre abierto y el contenido se corre a la derecha (solo desktop y tablet) */
+/* menu fijo siempre abierto */
 @media (min-width: 768px) {
   .menu-fijo .lateral {
     width: 240px;
