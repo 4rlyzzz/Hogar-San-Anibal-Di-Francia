@@ -20,13 +20,13 @@ export function limpiarTexto(texto) {
 // caracteres permitidos en cada tipo de texto (solo alfabeto latino)
 const caracteres = {
   // productos
-  producto: /^[\p{Script=Latin}0-9 .,\-\/()%+&'°#]+$/u,
+  producto: /^[\p{Script=Latin}0-9 .,\-/()%+&'°#]+$/u,
   // personas e instituciones
   nombre: /^[\p{Script=Latin}0-9 .,\-&'()]+$/u,
   // solo letras
-  letras: /^[\p{Script=Latin} '\-]+$/u,
+  letras: /^[\p{Script=Latin} '-]+$/u,
   // notas y actividades
-  libre: /^[\p{Script=Latin}0-9 .,;:\-\/()%+&'°#¿?¡!]+$/u,
+  libre: /^[\p{Script=Latin}0-9 .,;:\-/()%+&'°#¿?¡!]+$/u,
 };
 
 const textoCaracteres = {

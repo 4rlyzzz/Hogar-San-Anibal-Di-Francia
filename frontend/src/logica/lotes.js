@@ -1,6 +1,6 @@
 // cada ingreso es un lote con su propio vencimiento
 // lote: { id, ingreso, vence, cantidad, quedan, origen }
-import { meses, diasHasta, escapar, cantidadVencida, disponible } from './Comunes.js';
+import { meses, diasHasta, cantidadVencida, disponible } from './comunes.js';
 
 export { cantidadVencida, disponible };
 
@@ -26,7 +26,7 @@ export function fechaVence(iso) {
   return `${dia}/${mes}/${anio.slice(2)}`;
 }
 
-const haceDias = n => (n === 0 ? 'hoy' : `hace ${n} ${n === 1 ? 'día' : 'días'}`);
+export const haceDias = n => (n === 0 ? 'hoy' : `hace ${n} ${n === 1 ? 'día' : 'días'}`);
 
 const redondear = n => Math.round(n * 100) / 100;
 
@@ -43,7 +43,7 @@ export function lotesVencidos(item) {
 }
 
 // primero lo que vence antes; sin fecha, por orden de llegada
-function ordenUso(a, b) {
+export function ordenUso(a, b) {
   if (a.vence && b.vence) return a.vence.localeCompare(b.vence) || a.ingreso - b.ingreso;
   if (a.vence) return -1;
   if (b.vence) return 1;
@@ -97,32 +97,3 @@ export function textoVenceLote(lote) {
   return `${estaVencido(lote) ? 'Venció' : 'Vence'} ${fechaVence(lote.vence)}`;
 }
 
-// tabla de lotes del detalle del producto
-export function TablaLotes(item, categoria) {
-  const lotes = lotesCon(item).sort(ordenUso);
-  const vencida = cantidadVencida(item);
-
-  if (lotes.length === 0) return '';
-
-  return `
-    <div class="mov-pasos-titulo">
-      <b>Lotes</b>
-      <span class="lotes-ayuda">se usa primero el de arriba</span>
-    </div>
-    <ul class="lotes">
-      ${lotes.map(l => `
-        <li class="lote ${estaVencido(l) ? 'vencido' : ''}">
-          <span class="lote-ingreso">
-            <b>Ingresó ${fechaLote(l.ingreso)}</b>
-            <small>${l.origen ? escapar(l.origen) : haceDias(diasDesde(l.ingreso))}</small>
-          </span>
-          <span class="etiqueta ${colorLote(l)}">${textoVenceLote(l)}</span>
-          <span class="lote-quedan">${l.quedan} <small>${escapar(item.unidad)}</small></span>
-        </li>
-      `).join('')}
-    </ul>
-    ${vencida > 0 ? `
-      <button class="btn btn-blanco btn-baja" data-accion="dar-baja" data-categoria="${escapar(categoria)}" data-id="${escapar(item.id)}">
-        Dar de baja lo vencido (${vencida} ${escapar(item.unidad)})
-      </button>` : ''}`;
-}

@@ -1,13 +1,4 @@
-// partes que se repiten en las paginas
-
-// evita que un texto se lea como html
-export function escapar(texto) {
-  return String(texto ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}
+// funciones que se usan en varias partes (sin pantalla)
 
 // 'Administración' -> 'AD', 'María López' -> 'ML'
 // solo letras y numeros
@@ -21,14 +12,6 @@ export function iniciales(nombre) {
 // nombre visible de cada categoria
 export const nombresCategoria = { Alimentos: 'Alimentos', Salud: 'Salud e higiene' };
 export const nombreCategoria = categoria => nombresCategoria[categoria] || categoria;
-
-// titulo de columna que ordena
-// grupo: donde se guarda el orden en el estado
-export function TituloOrden(texto, orden, filtros, grupo) {
-  const activo = filtros.orden === orden;
-  const flecha = activo ? (filtros.invertido ? '↑' : '↓') : '';
-  return `<button class="titulo-orden ${activo ? 'activo' : ''}" data-accion="ordenar" data-grupo="${grupo}" data-orden="${orden}">${texto} ${flecha}</button>`;
-}
 
 export const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
 
@@ -168,30 +151,6 @@ export function movimientosEntre(historial, viejo, nuevo = null) {
     .filter(p => p.fila.insumo === viejo.insumo && p.fila.categoria === viejo.categoria);
 }
 
-// lista de esos movimientos con su total
-// navegable: cada fila abre su detalle
-export function MovimientosEntre(pasos, unidad, navegable = false) {
-  if (pasos.length === 0) return '<p class="correccion-vacio">No hubo ingresos, salidas ni ajustes en medio.</p>';
-
-  const total = Math.round(pasos.reduce((suma, p) => suma + cambioDe(p.fila), 0) * 100) / 100;
-  const clase = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
-  const etiqueta = navegable ? 'button' : 'div';
-
-  return `
-    <ul class="mov-pasos correccion-lista">
-      ${pasos.map(p => `
-        <li>
-          <${etiqueta} class="mov-paso ${clase[p.fila.movimiento]}" ${navegable ? `data-accion="ver-movimiento" data-indice="${p.indice}"` : ''}>
-            <span class="mov-paso-fecha">${escapar(p.fila.fecha)}</span>
-            <span class="mov-paso-tipo">● ${p.fila.movimiento} <small>${escapar(p.fila.responsable)}</small></span>
-            <span class="mov-paso-cambio">${escapar(textoCambio(p.fila))}</span>
-          </${etiqueta}>
-        </li>
-      `).join('')}
-    </ul>
-    <p class="correccion-total">En total: ${total > 0 ? '+' : total < 0 ? '−' : ''}${Math.abs(total)} ${escapar(unidad)}</p>`;
-}
-
 // cuanto cambio el stock, con signo: +20, -5
 export function cambioDe(fila) {
   if (fila.movimiento === 'Ajuste') return fila.diferencia;
@@ -301,64 +260,6 @@ export function textoVencimiento(item) {
   return diasHasta(vence) < 0 ? `Venció ${texto}` : `Vence ${texto}`;
 }
 
-// conteos: numero que va en cada boton de filtro
-// extra: lo que va al lado (boton Filtros)
-export function Encabezado(titulo, subtitulo = '', filtroActivo, conteos = {}, extra = '') {
-  let filtros = '';
-  if (filtroActivo) {
-    filtros = `
-      <div class="filtros">
-        ${['Todos', 'Por vencer', 'Stock bajo'].map(f => `
-          <button class="${f === filtroActivo ? 'activo' : ''}" data-accion="filtro" data-filtro="${f}">
-            ${f}${conteos[f] ? ` <span class="filtro-numero">${conteos[f]}</span>` : ''}
-          </button>
-        `).join('')}
-      </div>`;
-  }
-
-  return `
-    <div class="encabezado">
-      <div>
-        <h1>${titulo}</h1>
-        ${subtitulo ? `<p>${subtitulo}</p>` : ''}
-      </div>
-      ${extra ? `<div class="encabezado-derecha">${filtros}${extra}</div>` : filtros}
-    </div>
-  `;
-}
-
-export function TituloSeccion(codigo, color, titulo, detalle, extra = '') {
-  return `
-    <div class="titulo-seccion">
-      <span class="titulo-seccion-icono ${color}">${codigo}</span>
-      <h2>${titulo}</h2>
-      <span class="titulo-seccion-detalle">${detalle}</span>
-      ${extra}
-    </div>
-  `;
-}
-
-// recuadro de resumen; unidad: [singular, plural]
-export function Recuadro(color, icono, numero, titulo, detalle, unidad = ['producto', 'productos']) {
-  return `
-    <div class="recuadro">
-      <div class="recuadro-cabecera">
-        <div class="recuadro-icono ${color}">${icono}</div>
-        <span class="recuadro-titulo">${titulo}</span>
-      </div>
-      <div class="recuadro-fila">
-        <b class="recuadro-numero">${numero}</b>
-        <span class="recuadro-unidad">${numero === 1 ? unidad[0] : unidad[1]}</span>
-        <span class="recuadro-detalle texto-${color}">${detalle}</span>
-      </div>
-    </div>
-  `;
-}
-
-export function SinResultados(texto = 'Sin insumos en este filtro') {
-  return `<div class="vacio">${texto}</div>`;
-}
-
 // filtro rapido y buscador
 export function filtrarInsumos(lista, estado) {
   const texto = estado.busqueda.toLowerCase();
@@ -369,4 +270,18 @@ export function filtrarInsumos(lista, estado) {
     if (texto && !(item.nombre + ' ' + textoPresentacion(item)).toLowerCase().includes(texto)) return false;
     return true;
   });
+}
+
+// compara ids como texto (en CouchDB los _id son texto)
+export function mismoId(a, b) {
+  return a != null && b != null && String(a) === String(b);
+}
+
+// redondea a 2 decimales
+export function redondear(n) {
+  return Math.round(n * 100) / 100;
+}
+
+export function fechaActual() {
+  return textoFecha(new Date());
 }

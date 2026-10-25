@@ -1,5 +1,5 @@
 // datos de prueba mientras no hay backend
-import { textoFecha, fechaDe } from '../components/Comunes.js';
+import { textoFecha, fechaDe } from '../logica/comunes.js';
 
 const horasAtras = h => new Date(Date.now() - h * 60 * 60 * 1000);
 

@@ -1,11 +1,27 @@
-import { escapar, diasParaVencer, diasHasta, nombreCategoria } from './Comunes.js';
-import { lotesCon, lotesVencidos, cantidadVencida, disponible, estaVencido } from './Lotes.js';
-import { itemSobrestock, calcularExcedente } from './Alerta.js';
+import { diasParaVencer, diasHasta, nombreCategoria } from './comunes.js';
+import { lotesCon, lotesVencidos, cantidadVencida, disponible, estaVencido } from './lotes.js';
+
+// excedente = stock - consumo diario * dias que faltan para vencer
+export function calcularExcedente(item) {
+  return item.cantidad - item.consumoDiario * diasParaVencer(item);
+}
+
+// producto con riesgo de sobrestock, o null si no hay
+// solo aplica si quedan 15 dias o menos y sobra producto
+export function itemSobrestock(estado) {
+  // por ahora solo la avena tiene datos de consumo para la alerta
+  const avena = estado.alimentos.find(item => item.consumoDiario);
+  if (!avena) return null;
+
+  const dias = diasParaVencer(avena);
+  if (dias <= 0 || dias > 15 || calcularExcedente(avena) <= 0) return null;
+  return avena;
+}
 
 // color y orden de cada prioridad
 export const coloresPrioridad = { Alta: 'rojo', Media: 'naranja', Baja: 'azul' };
-const orden = Object.keys(coloresPrioridad);
-const grupos = { Alta: 'Urgente', Media: 'Pronto', Baja: 'Para revisar' };
+export const orden = Object.keys(coloresPrioridad);
+export const grupos = { Alta: 'Urgente', Media: 'Pronto', Baja: 'Para revisar' };
 
 // de la mas grave a la menos
 const tipos = ['Vencido', 'Sobrestock', 'Por vencer', 'Stock bajo', 'Cerca del mínimo'];
@@ -99,64 +115,3 @@ export function ordenarAlertas(filas, { orden: columna, invertido }) {
   return [...filas].sort((a, b) => sentido * comparar[columna](a, b) || porPrioridad(a, b));
 }
 
-// problemas en franjas de color (detalle del producto)
-export function ListaProblemas(problemas) {
-  return `
-    <span class="lista-alertas">
-      ${problemas.map(p => `
-        <span class="lista-alertas-item ${coloresPrioridad[p.prioridad]}">
-          <span class="actividad-punto ${coloresPrioridad[p.prioridad]}"></span>
-          <span><b>${p.tipo}</b> · ${escapar(p.detalle)}</span>
-        </span>`).join('')}
-    </span>`;
-}
-
-// problemas en una linea (tabla de Inicio)
-export function PastillasProblemas(problemas) {
-  return problemas.map(p => `
-    <span class="pastilla-alerta ${coloresPrioridad[p.prioridad]}" title="${escapar(p.tipo + ': ' + p.detalle)}"><b>${p.tipo}</b> · ${escapar(p.corto)}</span>`).join('');
-}
-
-// panel de la campanita
-export function PanelAlertas(alertas) {
-  const urgentes = alertas.filter(a => a.prioridad === 'Alta').length;
-
-  const lista = orden.map(prioridad => {
-    const delGrupo = alertas.filter(a => a.prioridad === prioridad);
-    if (delGrupo.length === 0) return '';
-
-    return `
-      <li class="actividad-dia">${grupos[prioridad]} · ${delGrupo.length}</li>
-      ${delGrupo.map(a => `
-        <li>
-          <button class="actividad-item alerta-item" data-accion="ver-producto" data-categoria="${escapar(a.categoria)}" data-id="${escapar(a.item.id)}">
-            <span class="actividad-punto ${coloresPrioridad[a.prioridad]}"></span>
-            <span>
-              <b>${escapar(a.item.nombre)}</b>
-              <small>${a.tipo} · ${escapar(a.detalle)}</small>
-            </span>
-            <span class="actividad-hora">${escapar(nombreCategoria(a.categoria))}</span>
-          </button>
-        </li>
-      `).join('')}
-    `;
-  }).join('');
-
-  return `
-    <div class="fondo-modal fondo-panel">
-      <aside class="panel-actividad" aria-label="Alertas">
-        <div class="panel-actividad-cabecera">
-          <div>
-            <div class="modal-titulo">Alertas</div>
-            <div class="modal-sub">${urgentes ? `${urgentes} urgentes de ${alertas.length}` : `${alertas.length} para revisar`}</div>
-          </div>
-          <button type="button" class="btn-cerrar" data-accion="cerrar-modal" aria-label="Cerrar">×</button>
-        </div>
-
-        <ul class="panel-actividad-lista">
-          ${lista || '<li class="vacio">Todo en orden, no hay alertas</li>'}
-        </ul>
-      </aside>
-    </div>
-  `;
-}
