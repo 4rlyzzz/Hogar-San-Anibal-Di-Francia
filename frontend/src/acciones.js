@@ -5,7 +5,7 @@ import { usuario, actividadesDonacion, ninos } from './data/datos.js';
 import { reglas, cantidadDe, numero as reglaNumero, opcion, limpiarTexto, fechaFiltro, largos } from './validacion.js';
 import {
   iniciales, nombreCategoria, motivoCorreccion, motivosAjuste, movimientosEntre, palabras, coincideNombre, palabrasEnComun,
-  pluralizar, envaseSingular, mismoId, redondear, fechaActual,
+  pluralizar, envaseSingular, mismoId, redondear, fechaActual, ninosDe,
 } from './logica/comunes.js';
 import { planDescuento, descontar, nuevoLote, disponible, cantidadVencida, lotesVencidos } from './logica/lotes.js';
 import { inventarioVacio } from './logica/inventario.js';
@@ -291,7 +291,7 @@ export function opcionesActividad() {
 
 // niños de la lista y los agregados
 export function opcionesNinos() {
-  const agregados = estado.historial.map(f => f.para).filter(n => n && !ninos.includes(n));
+  const agregados = estado.historial.flatMap(ninosDe).filter(n => !ninos.includes(n));
   return [...ninos, ...[...new Set(agregados)].sort((a, b) => a.localeCompare(b))];
 }
 
@@ -311,12 +311,20 @@ function productoIgual(nombre) {
 }
 
 // ---------- campos que se repiten ----------
-// para quien es la salida ('' = uso general)
+// para quienes es la salida ([] = uso general)
 function leerPara(v) {
-  const elegido = v.para ?? '';
-  if (elegido === 'otro') return leer(v, 'para-otro', reglas.nino);
-  if (!permitido(elegido, ['', ...opcionesNinos()])) falla('Elige para quién es de la lista.', 'para');
-  return elegido;
+  const elegidos = [].concat(v.para ?? []).filter(n => n !== '');
+  const lista = opcionesNinos();
+  if (elegidos.some(n => n !== 'otro' && !permitido(n, lista))) falla('Elige para quién es de la lista.', 'para');
+
+  const nombres = elegidos.filter(n => n !== 'otro');
+  if (elegidos.includes('otro')) {
+    const nuevo = leer(v, 'para-otro', reglas.nino);
+    // si ya estaba en la lista, se usa ese nombre
+    const igual = lista.find(n => n.toLowerCase() === nuevo.toLowerCase());
+    nombres.push(igual ?? nuevo);
+  }
+  return [...new Set(nombres)];
 }
 
 // actividad de la donacion ('' sin donador)
@@ -398,7 +406,8 @@ export function revisarMovimiento(modal, v) {
 
   // vencimiento del lote nuevo
   const vence = tipo === 'Ingreso' ? leerVencimiento(v) : null;
-  const para = categoria === 'Salud' && tipo === 'Salida' ? leerPara(v) : '';
+  const para = categoria === 'Salud' && tipo === 'Salida' ? leerPara(v) : [];
+  const observaciones = leer(v, 'observaciones', reglas.observaciones);
 
   let donador = { nombre: '', nuevo: null };
   let actividad = '';
@@ -408,7 +417,7 @@ export function revisarMovimiento(modal, v) {
   }
 
   const plan = tipo === 'Salida' ? planDescuento(item, cantidad) : [];
-  return { cantidad, vence, plan, donador, actividad, para, esSalud: categoria === 'Salud' };
+  return { cantidad, vence, plan, donador, actividad, para, observaciones, esSalud: categoria === 'Salud' };
 }
 
 // paso 2: guarda el movimiento
@@ -433,13 +442,14 @@ export function confirmarMovimiento(modal, datos) {
     donador,
     actividad: datos.actividad,
     para: datos.para,
+    observaciones: datos.observaciones,
     saldo: item.cantidad,
     // lote creado o lotes usados
     ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: descontar(datos.plan) }),
   });
 
   estado.modal = null;
-  mostrarToast(`${tipo} guardado · ${item.nombre}`);
+  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${item.nombre}`);
 }
 
 // ---------- producto nuevo ----------
@@ -500,7 +510,7 @@ export function guardarProducto(modal, v) {
     responsable: usuario.nombre,
     donador,
     actividad,
-    para: '',
+    para: [],
     saldo: cantidad,
     inicial: true,
     loteId: lote.id,
@@ -572,7 +582,7 @@ export function guardarUnion(modal, v) {
       unidad: destino.unidad,
       responsable: usuario.nombre,
       donador: '',
-      para: '',
+      para: [],
       saldo: destino.cantidad,
       motivo: 'Unión de productos',
       nota: `Se unió "${item.nombre}"`,
@@ -641,7 +651,7 @@ export function confirmarAjuste(modal, ajuste) {
     unidad: item.unidad,
     responsable: usuario.nombre,
     donador: '',
-    para: '',
+    para: [],
     saldo: ajuste.contado,
     motivo: ajuste.motivo,
     nota: ajuste.nota,
@@ -683,7 +693,7 @@ export function confirmarBaja(modal, v) {
     unidad: item.unidad,
     responsable: usuario.nombre,
     donador: '',
-    para: '',
+    para: [],
     saldo: item.cantidad,
     motivo: 'Baja por vencimiento',
     nota,

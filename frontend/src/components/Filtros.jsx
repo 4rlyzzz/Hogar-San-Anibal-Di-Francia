@@ -1,7 +1,9 @@
 // filtros guardados en estado[grupo]; en vez de mostrarlos siempre:
 // - un boton "Filtros" abre el panel
 // - los que estan puestos se ven como pastillas que se quitan con ×
+import { useId } from 'react';
 import { IconoFiltro } from '../assets/iconos.jsx';
+import { Desplegable } from './Desplegable.jsx';
 import { abrirFiltros, cerrarFiltros, limpiarFiltros, cambiarFiltro, quitarFiltro } from '../acciones.js';
 
 export function BotonFiltros({ grupo, activos, abierto }) {
@@ -32,13 +34,12 @@ export function PanelFiltros({ grupo, resultados, children }) {
 // opciones: [[valor, texto]]; solo se acepta un valor de la lista
 export function CampoSelect({ grupo, campo, titulo, opciones, actual }) {
   const valores = opciones.map(([valor]) => valor);
+  const id = useId();
   return (
-    <label className="campo-filtro">
-      <span>{titulo}</span>
-      <select value={actual} onChange={e => cambiarFiltro(grupo, campo, e.target.value, valores)}>
-        {opciones.map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
-      </select>
-    </label>
+    <div className="campo-filtro">
+      <span id={id}>{titulo}</span>
+      <Desplegable variante="filtro" data-campo={campo} aria-labelledby={id} opciones={opciones} valor={actual} onChange={v => cambiarFiltro(grupo, campo, v, valores)} />
+    </div>
   );
 }
 

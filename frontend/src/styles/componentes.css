@@ -464,6 +464,7 @@
 
 .campo input,
 .campo select,
+.campo textarea,
 .input-fijo {
   width: 100%;
   padding: 12px 13px;
@@ -477,7 +478,8 @@
 }
 
 .campo input:focus,
-.campo select:focus {
+.campo select:focus,
+.campo textarea:focus {
   border-color: #a9dcc6;
   background-color: #fff;
 }
@@ -495,6 +497,13 @@
 
 .campo select option {
   font-weight: 400;
+}
+
+.campo textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .input-fijo {
@@ -1688,7 +1697,7 @@ button.uf-usuario:hover b {
   min-width: 0;
 }
 
-.campo-filtro span {
+.campo-filtro > span {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: 11px;
@@ -1826,14 +1835,14 @@ button.uf-usuario:hover b {
   background: #f9fbfa;
 }
 
-.panel-actividad-controles label {
+.panel-actividad-controles .panel-actividad-rol {
   display: flex;
   flex-direction: column;
   gap: 5px;
   flex: 1;
 }
 
-.panel-actividad-controles label span {
+.panel-actividad-controles .panel-actividad-rol > span {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: 11px;
@@ -2711,4 +2720,178 @@ button.uf-usuario:hover b {
 .fila-presentacion.sin-envase #contenido-envase,
 .fila-presentacion.sin-envase #medida {
   display: none;
+}
+
+/* ---------- desplegable propio ---------- */
+/* el boton se ve igual que los inputs de cada lugar */
+.desplegable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.desplegable-texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.desplegable-flecha {
+  flex: none;
+  color: #7c8b86;
+  transition: transform 0.15s ease;
+}
+
+.desplegable.abierto .desplegable-flecha {
+  transform: rotate(180deg);
+}
+
+.desplegable-campo {
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid #e0e7e4;
+  background: #f9fbfa;
+  font-size: 13px;
+  font-weight: 500;
+  color: #17211f;
+}
+
+.desplegable-filtro {
+  padding: 9px 11px;
+  border: 1px solid #e0e7e4;
+  border-radius: 10px;
+  background: #f9fbfa;
+  font-weight: 600;
+  font-size: 13px;
+  color: #17211f;
+}
+
+.desplegable-campo:focus-visible,
+.desplegable-campo.abierto,
+.desplegable-filtro:focus-visible,
+.desplegable-filtro.abierto {
+  border-color: #a9dcc6;
+  background: #fff;
+}
+
+.desplegable-campo[aria-invalid="true"] {
+  border-color: #e6a9a5;
+}
+
+/* rol: pastilla azul */
+.desplegable-rol {
+  width: auto;
+  padding: 6px 10px 6px 11px;
+  border: 1px solid #d8e6ef;
+  border-radius: 999px;
+  background: #f2f8fc;
+  color: #23698f;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.desplegable-rol .desplegable-flecha {
+  color: #2f7fb5;
+}
+
+.desplegable-rol:focus-visible,
+.desplegable-rol.abierto {
+  border-color: #9cc7e2;
+}
+
+/* la lista va encima de todo, hasta de las ventanas */
+.desplegable-lista {
+  position: fixed;
+  z-index: 100;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #fff;
+  border: 1px solid #e5eae8;
+  border-radius: 14px;
+  box-shadow: 0 20px 44px -18px rgba(23, 33, 31, 0.32);
+  font-size: 13px;
+  animation: aparecer 0.12s ease;
+}
+
+.desplegable-lista-rol {
+  min-width: 170px !important;
+}
+
+.desplegable-grupo {
+  padding: 10px 10px 4px;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8b9a95;
+  text-transform: uppercase;
+}
+
+.desplegable-opcion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-weight: 500;
+  color: #17211f;
+  cursor: pointer;
+  user-select: none;
+}
+
+.desplegable-opcion > span:not(.desplegable-check) {
+  flex: 1;
+  min-width: 0;
+}
+
+.desplegable-opcion.activa {
+  background: #f2f6f5;
+}
+
+.desplegable-opcion[aria-selected="true"] {
+  color: #2d8e6c;
+  font-weight: 600;
+}
+
+.desplegable-marca {
+  flex: none;
+  visibility: hidden;
+}
+
+.desplegable-opcion[aria-selected="true"] .desplegable-marca {
+  visibility: visible;
+}
+
+/* "+ Otro..." en verde para que se note que agrega */
+.desplegable-agregar {
+  color: #2d8e6c;
+  font-weight: 600;
+}
+
+/* casilla de los que permiten elegir varios */
+.desplegable-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #c9d4d0;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.desplegable-opcion[aria-selected="true"] .desplegable-check {
+  border-color: #3fb98f;
+  background: #3fb98f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.5 6 10.5 11 4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;
+}
+
+.fila-presentacion .desplegable {
+  width: auto;
 }

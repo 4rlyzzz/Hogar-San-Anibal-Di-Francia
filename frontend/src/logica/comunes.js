@@ -169,17 +169,31 @@ export function textoStock(fila) {
   return fila.saldo == null ? '—' : `${stockAntes(fila)} → ${fila.saldo}`;
 }
 
+// niños de una salida como lista
+// los movimientos viejos guardan un solo nombre como texto
+export function ninosDe(fila) {
+  if (Array.isArray(fila.para)) return fila.para;
+  return fila.para ? [fila.para] : [];
+}
+
+// ['Mateo', 'Lucía', 'Thiago'] -> 'Mateo, Lucía y Thiago'
+export function textoPara(fila) {
+  const ninos = ninosDe(fila);
+  return ninos.length > 1 ? ninos.slice(0, -1).join(', ') + ' y ' + ninos.at(-1) : ninos.join('');
+}
+
 // texto de la columna DETALLE
 export function textoDetalle(fila) {
-  const nota = fila.nota ? ' · ' + fila.nota : '';
-  if (fila.movimiento === 'Ajuste') return (fila.motivo || 'Ajuste') + nota;
+  const extra = [fila.nota, fila.observaciones].filter(Boolean).map(t => ' · ' + t).join('');
+  if (fila.movimiento === 'Ajuste') return (fila.motivo || 'Ajuste') + extra;
   if (fila.movimiento === 'Ingreso') {
-    if (fila.donador) return fila.donador + (fila.actividad ? ' · ' + fila.actividad : '') + nota;
-    return fila.inicial ? 'Registro inicial' : 'Compra del hogar';
+    if (fila.donador) return fila.donador + (fila.actividad ? ' · ' + fila.actividad : '') + extra;
+    return (fila.inicial ? 'Registro inicial' : 'Compra del hogar') + extra;
   }
-  if (fila.motivo) return fila.motivo + nota;
-  if (fila.para) return 'Para ' + fila.para;
-  return fila.categoria === 'Salud' ? 'Uso general' : '';
+  if (fila.motivo) return fila.motivo + extra;
+  if (ninosDe(fila).length) return 'Para ' + textoPara(fila) + extra;
+  const base = fila.categoria === 'Salud' ? 'Uso general' : '';
+  return base ? base + extra : extra.slice(3);
 }
 
 // '+20 kg', '−5 kg' (con el signo menos tipografico)

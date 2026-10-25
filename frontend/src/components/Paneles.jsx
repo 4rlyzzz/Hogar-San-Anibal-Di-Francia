@@ -8,13 +8,14 @@ import {
 } from '../acciones.js';
 import {
   nombreCategoria, colorVencimiento, textoCambio, textoStock, textoPresentacion, textoTotal, disponible, stockAntes,
-  movimientosEntre, iniciales, fechaDe, fechaLarga, textoFecha, tiempoRelativo, mismoId,
+  movimientosEntre, iniciales, fechaDe, fechaLarga, textoFecha, tiempoRelativo, mismoId, textoPara,
 } from '../logica/comunes.js';
 import { fechaVence } from '../logica/lotes.js';
 import { problemasDe, coloresPrioridad, orden, grupos } from '../logica/alertas.js';
 import { actividadesDe } from '../logica/donadores.js';
 import { actividadDe, coloresActividad, nombreDia } from '../logica/actividad.js';
 import { Fondo } from './Formulario.jsx';
+import { Desplegable } from './Desplegable.jsx';
 import { MovimientosEntre, clasesMovimiento } from './Comunes.jsx';
 import { TablaLotes } from './Lotes.jsx';
 
@@ -153,12 +154,13 @@ export function PanelProducto({ modal }) {
 // campos que no se listan
 const yaMostrados = ['fecha', 'insumo', 'categoria', 'movimiento', 'cantidad', 'diferencia', 'unidad', 'saldo', 'inicial', 'corrige', 'loteId', '_id', '_rev', 'tipo', 'fechaOrden'];
 // nombre visible de cada campo
-const etiquetasMovimiento = { responsable: 'Responsable', donador: 'Donado por', actividad: 'Actividad', para: 'Para (niño/a)', motivo: 'Motivo', nota: 'Detalle', lote: 'Lote', vence: 'Vence', lotes: 'Salió de' };
+const etiquetasMovimiento = { responsable: 'Responsable', donador: 'Donado por', actividad: 'Actividad', para: 'Para (niño/a)', motivo: 'Motivo', nota: 'Detalle', observaciones: 'Observaciones', lote: 'Lote', vence: 'Vence', lotes: 'Salió de' };
 
 // campos que necesitan formato
 function textoCampo(campo, valor, fila) {
   if (campo === 'lotes') return valor.map(l => `Lote del ${l.ingreso}: ${l.cantidad} ${fila.unidad}`).join(' · ');
   if (campo === 'vence') return fechaVence(valor);
+  if (campo === 'para') return textoPara(fila);
   return String(valor);
 }
 
@@ -369,12 +371,10 @@ export function PanelActividad({ modal }) {
 
         {administrar && (
           <div className="panel-actividad-controles">
-            <label>
-              <span>Rol</span>
-              <select className="selector-rol" data-id={cuenta.id} value={cuenta.rol} onChange={e => cambiarRol(cuenta.id, e.target.value)}>
-                {roles.map(r => <option key={r}>{r}</option>)}
-              </select>
-            </label>
+            <div className="panel-actividad-rol">
+              <span id="rol-panel">Rol</span>
+              <Desplegable variante="rol" className="selector-rol" data-id={cuenta.id} aria-labelledby="rol-panel" valor={cuenta.rol} onChange={r => cambiarRol(cuenta.id, r)} opciones={roles.map(r => [r, r])} />
+            </div>
             <button className={`btn-mini ${cuenta.activo ? 'btn-mini-rojo' : ''}`} data-accion="activar-usuario" data-id={cuenta.id} onClick={() => cambiarActivo(cuenta.id)}>
               {cuenta.activo ? 'Desactivar cuenta' : 'Activar cuenta'}
             </button>

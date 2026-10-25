@@ -1,4 +1,4 @@
-import { fechaDe, cambioDe, nombreCategoria } from './comunes.js';
+import { fechaDe, cambioDe, nombreCategoria, textoPara } from './comunes.js';
 
 const negrita = texto => ({ value: texto, fontWeight: 'bold' });
 
@@ -25,9 +25,10 @@ const columnasHistorial = [
   { header: negrita('Responsable'), width: 16, cell: f => texto(f.responsable) },
   { header: negrita('Donador'), width: 24, cell: f => texto(f.donador || '') },
   { header: negrita('Actividad'), width: 22, cell: f => texto(f.actividad || '') },
-  { header: negrita('Para'), width: 18, cell: f => texto(f.para || '') },
+  { header: negrita('Para'), width: 18, cell: f => texto(textoPara(f)) },
   { header: negrita('Motivo del ajuste'), width: 26, cell: f => texto(f.motivo || '') },
   { header: negrita('Detalle'), width: 30, cell: f => texto(f.nota || (f.corrige ? `Corrige el ajuste del ${f.corrige.fecha}` : '')) },
+  { header: negrita('Observaciones'), width: 30, cell: f => texto(f.observaciones || '') },
 ];
 
 // 'Leche evaporada Gloria' -> 'leche-evaporada-gloria'

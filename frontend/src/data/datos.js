@@ -130,7 +130,7 @@ function movimientosDePrueba() {
         responsable: esIngreso ? 'Almacén' : esSalud ? 'Enfermería' : 'Cocina',
         donador: donacion ? donadores[azar(donadores.length)].nombre : '',
         actividad: donacion ? actividadDeFecha(fecha) : '',
-        para: esSalud && !esIngreso && azar(3) === 0 ? ninos[azar(ninos.length)] : '',
+        para: esSalud && !esIngreso && azar(3) === 0 ? [ninos[azar(ninos.length)]] : [],
       });
     }
   }
@@ -139,12 +139,12 @@ function movimientosDePrueba() {
 
 // historial, del mas nuevo al mas antiguo
 export const historial = [
-  { fecha: '07 oct 09:05', insumo: 'Avena 3 Ositos', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 150, unidad: 'kg', responsable: 'Almacén', donador: '', para: '' },
-  { fecha: '07 oct 08:40', insumo: 'Leche evaporada Gloria', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 12, unidad: 'latas', responsable: 'Cocina', donador: '', para: '' },
-  { fecha: '06 oct 18:22', insumo: 'Amoxicilina 500 mg', categoria: 'Salud', movimiento: 'Salida', cantidad: 2, unidad: 'blísters', responsable: 'Enfermería', donador: '', para: '' },
-  { fecha: '06 oct 16:10', insumo: 'Pañales Huggies talla M', categoria: 'Salud', movimiento: 'Salida', cantidad: 3, unidad: 'paquetes', responsable: 'Cuidado', donador: '', para: '' },
-  { fecha: '06 oct 11:35', insumo: 'Pollo entero', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 8, unidad: 'kg', responsable: 'Cocina', donador: '', para: '' },
-  { fecha: '05 oct 15:48', insumo: 'Sales de rehidratación oral', categoria: 'Salud', movimiento: 'Ingreso', cantidad: 40, unidad: 'sobres', responsable: 'Almacén', donador: '', para: '' },
-  { fecha: '05 oct 09:12', insumo: 'Arroz Costeño', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 120, unidad: 'kg', responsable: 'Almacén', donador: '', para: '' },
+  { fecha: '07 oct 09:05', insumo: 'Avena 3 Ositos', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 150, unidad: 'kg', responsable: 'Almacén', donador: '', para: [] },
+  { fecha: '07 oct 08:40', insumo: 'Leche evaporada Gloria', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 12, unidad: 'latas', responsable: 'Cocina', donador: '', para: [] },
+  { fecha: '06 oct 18:22', insumo: 'Amoxicilina 500 mg', categoria: 'Salud', movimiento: 'Salida', cantidad: 2, unidad: 'blísters', responsable: 'Enfermería', donador: '', para: [] },
+  { fecha: '06 oct 16:10', insumo: 'Pañales Huggies talla M', categoria: 'Salud', movimiento: 'Salida', cantidad: 3, unidad: 'paquetes', responsable: 'Cuidado', donador: '', para: [] },
+  { fecha: '06 oct 11:35', insumo: 'Pollo entero', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 8, unidad: 'kg', responsable: 'Cocina', donador: '', para: [] },
+  { fecha: '05 oct 15:48', insumo: 'Sales de rehidratación oral', categoria: 'Salud', movimiento: 'Ingreso', cantidad: 40, unidad: 'sobres', responsable: 'Almacén', donador: '', para: [] },
+  { fecha: '05 oct 09:12', insumo: 'Arroz Costeño', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 120, unidad: 'kg', responsable: 'Almacén', donador: '', para: [] },
   ...movimientosDePrueba(),
 ].sort((a, b) => fechaDe(b.fecha) - fechaDe(a.fecha));

@@ -342,6 +342,8 @@
   }
 
   .campo input,
+  .campo textarea,
+  .desplegable-campo,
   .input-fijo {
     min-height: 46px;
     font-size: 16px;
@@ -492,9 +494,16 @@
   }
 
   .campo-filtro select,
-  .campo-filtro input {
+  .campo-filtro input,
+  .desplegable-filtro {
     min-height: 44px;
     font-size: 16px;
+  }
+
+  /* opciones grandes para el dedo */
+  .desplegable-opcion {
+    min-height: 44px;
+    font-size: 15px;
   }
 
   .panel-filtros-ver {

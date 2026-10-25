@@ -5,6 +5,7 @@ import { iniciales, fechaLarga, textoFecha, tiempoRelativo, mismoId } from '../l
 import { actividadDe } from '../logica/actividad.js';
 import { Encabezado, SinResultados, TituloOrden } from '../components/Comunes.jsx';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips } from '../components/Filtros.jsx';
+import { Desplegable } from '../components/Desplegable.jsx';
 
 // ordenes; "invertido" los da vuelta
 const ordenes = {
@@ -43,9 +44,7 @@ function FilaUsuario({ c, registros, ultima }) {
         {esYo
           ? <span className="pastilla azul">{c.rol}</span>
           : (
-            <select className="selector-rol" data-id={c.id} aria-label={`Rol de ${c.nombre}`} value={c.rol} onChange={e => cambiarRol(c.id, e.target.value)}>
-              {roles.map(r => <option key={r}>{r}</option>)}
-            </select>
+            <Desplegable variante="rol" className="selector-rol" data-id={c.id} aria-label={`Rol de ${c.nombre}`} valor={c.rol} onChange={r => cambiarRol(c.id, r)} opciones={roles.map(r => [r, r])} />
           )}
       </span>
 

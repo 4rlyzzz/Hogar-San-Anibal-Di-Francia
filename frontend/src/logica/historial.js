@@ -1,4 +1,4 @@
-import { fechaDe } from './comunes.js';
+import { fechaDe, ninosDe, textoPara } from './comunes.js';
 
 export function filtrosHistorialVacios() {
   return { movimiento: 'Todos', categoria: 'Todos', responsable: 'Todos', producto: 'Todos', para: 'Todos', donador: 'Todos', actividad: 'Todos', desde: '', hasta: '' };
@@ -19,7 +19,7 @@ export function filtrarHistorial(estado) {
     if (f.categoria !== 'Todos' && fila.categoria !== f.categoria) return false;
     if (f.responsable !== 'Todos' && fila.responsable !== f.responsable) return false;
     if (f.producto !== 'Todos' && !nombresProducto.includes(fila.insumo)) return false;
-    if (f.para !== 'Todos' && fila.para !== f.para) return false;
+    if (f.para !== 'Todos' && !ninosDe(fila).includes(f.para)) return false;
     if (f.donador !== 'Todos' && fila.donador !== f.donador) return false;
     if (f.actividad !== 'Todos' && fila.actividad !== f.actividad) return false;
 
@@ -29,13 +29,13 @@ export function filtrarHistorial(estado) {
       if (hasta && fecha > hasta) return false;
     }
 
-    return (fila.insumo + ' ' + fila.responsable + ' ' + fila.donador + ' ' + fila.para).toLowerCase().includes(texto);
+    return [fila.insumo, fila.responsable, fila.donador, textoPara(fila), fila.observaciones].join(' ').toLowerCase().includes(texto);
   });
 }
 
-// valores distintos que aparecen en el historial, ordenados
+// valores distintos que aparecen en el historial, ordenados (las listas se abren)
 export function opcionesDe(filas, campo) {
-  return [...new Set(filas.map(f => f[campo]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return [...new Set(filas.flatMap(f => f[campo] ?? []).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 const plurales = { Ingreso: 'Ingresos', Salida: 'Salidas', Ajuste: 'Ajustes' };

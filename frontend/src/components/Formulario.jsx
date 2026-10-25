@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { largos } from '../validacion.js';
 import { cerrarModal, intentar } from '../acciones.js';
 import { textoPresentacion } from '../logica/comunes.js';
+import { Desplegable } from './Desplegable.jsx';
 
 // error del formulario: lo muestra, marca el campo y lo enfoca
 export function useFormulario() {
@@ -12,7 +13,8 @@ export function useFormulario() {
   function mostrar(resultado) {
     formulario.current?.querySelectorAll('[aria-invalid]').forEach(e => e.removeAttribute('aria-invalid'));
     setError(resultado?.error ?? '');
-    const campo = resultado?.campo && formulario.current?.elements[resultado.campo];
+    // por id: en los desplegables el name esta en inputs ocultos
+    const campo = resultado?.campo && formulario.current?.querySelector(`[id="${resultado.campo}"]`);
     if (campo) {
       campo.setAttribute('aria-invalid', 'true');
       campo.focus();
@@ -31,9 +33,13 @@ export function useFormulario() {
 }
 
 // valores del formulario como { name: valor }
+// si un name se repite (desplegable de varios), queda una lista
 export function valoresDe(formulario) {
   const valores = {};
-  for (const [campo, valor] of new FormData(formulario)) valores[campo] = valor;
+  for (const [campo, valor] of new FormData(formulario)) {
+    if (!(campo in valores)) valores[campo] = valor;
+    else valores[campo] = [].concat(valores[campo], valor);
+  }
   return valores;
 }
 
@@ -149,15 +155,14 @@ export function CampoDonador({ donadores, actividades = [] }) {
     if (actividad === 'otra') otra.current.focus();
   }, [actividad]);
 
+  const opcionesDonador = [['', 'Sin donador (compra del hogar)'], ...donadores.map(d => [String(d.id), d.nombre]), ['nuevo', '+ Nuevo donador']];
+  const opcionesActividad = [['', 'Elige una actividad'], ...actividades.map(a => [a, a]), ['otra', '+ Otra actividad…']];
+
   return (
     <>
       <div className="campo">
-        <label>DONADOR</label>
-        <select id="donador" name="donador" onChange={e => setDonador(e.target.value)}>
-          <option value="">Sin donador (compra del hogar)</option>
-          {donadores.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-          <option value="nuevo">+ Nuevo donador</option>
-        </select>
+        <label htmlFor="donador">DONADOR</label>
+        <Desplegable id="donador" name="donador" opciones={opcionesDonador} valor={donador} onChange={setDonador} />
       </div>
 
       <div className="dos-columnas" id="nuevo-donador" hidden={donador !== 'nuevo'}>
@@ -174,11 +179,7 @@ export function CampoDonador({ donadores, actividades = [] }) {
       {/* solo si hay donador */}
       <div className="campo" id="campo-actividad" hidden={donador === ''}>
         <label htmlFor="actividad">ACTIVIDAD O MOTIVO</label>
-        <select id="actividad" name="actividad" onChange={e => setActividad(e.target.value)}>
-          <option value="">Elige una actividad</option>
-          {actividades.map(a => <option key={a} value={a}>{a}</option>)}
-          <option value="otra">+ Otra actividad…</option>
-        </select>
+        <Desplegable id="actividad" name="actividad" opciones={opcionesActividad} valor={actividad} onChange={setActividad} />
         <input
           id="actividad-otra"
           name="actividad-otra"
@@ -193,31 +194,62 @@ export function CampoDonador({ donadores, actividades = [] }) {
   );
 }
 
-// solo en salidas de Salud: a quien se le dio
+// solo en salidas de Salud: a quien o a quienes se les dio
+// sin nadie elegido es uso general
 export function CampoPara({ ninos = [] }) {
-  const [elegido, setElegido] = useState('');
+  const [elegidos, setElegidos] = useState([]);
+  const [nombreOtro, setNombreOtro] = useState('');
   const otro = useRef(null);
+  const conOtro = elegidos.includes('otro');
   useEffect(() => {
-    if (elegido === 'otro') otro.current.focus();
-  }, [elegido]);
+    if (conOtro) otro.current.focus();
+  }, [conOtro]);
+
+  const opciones = [['', 'Uso general (no es para un niño en particular)'], ...ninos.map(n => [n, n]), ['otro', '+ Otro niño/a…']];
+  const mostrado = elegidos.length ? elegidos : [''];
+
+  // elegir "uso general" quita a los niños, y elegir un niño quita "uso general"
+  function cambiar(nuevo) {
+    const agregado = nuevo.find(v => !mostrado.includes(v));
+    setElegidos(agregado === '' ? [] : nuevo.filter(v => v !== ''));
+  }
 
   return (
     <div className="campo">
       <label htmlFor="para">PARA QUIÉN</label>
-      <select id="para" name="para" onChange={e => setElegido(e.target.value)}>
-        <option value="">Uso general (no es para un niño en particular)</option>
-        {ninos.map(n => <option key={n} value={n}>{n}</option>)}
-        <option value="otro">+ Otro niño/a…</option>
-      </select>
+      <Desplegable
+        id="para"
+        name="para"
+        multiple
+        opciones={opciones}
+        valor={mostrado}
+        onChange={cambiar}
+        // en vez de "+ Otro niño/a…" muestra el nombre que se escribio
+        textoBoton={() => (elegidos.length
+          ? elegidos.map(n => (n === 'otro' ? nombreOtro.trim() || 'otro niño/a' : n)).join(', ')
+          : opciones[0][1])}
+      />
       <input
         id="para-otro"
         name="para-otro"
         type="text"
         maxLength={largos.nino}
         placeholder="Nombre del niño o niña"
-        hidden={elegido !== 'otro'}
+        hidden={!conOtro}
         ref={otro}
+        onInput={e => setNombreOtro(e.target.value)}
       />
+      <small>Puedes elegir a varios niños.</small>
+    </div>
+  );
+}
+
+// texto libre opcional de los ingresos y salidas
+export function CampoObservaciones({ ejemplo }) {
+  return (
+    <div className="campo">
+      <label htmlFor="observaciones">OBSERVACIONES (OPCIONAL)</label>
+      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} />
     </div>
   );
 }

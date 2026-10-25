@@ -10,10 +10,11 @@ import {
   guardarDonador, guardarUsuario, roles, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
 } from '../acciones.js';
 import {
-  nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, redondear, fechaActual,
+  nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, redondear, fechaActual, textoPara,
 } from '../logica/comunes.js';
 import { cantidadVencida, disponible, lotesVencidos, fechaLote, fechaVence } from '../logica/lotes.js';
-import { useFormulario, CampoNumero, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, filtrarNumero } from './Formulario.jsx';
+import { useFormulario, CampoNumero, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
+import { Desplegable } from './Desplegable.jsx';
 import { MovimientosEntre } from './Comunes.jsx';
 import { LotesSalida } from './Lotes.jsx';
 
@@ -100,6 +101,7 @@ export function ModalMovimiento({ modal }) {
 
           {esIngreso && <CampoDonador donadores={estado.donadores} actividades={opcionesActividad()} />}
           {esSalud && !esIngreso && <CampoPara ninos={opcionesNinos()} />}
+          <CampoObservaciones ejemplo={esIngreso ? 'Ej. llegó en cajas abolladas, falta la boleta' : 'Ej. se usó para la fiesta del sábado'} />
 
           <div className="dos-columnas">
             <div className="campo">
@@ -134,7 +136,8 @@ function ConfirmarMovimiento({ modal, datos, onVolver }) {
     ['Vence', esIngreso ? (datos.vence ? fechaVence(datos.vence) : 'No tiene fecha') : ''],
     ['Donado por', datos.donador.nombre ? datos.donador.nombre + (datos.donador.nuevo ? ' (nuevo donador)' : '') : (esIngreso ? 'Compra del hogar' : '')],
     ['Actividad', datos.actividad],
-    ['Para', datos.para || (!esIngreso && datos.esSalud ? 'Uso general' : '')],
+    ['Para', datos.para.length ? textoPara(datos) : (!esIngreso && datos.esSalud ? 'Uso general' : '')],
+    ['Observaciones', datos.observaciones],
     ['Responsable', usuario.nombre],
     ['Fecha y hora', fechaActual()],
   ].filter(([, valor]) => valor);
@@ -245,21 +248,24 @@ export function ModalProducto({ modal }) {
             <label htmlFor="cantidad">CANTIDAD QUE ENTRA</label>
             <div className={`fila-presentacion ${!envase || suelto ? 'sin-envase' : ''}`} id="fila-presentacion">
               <CampoNumero id="cantidad" decimales={decimalesCantidad} placeholder="0" aria-label="Cantidad" onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
-              <select id="envase" name="envase" aria-label="En qué viene" value={envase} onChange={e => setEnvase(e.target.value)}>
-                <option value="">en qué viene…</option>
-                <optgroup label="Envase">
-                  {(esSalud ? envasesSalud : envasesAlimentos).map(e => <option key={e} value={e}>{e}</option>)}
-                  <option value="otro">+ otro envase…</option>
-                </optgroup>
-                <optgroup label="Suelto (a granel)">
-                  {medidasSuelto.map(m => <option key={m} value={`suelto:${m}`}>{m}</option>)}
-                </optgroup>
-              </select>
+              <Desplegable
+                id="envase"
+                name="envase"
+                aria-label="En qué viene"
+                valor={envase}
+                onChange={setEnvase}
+                opciones={[
+                  ['', 'en qué viene…'],
+                  [null, 'Envase'],
+                  ...(esSalud ? envasesSalud : envasesAlimentos).map(e => [e, e]),
+                  ['otro', '+ otro envase…'],
+                  [null, 'Suelto (a granel)'],
+                  ...medidasSuelto.map(m => [`suelto:${m}`, m]),
+                ]}
+              />
               <span className="fila-presentacion-de">de</span>
               <CampoNumero id="contenido-envase" decimales={decimalesContenido} placeholder={esSalud ? '10' : '1'} aria-label="Cuánto trae cada uno" onAviso={f.setError} onInput={e => setContenido(e.target.value)} />
-              <select id="medida" name="medida" aria-label="Medida" value={medida} onChange={e => setMedida(e.target.value)}>
-                {(esSalud ? medidasSalud : medidasAlimentos).map(m => <option key={m}>{m}</option>)}
-              </select>
+              <Desplegable id="medida" name="medida" aria-label="Medida" valor={medida} onChange={setMedida} opciones={(esSalud ? medidasSalud : medidasAlimentos).map(m => [m, m])} />
             </div>
             <input
               id="envase-otro"
@@ -393,9 +399,7 @@ export function ModalAjuste({ modal }) {
             <>
               <div className="campo">
                 <label htmlFor="motivo">¿POR QUÉ NO COINCIDÍA?</label>
-                <select id="motivo" name="motivo" value={motivo} onChange={e => setMotivo(e.target.value)}>
-                  {motivosAjuste.map(m => <option key={m}>{m}</option>)}
-                </select>
+                <Desplegable id="motivo" name="motivo" valor={motivo} onChange={setMotivo} opciones={motivosAjuste.map(m => [m, m])} />
                 <small>Si no sabes la causa, deja "Sin identificar"</small>
               </div>
               <div className="campo">
@@ -489,10 +493,13 @@ export function ModalUnir({ modal }) {
             <>
               <div className="campo">
                 <label htmlFor="unir-con">SE UNE CON</label>
-                <select id="unir-con" name="unir-con" onChange={e => setElegido(e.target.value)}>
-                  <option value="">Elige el producto que se queda</option>
-                  {opciones.map(o => <option key={o.id} value={o.id}>{o.nombre} · {o.cantidad} {o.unidad}</option>)}
-                </select>
+                <Desplegable
+                  id="unir-con"
+                  name="unir-con"
+                  valor={elegido}
+                  onChange={setElegido}
+                  opciones={[['', 'Elige el producto que se queda'], ...opciones.map(o => [String(o.id), `${o.nombre} · ${o.cantidad} ${o.unidad}`])]}
+                />
               </div>
               <p className={`ajuste-diferencia ${destino ? 'sobra' : ''}`} id="unir-resumen">
                 {destino
@@ -639,11 +646,8 @@ export function ModalUsuario() {
           </div>
 
           <div className="campo">
-            <label>ROL</label>
-            <select id="cuenta-rol" name="cuenta-rol">
-              <option value={roles[0]}>Usuario · registra ingresos y salidas</option>
-              <option value={roles[1]}>Administrador · además gestiona usuarios</option>
-            </select>
+            <label htmlFor="cuenta-rol">ROL</label>
+            <Desplegable id="cuenta-rol" name="cuenta-rol" opciones={[[roles[0], 'Usuario · registra ingresos y salidas'], [roles[1], 'Administrador · además gestiona usuarios']]} />
           </div>
 
           <MensajeError texto={f.error} />
