@@ -1,0 +1,119 @@
+/* ---------- inicio de sesion ---------- */
+.login {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(64px, 11vw, 220px);
+  padding: 32px;
+  background: radial-gradient(circle at 38% 45%, #e3f4ec 0%, #f5f8f7 55%);
+}
+
+.login-marca img {
+  display: block;
+  width: clamp(240px, 19vw, 360px);
+  height: auto;
+  animation: aparecer 0.6s ease both;
+}
+
+.login-lado {
+  width: min(400px, 100%);
+  flex-shrink: 0;
+}
+
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 32px;
+  background: #fff;
+  border: 1px solid #e5eae8;
+  border-radius: 22px;
+  box-shadow: 0 24px 50px -28px rgba(23, 33, 31, 0.28);
+  animation: aparecer 0.6s ease 0.1s both;
+}
+
+.login-form h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.login-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6f7e79;
+}
+
+/* contraseña con el boton del ojo adentro */
+.campo-clave {
+  position: relative;
+}
+
+.campo-clave input {
+  padding-right: 48px;
+}
+
+.ver-clave {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #8b9a95;
+  display: grid;
+  place-items: center;
+}
+
+.ver-clave:hover {
+  background: #eef2f1;
+}
+
+.ver-clave.activo {
+  color: #2d8e6c;
+}
+
+.login-entrar {
+  flex: none;
+  padding: 13px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+/* celular: logo arriba y formulario abajo */
+@media (max-width: 767px) {
+  .login {
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 20px;
+    padding: 36px 16px 32px;
+    background: radial-gradient(circle at 50% 18%, #e3f4ec 0%, #f5f8f7 60%);
+  }
+
+  .login-marca img {
+    width: 150px;
+  }
+
+  .login-lado {
+    width: min(400px, 100%);
+  }
+
+  .login-form {
+    padding: 22px 18px;
+  }
+
+  .login-form h1 {
+    font-size: 22px;
+  }
+
+  .campo-clave input {
+    padding-right: 50px;
+  }
+}
