@@ -2,17 +2,27 @@ import { useState } from 'react';
 import logo from '../assets/logo.png';
 import { IconoOjo } from '../assets/iconos.jsx';
 import { largos } from '../validacion.js';
-import { iniciarSesion } from '../acciones.js';
-import { useFormulario, MensajeError } from '../components/Formulario.jsx';
+import { iniciarSesion, Invalido } from '../acciones.js';
+import { useFormulario, valoresDe, MensajeError } from '../components/Formulario.jsx';
 
 // pantalla completa, antes de entrar a la app
 export function Login() {
   const f = useFormulario();
   const [verClave, setVerClave] = useState(false);
+  const [cargando, setCargando] = useState(false);
 
-  function entrar(e) {
-    // si la clave estaba mal, queda seleccionada para escribirla de nuevo
-    if (!f.enviar(e, iniciarSesion) && document.activeElement?.id === 'login-clave') document.activeElement.select();
+  async function entrar(e) {
+    e.preventDefault();
+    setCargando(true);
+    f.mostrar(null); // Limpiar errores anteriores
+
+    const valores = valoresDe(e.currentTarget);
+    const resultado = await iniciarSesion(valores);
+
+    if (resultado?.error) {
+      f.mostrar(resultado); // Resalta el campo con error y enfoca el input
+    }
+    setCargando(false);
   }
 
   return (

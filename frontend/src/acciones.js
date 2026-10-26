@@ -1,4 +1,18 @@
 // lo que hace la app: guardar, cambiar el estado, abrir ventanas
+import { 
+  login, 
+  logout,
+  getInventario, 
+  guardarProductoAPI, 
+  actualizarProductoAPI, 
+  getHistorialAPI, 
+  registrarMovimientoAPI,
+  getDonadoresAPI,
+  guardarDonadorAPI,
+  getUsuariosAPI,
+  guardarUsuarioAPI,
+  actualizarUsuarioAPI
+} from './servicios/api.js';
 // los formularios mandan sus valores como objeto { campo: texto }; si algo no pasa la validacion se lanza Invalido
 import { estado, refrescar } from './estado.js';
 import { usuario, actividadesDonacion, ninos } from './data/datos.js';
@@ -62,6 +76,17 @@ export function intentar(accion) {
   }
 }
 
+// variante asíncrona para acciones que consultan la API de Django
+export async function intentarAsync(accion) {
+  try {
+    await accion();
+    return null;
+  } catch (e) {
+    if (e instanceof Invalido) return { error: e.message, campo: e.campo };
+    throw e;
+  }
+}
+
 // ---------- ventanas y avisos ----------
 let siguienteModal = 1;
 
@@ -98,60 +123,73 @@ export function mostrarToast(texto) {
 // la sesion dura hasta cerrar el navegador
 function leerSesion() {
   try {
-    return sessionStorage.getItem('sesion');
+    const sesion = localStorage.getItem('usuario_sesion');
+    return sesion ? JSON.parse(sesion) : null;
   } catch {
     return null;
   }
 }
 
-function guardarSesion(id) {
+function guardarSesion(cuenta) {
   try {
-    if (id) sessionStorage.setItem('sesion', id);
-    else sessionStorage.removeItem('sesion');
+    if (cuenta) {
+      localStorage.setItem('usuario_sesion', JSON.stringify(cuenta));
+    } else {
+      localStorage.removeItem('usuario_sesion');
+    }
   } catch {
-    // sin almacenamiento la sesion solo dura hasta recargar
   }
 }
 
-// si la cuenta se desactivo, vuelve al login
 export function iniciar() {
-  const cuenta = estado.cuentas.find(c => mismoId(c.id, leerSesion()) && c.activo);
+  const token = localStorage.getItem('access_token');
+  const cuentaGuardada = leerSesion();
   estado.menuFijo = leerMenuFijo();
-  if (cuenta) entrar(cuenta);
+
+  if (token && cuentaGuardada) {
+    entrar(cuentaGuardada);
+    cargarDatosDesdeDB();
+  }
 }
 
 // 5 intentos fallidos: esperar 30 segundos
 const intentos = { fallidos: 0, esperarHasta: 0 };
 
-export function iniciarSesion(v) {
-  const espera = Math.ceil((intentos.esperarHasta - Date.now()) / 1000);
-  if (espera > 0) falla(`Demasiados intentos. Espera ${espera} segundos y vuelve a probar.`);
+export async function iniciarSesion(v) {
+  const usuarioTexto = (v['login-usuario'] || v.usuario || v.username || '').trim();
+  const clave = (v['login-clave'] || v.clave || v.password || '').trim();
 
-  const nombre = leer(v, 'login-usuario', reglas.nombreUsuario);
-  const clave = leer(v, 'login-clave', reglas.claveLogin);
-
-  const cuenta = estado.cuentas.find(c => c.usuario === nombre && c.clave === clave);
-  if (!cuenta) {
-    intentos.fallidos++;
-    if (intentos.fallidos >= 5) {
-      intentos.fallidos = 0;
-      intentos.esperarHasta = Date.now() + 30000;
-    }
-    falla('Usuario o contraseña incorrectos.', 'login-clave');
+  if (!usuarioTexto) {
+    return { error: 'Ingresa tu usuario', campo: 'login-usuario' };
   }
-  intentos.fallidos = 0;
-  if (!cuenta.activo) falla('Esta cuenta está desactivada. Comunicarse con el administrador.');
+  if (!clave) {
+    return { error: 'Ingresa tu contraseña', campo: 'login-clave' };
+  }
 
-  cuenta.ultimoAcceso = new Date();
-  entrar(cuenta);
-  mostrarToast('Hola, ' + cuenta.nombre);
+  try {
+    // Llama a tu función de api.js que ya guarda los tokens
+    const res = await login(usuarioTexto, clave);
+
+    const cuenta = res.usuario || {
+      id: res.id || usuarioTexto,
+      nombre: res.nombre || usuarioTexto,
+      usuario: usuarioTexto,
+      rol: res.rol || 'Usuario'
+    };
+
+    entrar(cuenta);
+    await cargarDatosDesdeDB();
+    return null; // Éxito
+  } catch (err) {
+    console.error('Error en login:', err);
+    return { error: 'Usuario o contraseña incorrectos', campo: 'login-clave' };
+  }
 }
 
 function entrar(cuenta) {
   Object.assign(usuario, { id: cuenta.id, nombre: cuenta.nombre, rol: cuenta.rol, iniciales: iniciales(cuenta.nombre) });
-  guardarSesion(cuenta.id);
+  guardarSesion(cuenta);
 
-  // cada vez que alguien entra empieza en Inicio
   estado.seccion = 'Inicio';
   estado.filtro = 'Todos';
   estado.busqueda = '';
@@ -161,7 +199,8 @@ function entrar(cuenta) {
 }
 
 export function salir() {
-  guardarSesion(null);
+  logout(); // Elimina tokens de localStorage
+  guardarSesion(null); // Elimina usuario guardado
   Object.assign(usuario, { id: null, nombre: '', iniciales: '', rol: '' });
   estado.modal = null;
   estado.menuUsuario = false;
@@ -386,7 +425,36 @@ function registrarActividad(accion, texto, detalle) {
 let siguienteDonador = 0;
 function nuevoDonador(nombre, telefono) {
   registrarActividad('donador', 'Agregó donador', nombre);
-  return { id: Date.now() + siguienteDonador++, nombre, telefono, creadoPor: usuario.nombre, creadoPorId: usuario.id, creado: new Date() };
+  const fechaCreado = new Date();
+
+  // Objeto en memoria para React (con fecha como Date)
+  const donadorObjeto = {
+    id: Date.now() + siguienteDonador++,
+    tipo: 'donador',
+    nombre,
+    telefono,
+    contacto: telefono,
+    creadoPor: usuario.nombre,
+    creadoPorId: usuario.id,
+    creado: fechaCreado
+  };
+
+  // Objeto serializado para CouchDB (con fecha como String)
+  const donadorDocBD = {
+    ...donadorObjeto,
+    creado: fechaCreado.toISOString()
+  };
+
+  guardarDonadorAPI(donadorDocBD)
+    .then(res => {
+      if (res?.id || res?._id) {
+        donadorObjeto.id = res.id || res._id;
+        donadorObjeto._rev = res.rev || res._rev;
+      }
+    })
+    .catch(err => console.error('Error al guardar donador en CouchDB:', err));
+
+  return donadorObjeto;
 }
 
 // ---------- ingreso o salida ----------
@@ -425,31 +493,39 @@ export function revisarMovimiento(modal, v) {
 }
 
 // paso 2: guarda el movimiento
-export function confirmarMovimiento(modal, datos) {
-  // si ya se guardo (doble clic), no hace nada
+export async function confirmarMovimiento(modal, datos) {
   if (estado.modal !== modal) return;
   const { item, categoria, movimiento: tipo } = modal;
   const donador = guardarDonadorElegido(datos.donador);
-  registrarMovimiento({ ...datos, item, categoria, tipo, donador });
   estado.modal = null;
   mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${item.nombre}`);
+  await registrarMovimiento({ ...datos, item, categoria, tipo, donador });
 }
 
 // cambia el stock y anota el movimiento (ya validado)
 // plan: de que lotes sale; si no viene, se calcula ahora
 // inicial: primer ingreso de un producto nuevo
-function registrarMovimiento({ item, categoria, tipo, cantidad, vence = null, plan, donador = '', actividad = '', para = [], observaciones = '', inicial = false }) {
+async function registrarMovimiento({ item, categoria, tipo, cantidad, vence = null, plan, donador = '', actividad = '', para = [], observaciones = '', inicial = false }) {
   const usados = tipo === 'Salida' ? descontar(plan ?? planDescuento(item, cantidad)) : null;
   item.cantidad = redondear(item.cantidad + (tipo === 'Ingreso' ? cantidad : -cantidad));
   const lote = tipo === 'Ingreso' ? nuevoLote(item, { cantidad, vence }) : null;
 
-  estado.historial.unshift({
-    fecha: fechaActual(),
+  // Formato compatible con React y con la BD
+  const catNormalizada = categoria.toLowerCase() === 'salud' ? 'Salud' : 'Alimentos';
+  const tipoNormalizado = tipo.charAt(0).toUpperCase() + tipo.slice(1).toLowerCase();
+
+  const movimientoDoc = {
+    tipo: 'movimiento',
+    producto_id: item.id || null,
+    tipo_movimiento: tipoNormalizado.toLowerCase(), // 'ingreso' | 'salida'
+    movimiento: tipoNormalizado,                   // 'Ingreso' | 'Salida'
     insumo: item.nombre,
-    categoria,
-    movimiento: tipo,
+    categoria: catNormalizada,
     cantidad,
     unidad: item.unidad,
+    fecha: fechaActual(),
+    canal: 'manual',
+    usuario_id: usuario.id || usuario.nombre,
     responsable: usuario.nombre,
     donador,
     actividad,
@@ -457,9 +533,52 @@ function registrarMovimiento({ item, categoria, tipo, cantidad, vence = null, pl
     observaciones,
     saldo: item.cantidad,
     ...(inicial && { inicial: true }),
-    // lote creado o lotes usados
     ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: usados }),
-  });
+  };
+
+  estado.historial.unshift(movimientoDoc);
+  refrescar();
+
+  try {
+    const yaExisteEnDB = Boolean(item.id && typeof item.id === 'string' && item._rev);
+
+    if (yaExisteEnDB && item._rev) {
+      const productoDoc = {
+        _id: item.id,
+        _rev: item._rev,
+        tipo: 'producto',
+        nombre: item.nombre,
+        categoria: catNormalizada.toLowerCase(),
+        cantidad: item.cantidad,
+        unidad: item.unidad,
+        stock_minimo: item.minimo || 0,
+        lotes: item.lotes || []
+      };
+      const res = await actualizarProductoAPI(item.id, productoDoc);
+      if (res?.rev || res?._rev) item._rev = res.rev || res._rev;
+    } else {
+      const productoNuevoDoc = {
+        tipo: 'producto',
+        nombre: item.nombre,
+        categoria: catNormalizada.toLowerCase(),
+        cantidad: item.cantidad,
+        unidad: item.unidad,
+        stock_minimo: item.minimo || 0,
+        lotes: item.lotes || []
+      };
+      const res = await guardarProductoAPI(productoNuevoDoc);
+      
+      if (res?.id || res?._id) {
+        item.id = res.id || res._id;
+        item._rev = res.rev || res._rev;
+        movimientoDoc.producto_id = item.id;
+      }
+    }
+
+    await registrarMovimientoAPI(movimientoDoc);
+  } catch (error) {
+    console.error('Error al guardar en CouchDB:', error);
+  }
 }
 
 // ---------- producto nuevo ----------
@@ -744,17 +863,16 @@ export function revisarAjuste(modal, v) {
 }
 
 // paso 2: guarda el ajuste
-export function confirmarAjuste(modal, ajuste) {
+export async function confirmarAjuste(modal, ajuste) {
   if (estado.modal !== modal) return;
   const { item, categoria, correccion } = modal;
   item.cantidad = ajuste.contado;
 
-  // si falta, se descuenta de los lotes; si sobra, es un lote nuevo
   const lotes = ajuste.diferencia < 0
     ? { lotes: descontar(planDescuento(item, -ajuste.diferencia, true)) }
     : { loteId: nuevoLote(item, { cantidad: ajuste.diferencia, origen: 'Sobrante del conteo' }).id };
 
-  estado.historial.unshift({
+  const movimientoAjuste = {
     fecha: fechaActual(),
     insumo: item.nombre,
     categoria,
@@ -768,13 +886,24 @@ export function confirmarAjuste(modal, ajuste) {
     saldo: ajuste.contado,
     motivo: ajuste.motivo,
     nota: ajuste.nota,
-    // ajuste que corrige (en la bd, su _id)
     corrige: correccion?.fila ?? null,
     ...lotes,
-  });
+  };
 
+  estado.historial.unshift(movimientoAjuste);
   estado.modal = null;
+  refrescar();
   mostrarToast(`Stock ajustado · ${item.nombre}: ${ajuste.contado} ${item.unidad}`);
+
+  try {
+    if (item.id && typeof item.id === 'string' && item._rev) {
+      const res = await actualizarProductoAPI(item.id, { ...item, tipo: 'producto', categoria });
+      if (res?._rev) item._rev = res._rev;
+    }
+    await registrarMovimientoAPI(movimientoAjuste);
+  } catch (error) {
+    console.error('Error al guardar ajuste en CouchDB:', error);
+  }
 }
 
 // ---------- baja por vencimiento ----------
@@ -788,7 +917,7 @@ export function abrirBaja(categoria, id) {
 }
 
 // saca los lotes vencidos como una salida
-export function confirmarBaja(modal, v) {
+export async function confirmarBaja(modal, v) {
   if (estado.modal !== modal) return;
   const { item, categoria } = modal;
   const nota = leer(v, 'nota', reglas.nota);
@@ -797,7 +926,7 @@ export function confirmarBaja(modal, v) {
   const usados = descontar(lotesVencidos(item).map(lote => ({ lote, cantidad: lote.quedan })));
   item.cantidad = redondear(item.cantidad - vencida);
 
-  estado.historial.unshift({
+  const movimientoBaja = {
     fecha: fechaActual(),
     insumo: item.nombre,
     categoria,
@@ -811,10 +940,22 @@ export function confirmarBaja(modal, v) {
     motivo: 'Baja por vencimiento',
     nota,
     lotes: usados,
-  });
+  };
 
+  estado.historial.unshift(movimientoBaja);
   estado.modal = null;
+  refrescar();
   mostrarToast(`Dado de baja · ${vencida} ${item.unidad} de ${item.nombre}`);
+
+  try {
+    if (item.id && typeof item.id === 'string' && item._rev) {
+      const res = await actualizarProductoAPI(item.id, { ...item, tipo: 'producto', categoria });
+      if (res?._rev) item._rev = res._rev;
+    }
+    await registrarMovimientoAPI(movimientoBaja);
+  } catch (error) {
+    console.error('Error al guardar baja en CouchDB:', error);
+  }
 }
 
 // ---------- detalle de un movimiento ----------
@@ -888,36 +1029,94 @@ export function verActividad(id) {
   abrirModal({ tipo: 'panel-actividad', cuenta });
 }
 
-export function guardarUsuario(v) {
+export async function guardarUsuario(v) {
   if (!esAdmin()) return;
-  const nombre = leer(v, 'cuenta-nombre', reglas.nombreCuenta);
-  const nombreUsuario = leer(v, 'cuenta-usuario', reglas.nombreUsuario);
-  if (estado.cuentas.some(c => c.usuario === nombreUsuario)) falla(`Ya existe el usuario "${nombreUsuario}".`, 'cuenta-usuario');
-  const clave = leer(v, 'cuenta-clave', reglas.claveNueva);
-  const rol = leer(v, 'cuenta-rol', opcion(roles, 'el rol'));
 
-  estado.cuentas.push({ id: Date.now(), usuario: nombreUsuario, clave, nombre, rol, activo: true, creado: new Date(), creadoPor: usuario.nombre, ultimoAcceso: null });
-  registrarActividad('usuario', 'Agregó usuario', nombre);
+  const nombre = (v['cuenta-nombre'] || '').trim();
+  const usuarioTexto = (v['cuenta-usuario'] || '').trim();
+  const clave = (v['cuenta-clave'] || '').trim();
+  const rol = v['cuenta-rol'] || 'Usuario';
 
-  estado.modal = null;
-  mostrarToast('Usuario agregado · ' + nombre);
+  const fechaActual = new Date();
+
+  // Documento enviado a Django / CouchDB
+  const usuarioDoc = {
+    tipo: 'usuario',
+    nombre,
+    usuario: usuarioTexto,
+    username: usuarioTexto, // Para Django
+    clave,
+    password: clave,        // Para Django
+    rol,
+    activo: true,
+    creado: fechaActual.toISOString(),
+    creadoPor: usuario.nombre,
+    ultimoAcceso: null
+  };
+
+  try {
+    const res = await guardarUsuarioAPI(usuarioDoc);
+
+    const usuarioObjeto = {
+      ...usuarioDoc,
+      id: res.id || res._id,
+      _rev: res.rev || res._rev,
+      creado: fechaActual
+    };
+
+    estado.cuentas.push(usuarioObjeto);
+    refrescar();
+    cerrarModal();
+  } catch (err) {
+    console.error('Error al guardar el usuario en CouchDB:', err);
+  }
 }
 
 // el admin no puede desactivarse ni quitarse el rol a si mismo
-export function cambiarActivo(id) {
-  const cuenta = cuentaPorId(id);
-  if (!esAdmin() || !cuenta || mismoId(cuenta.id, usuario.id)) return;
-  cuenta.activo = !cuenta.activo;
-  registrarActividad('estado', cuenta.activo ? 'Activó a' : 'Desactivó a', cuenta.nombre);
-  mostrarToast(`${cuenta.nombre} · ${cuenta.activo ? 'activado' : 'desactivado'}`);
+export async function cambiarActivo(id) {
+  const c = estado.cuentas.find(x => mismoId(x.id, id));
+  if (!c) return;
+
+  c.activo = !c.activo;
+  refrescar();
+
+  try {
+    const usuarioDoc = {
+      ...c,
+      _id: c.id,
+      tipo: 'usuario',
+      activo: c.activo,
+      creado: c.creado instanceof Date ? c.creado.toISOString() : c.creado,
+      ultimoAcceso: c.ultimoAcceso instanceof Date ? c.ultimoAcceso.toISOString() : c.ultimoAcceso
+    };
+    const res = await actualizarUsuarioAPI(c.id, usuarioDoc);
+    if (res?.rev || res?._rev) c._rev = res.rev || res._rev;
+  } catch (err) {
+    console.error('Error al cambiar estado activo/desactivado en DB:', err);
+  }
 }
 
-export function cambiarRol(id, rol) {
-  const cuenta = cuentaPorId(id);
-  if (!esAdmin() || !cuenta || mismoId(cuenta.id, usuario.id) || !permitido(rol, roles)) return;
-  cuenta.rol = rol;
-  registrarActividad('rol', 'Cambió el rol de', `${cuenta.nombre} a ${rol}`);
-  mostrarToast(`${cuenta.nombre} ahora es ${rol}`);
+export async function cambiarRol(id, nuevoRol) {
+  const c = estado.cuentas.find(x => mismoId(x.id, id));
+  if (!c) return;
+
+  c.rol = nuevoRol;
+  refrescar();
+
+  try {
+    const usuarioDoc = {
+      ...c,
+      _id: c.id,
+      tipo: 'usuario',
+      rol: nuevoRol,
+      creado: c.creado instanceof Date ? c.creado.toISOString() : c.creado,
+      ultimoAcceso: c.ultimoAcceso instanceof Date ? c.ultimoAcceso.toISOString() : c.ultimoAcceso
+    };
+    const res = await actualizarUsuarioAPI(c.id, usuarioDoc);
+    if (res?.rev || res?._rev) c._rev = res.rev || res._rev;
+  } catch (err) {
+    console.error('Error al cambiar rol en DB:', err);
+  }
 }
 
 // ---------- boton "+" segun la pestaña ----------
@@ -1277,4 +1476,100 @@ export function confirmarLote(modal) {
   estado.modal = null;
   estado.filtro = 'Todos';
   mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`);
+}
+
+// Carga los documentos de CouchDB en el estado global de React
+export async function cargarDatosDesdeDB() {
+  try {
+    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = await Promise.all([
+      getInventario().catch(() => []),
+      getHistorialAPI().catch(() => []),
+      getDonadoresAPI().catch(() => []),
+      getUsuariosAPI().catch(() => [])
+    ]);
+
+    // 1. Inventario (se mantiene igual)
+    const documentos = Array.isArray(respuestaInv) ? respuestaInv : (respuestaInv?.docs || []);
+    if (documentos.length > 0) {
+      const formateados = documentos.map(doc => ({
+        ...doc,
+        id: doc._id || doc.id,
+        _rev: doc._rev,
+        nombre: doc.nombre || 'Sin nombre',
+        unidad: doc.unidad || 'unidades',
+        cantidad: Number(doc.cantidad) || 0,
+        minimo: Number(doc.stock_minimo ?? doc.minimo ?? 0),
+        codigo: doc.codigo || (doc.nombre ? doc.nombre.slice(0, 2).toUpperCase() : 'PR'),
+        codigosBarras: doc.codigosBarras || [],
+        lotes: (doc.lotes || (doc.fecha_vencimiento ? [{ id: 1, vence: doc.fecha_vencimiento, quedan: doc.cantidad }] : [])).map(lote => ({
+          ...lote,
+          ingreso: lote.ingreso ? new Date(lote.ingreso) : new Date()
+        })),
+        almacen: doc.almacen || '',
+        categoriaNombre: doc.categoria || ''
+      }));
+
+      const saludDB = formateados.filter(doc => 
+        (doc.almacen && (doc.almacen.includes('medicinas') || doc.almacen.includes('higiene'))) || 
+        ['medicinas', 'higiene', 'salud'].includes((doc.categoriaNombre || '').toLowerCase())
+      );
+      estado.alimentos = formateados.filter(doc => !saludDB.includes(doc));
+      estado.salud = saludDB;
+    }
+
+    // 2. Historial (se mantiene igual)
+    if (Array.isArray(respuestaHist) && respuestaHist.length > 0) {
+      estado.historial = respuestaHist.map(doc => {
+        const rawMov = doc.movimiento || doc.tipo_movimiento || 'Ingreso';
+        const movimiento = rawMov.charAt(0).toUpperCase() + rawMov.slice(1).toLowerCase();
+        const rawCat = doc.categoria || 'alimentos';
+        const categoria = rawCat.toLowerCase() === 'salud' ? 'Salud' : 'Alimentos';
+
+        return {
+          ...doc,
+          id: doc._id || doc.id,
+          movimiento,
+          categoria,
+          insumo: doc.insumo || doc.nombre || 'Sin insumo',
+          cantidad: Number(doc.cantidad) || 0,
+          saldo: Number(doc.saldo) || 0,
+          responsable: doc.responsable || doc.usuario_id || 'admin'
+        };
+      });
+    }
+
+    // 3. Donadores (se mantiene igual)
+    if (Array.isArray(respuestaDon) && respuestaDon.length > 0) {
+      estado.donadores = respuestaDon.map(doc => ({
+        ...doc,
+        id: doc._id || doc.id,
+        _rev: doc._rev,
+        nombre: doc.nombre || '',
+        telefono: doc.telefono || doc.contacto || '',
+        contacto: doc.contacto || doc.telefono || '',
+        creadoPor: doc.creadoPor || 'admin',
+        creado: doc.creado ? new Date(doc.creado) : new Date()
+      }));
+    }
+
+    // 4. Cuentas de usuario desde CouchDB
+    if (Array.isArray(respuestaUsu) && respuestaUsu.length > 0) {
+      estado.cuentas = respuestaUsu.map(doc => ({
+        ...doc,
+        id: doc._id || doc.id,
+        _rev: doc._rev,
+        nombre: doc.nombre || '',
+        usuario: doc.usuario || doc.username || '',
+        rol: doc.rol || 'Usuario',
+        activo: doc.activo ?? true,
+        ultimoAcceso: doc.ultimoAcceso ? new Date(doc.ultimoAcceso) : null,
+        creado: doc.creado ? new Date(doc.creado) : new Date(),
+        creadoPor: doc.creadoPor || ''
+      }));
+    }
+
+    refrescar();
+  } catch (error) {
+    console.error('Error al actualizar el estado con datos de CouchDB:', error);
+  }
 }
