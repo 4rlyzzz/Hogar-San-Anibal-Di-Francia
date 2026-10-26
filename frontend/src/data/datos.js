@@ -64,23 +64,24 @@ function lote(llego, vence, quedan) {
 }
 
 // cantidad = suma de sus lotes
+// codigosBarras: opcional, para registrar escaneando
 export const alimentos = [
-  { id: 1, codigo: 'LE', nombre: 'Leche evaporada Gloria', contenido: 400, medida: 'g', cantidad: 96, minimo: 40, unidad: 'latas', lotes: [lote(40, 142, 60), lote(6, 210, 36)] },
+  { id: 1, codigo: 'LE', nombre: 'Leche Evaporada Gloria', codigosBarras: ['7751271010016'], contenido: 400, medida: 'g', cantidad: 96, minimo: 40, unidad: 'latas', lotes: [lote(40, 142, 60), lote(6, 210, 36)] },
   { id: 2, codigo: 'MA', nombre: 'Manzana', cantidad: 42, minimo: 30, unidad: 'kg', lotes: [lote(20, -11, 12), lote(3, 10, 30)] },
-  { id: 3, codigo: 'AV', nombre: 'Avena 3 Ositos', cantidad: 150, minimo: 50, unidad: 'kg', consumoDiario: 3.75, lotes: [lote(17, 12, 150)] },
-  { id: 4, codigo: 'AR', nombre: 'Arroz Costeño', cantidad: 210, minimo: 100, unidad: 'kg', lotes: [lote(60, 300, 90), lote(19, 330, 120)] },
-  { id: 5, codigo: 'PO', nombre: 'Pollo entero', cantidad: 28, minimo: 40, unidad: 'kg', lotes: [lote(19, -14, 4), lote(5, null, 10), lote(1, null, 14)] },
-  { id: 6, codigo: 'LT', nombre: 'Lentejas', contenido: 1, medida: 'kg', cantidad: 12, minimo: 20, unidad: 'bolsas', lotes: [lote(50, 198, 12)] },
+  { id: 3, codigo: 'AV', nombre: 'Avena 3 Ositos', codigosBarras: ['7750243058476'], cantidad: 150, minimo: 50, unidad: 'kg', consumoDiario: 3.75, lotes: [lote(17, 12, 150)] },
+  { id: 4, codigo: 'AR', nombre: 'Arroz Costeño', codigosBarras: ['7751158001045'], cantidad: 210, minimo: 100, unidad: 'kg', lotes: [lote(60, 300, 90), lote(19, 330, 120)] },
+  { id: 5, codigo: 'PO', nombre: 'Pollo Entero', cantidad: 28, minimo: 40, unidad: 'kg', lotes: [lote(19, -14, 4), lote(5, null, 10), lote(1, null, 14)] },
+  { id: 6, codigo: 'LT', nombre: 'Lentejas', codigosBarras: ['7750885011259'], contenido: 1, medida: 'kg', cantidad: 12, minimo: 20, unidad: 'bolsas', lotes: [lote(50, 198, 12)] },
 ];
 
 // salud e higiene
 export const salud = [
-  { id: 1, codigo: 'PC', nombre: 'Paracetamol jarabe 120 mg/5 ml', contenido: 60, medida: 'ml', cantidad: 18, minimo: 10, unidad: 'frascos', lotes: [lote(30, 127, 18)] },
+  { id: 1, codigo: 'PC', nombre: 'Paracetamol Jarabe 120 mg/5 ml', codigosBarras: ['7750215004432'], contenido: 60, medida: 'ml', cantidad: 18, minimo: 10, unidad: 'frascos', lotes: [lote(30, 127, 18)] },
   { id: 2, codigo: 'AM', nombre: 'Amoxicilina 500 mg', contenido: 10, medida: 'unidades', cantidad: 6, minimo: 12, unidad: 'blísters', lotes: [lote(45, 37, 6)] },
-  { id: 3, codigo: 'PÑ', nombre: 'Pañales Huggies talla M', contenido: 40, medida: 'unidades', cantidad: 4, minimo: 10, unidad: 'paquetes', lotes: [lote(30, null, 4)] },
-  { id: 4, codigo: 'SR', nombre: 'Sales de rehidratación oral', contenido: 27.9, medida: 'g', cantidad: 34, minimo: 20, unidad: 'sobres', lotes: [lote(19, 249, 34)] },
-  { id: 5, codigo: 'AG', nombre: 'Alcohol en gel', contenido: 1, medida: 'L', cantidad: 22, minimo: 8, unidad: 'frascos', lotes: [lote(70, 158, 22)] },
-  { id: 6, codigo: 'VC', nombre: 'Vitamina C gotas', contenido: 30, medida: 'ml', cantidad: 9, minimo: 8, unidad: 'frascos', lotes: [lote(25, 12, 9)] },
+  { id: 3, codigo: 'PÑ', nombre: 'Pañales Huggies Talla M', codigosBarras: ['7702425538351'], contenido: 40, medida: 'unidades', cantidad: 4, minimo: 10, unidad: 'paquetes', lotes: [lote(30, null, 4)] },
+  { id: 4, codigo: 'SR', nombre: 'Sales de Rehidratación Oral', contenido: 27.9, medida: 'g', cantidad: 34, minimo: 20, unidad: 'sobres', lotes: [lote(19, 249, 34)] },
+  { id: 5, codigo: 'AG', nombre: 'Alcohol en Gel', codigosBarras: ['7751851004213'], contenido: 1, medida: 'L', cantidad: 22, minimo: 8, unidad: 'frascos', lotes: [lote(70, 158, 22)] },
+  { id: 6, codigo: 'VC', nombre: 'Vitamina C Gotas', contenido: 30, medida: 'ml', cantidad: 9, minimo: 8, unidad: 'frascos', lotes: [lote(25, 12, 9)] },
 ];
 
 // movimientos de prueba del ultimo año
@@ -140,11 +141,11 @@ function movimientosDePrueba() {
 // historial, del mas nuevo al mas antiguo
 export const historial = [
   { fecha: '07 oct 09:05', insumo: 'Avena 3 Ositos', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 150, unidad: 'kg', responsable: 'Almacén', donador: '', para: [] },
-  { fecha: '07 oct 08:40', insumo: 'Leche evaporada Gloria', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 12, unidad: 'latas', responsable: 'Cocina', donador: '', para: [] },
+  { fecha: '07 oct 08:40', insumo: 'Leche Evaporada Gloria', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 12, unidad: 'latas', responsable: 'Cocina', donador: '', para: [] },
   { fecha: '06 oct 18:22', insumo: 'Amoxicilina 500 mg', categoria: 'Salud', movimiento: 'Salida', cantidad: 2, unidad: 'blísters', responsable: 'Enfermería', donador: '', para: [] },
-  { fecha: '06 oct 16:10', insumo: 'Pañales Huggies talla M', categoria: 'Salud', movimiento: 'Salida', cantidad: 3, unidad: 'paquetes', responsable: 'Cuidado', donador: '', para: [] },
-  { fecha: '06 oct 11:35', insumo: 'Pollo entero', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 8, unidad: 'kg', responsable: 'Cocina', donador: '', para: [] },
-  { fecha: '05 oct 15:48', insumo: 'Sales de rehidratación oral', categoria: 'Salud', movimiento: 'Ingreso', cantidad: 40, unidad: 'sobres', responsable: 'Almacén', donador: '', para: [] },
+  { fecha: '06 oct 16:10', insumo: 'Pañales Huggies Talla M', categoria: 'Salud', movimiento: 'Salida', cantidad: 3, unidad: 'paquetes', responsable: 'Cuidado', donador: '', para: [] },
+  { fecha: '06 oct 11:35', insumo: 'Pollo Entero', categoria: 'Alimentos', movimiento: 'Salida', cantidad: 8, unidad: 'kg', responsable: 'Cocina', donador: '', para: [] },
+  { fecha: '05 oct 15:48', insumo: 'Sales de Rehidratación Oral', categoria: 'Salud', movimiento: 'Ingreso', cantidad: 40, unidad: 'sobres', responsable: 'Almacén', donador: '', para: [] },
   { fecha: '05 oct 09:12', insumo: 'Arroz Costeño', categoria: 'Alimentos', movimiento: 'Ingreso', cantidad: 120, unidad: 'kg', responsable: 'Almacén', donador: '', para: [] },
   ...movimientosDePrueba(),
 ].sort((a, b) => fechaDe(b.fecha) - fechaDe(a.fecha));

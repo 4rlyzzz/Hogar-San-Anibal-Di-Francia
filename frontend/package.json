@@ -16,8 +16,11 @@
     "vite": "^8.3.5"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.0",
+    "barcode-detector": "3.2.2",
     "react": "19.1.10",
     "react-dom": "19.1.10",
-    "write-excel-file": "4.1.1"
+    "write-excel-file": "4.1.1",
+    "zxing-wasm": "3.1.3"
   }
 }

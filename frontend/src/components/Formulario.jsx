@@ -1,6 +1,7 @@
 // piezas de los formularios de las ventanas
 import { useEffect, useRef, useState } from 'react';
 import { largos } from '../validacion.js';
+import { estado } from '../estado.js';
 import { cerrarModal, intentar } from '../acciones.js';
 import { textoPresentacion } from '../logica/comunes.js';
 import { Desplegable } from './Desplegable.jsx';
@@ -89,9 +90,22 @@ export function Fondo({ panel = false, children }) {
   );
 }
 
-export function Cabecera({ codigo, color, titulo, subtitulo }) {
+// flecha arriba a la izquierda: vuelve a la ventana anterior
+// onVolver: para volver dentro de la misma ventana (del paso 2 al paso 1)
+export function BotonVolver({ onVolver }) {
+  const volver = onVolver ?? estado.modal?.volver;
+  if (!volver) return null;
+  return (
+    <button type="button" className="btn-volver" data-accion="volver" aria-label="Volver" onClick={() => volver()}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>
+  );
+}
+
+export function Cabecera({ codigo, color, titulo, subtitulo, onVolver }) {
   return (
     <div className="modal-header">
+      <BotonVolver onVolver={onVolver} />
       <div className={`tarjeta-codigo ${color}`}>{codigo}</div>
       <div>
         <div className="modal-titulo">{titulo}</div>
@@ -102,10 +116,11 @@ export function Cabecera({ codigo, color, titulo, subtitulo }) {
   );
 }
 
+// abajo va solo la accion principal; "Cancelar" solo si arriba no hay flecha para volver
 export function Botones({ textoGuardar }) {
   return (
     <div className="modal-footer">
-      <button type="button" className="btn btn-blanco" data-accion="cerrar-modal" onClick={cerrarModal}>Cancelar</button>
+      {!estado.modal?.volver && <button type="button" className="btn btn-blanco" data-accion="cerrar-modal" onClick={cerrarModal}>Cancelar</button>}
       <button type="submit" className="btn btn-verde">{textoGuardar}</button>
     </div>
   );
@@ -121,14 +136,15 @@ export function sobreProducto(item, antes = '') {
 }
 
 // fecha de vencimiento o "No tiene fecha"
-export function CampoVencimiento() {
-  const [sinFecha, setSinFecha] = useState(false);
+// inicial: fecha ya elegida, null si no tiene fecha (al editar)
+export function CampoVencimiento({ inicial }) {
+  const [sinFecha, setSinFecha] = useState(inicial === null);
   const fecha = useRef(null);
 
   return (
     <div className="campo">
       <label htmlFor="vencimiento">VENCE</label>
-      <input id="vencimiento" name="vencimiento" type="date" ref={fecha} disabled={sinFecha} />
+      <input id="vencimiento" name="vencimiento" type="date" ref={fecha} disabled={sinFecha} defaultValue={inicial || ''} />
       <label className="check-campo">
         <input
           type="checkbox"
@@ -147,9 +163,10 @@ export function CampoVencimiento() {
 }
 
 // donador de la lista o uno nuevo; si hay donador, se pide la actividad
-export function CampoDonador({ donadores, actividades = [] }) {
-  const [donador, setDonador] = useState('');
-  const [actividad, setActividad] = useState('');
+// inicial: lo que ya se habia escrito ({ donador, actividad, ... })
+export function CampoDonador({ donadores, actividades = [], inicial = {} }) {
+  const [donador, setDonador] = useState(inicial.donador ?? '');
+  const [actividad, setActividad] = useState(inicial.actividad ?? '');
   const otra = useRef(null);
   useEffect(() => {
     if (actividad === 'otra') otra.current.focus();
@@ -168,11 +185,11 @@ export function CampoDonador({ donadores, actividades = [] }) {
       <div className="dos-columnas" id="nuevo-donador" hidden={donador !== 'nuevo'}>
         <div className="campo">
           <label>NOMBRE DEL DONADOR</label>
-          <input id="donador-nombre" name="donador-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Nombre o institución" />
+          <input id="donador-nombre" name="donador-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Nombre o institución" defaultValue={inicial['donador-nombre']} />
         </div>
         <div className="campo">
           <label>NÚMERO DE CONTACTO</label>
-          <input id="donador-telefono" name="donador-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" />
+          <input id="donador-telefono" name="donador-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" defaultValue={inicial['donador-telefono']} />
         </div>
       </div>
 
@@ -186,6 +203,7 @@ export function CampoDonador({ donadores, actividades = [] }) {
           type="text"
           maxLength={largos.actividadOtra}
           placeholder="Ej. Colecta parroquial, Kermés"
+          defaultValue={inicial['actividad-otra']}
           hidden={actividad !== 'otra'}
           ref={otra}
         />
@@ -196,9 +214,11 @@ export function CampoDonador({ donadores, actividades = [] }) {
 
 // solo en salidas de Salud: a quien o a quienes se les dio
 // sin nadie elegido es uso general
-export function CampoPara({ ninos = [] }) {
-  const [elegidos, setElegidos] = useState([]);
-  const [nombreOtro, setNombreOtro] = useState('');
+// inicial: nombres ya elegidos (al editar); uno que no esta en la lista va como "otro"
+export function CampoPara({ ninos = [], inicial = [] }) {
+  const deFuera = inicial.find(n => !ninos.includes(n));
+  const [elegidos, setElegidos] = useState(() => [...inicial.filter(n => ninos.includes(n)), ...(deFuera ? ['otro'] : [])]);
+  const [nombreOtro, setNombreOtro] = useState(deFuera ?? '');
   const otro = useRef(null);
   const conOtro = elegidos.includes('otro');
   useEffect(() => {
@@ -237,6 +257,7 @@ export function CampoPara({ ninos = [] }) {
         placeholder="Nombre del niño o niña"
         hidden={!conOtro}
         ref={otro}
+        defaultValue={deFuera}
         onInput={e => setNombreOtro(e.target.value)}
       />
       <small>Puedes elegir a varios niños.</small>
@@ -245,11 +266,11 @@ export function CampoPara({ ninos = [] }) {
 }
 
 // texto libre opcional de los ingresos y salidas
-export function CampoObservaciones({ ejemplo }) {
+export function CampoObservaciones({ ejemplo, inicial = '' }) {
   return (
     <div className="campo">
       <label htmlFor="observaciones">OBSERVACIONES (OPCIONAL)</label>
-      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} />
+      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} defaultValue={inicial} />
     </div>
   );
 }

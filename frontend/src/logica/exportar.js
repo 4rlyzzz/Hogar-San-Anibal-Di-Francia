@@ -31,7 +31,7 @@ const columnasHistorial = [
   { header: negrita('Observaciones'), width: 30, cell: f => texto(f.observaciones || '') },
 ];
 
-// 'Leche evaporada Gloria' -> 'leche-evaporada-gloria'
+// 'Leche Evaporada Gloria' -> 'leche-evaporada-gloria'
 function paraArchivo(texto) {
   return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

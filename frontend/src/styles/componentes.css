@@ -2895,3 +2895,568 @@ button.uf-usuario:hover b {
 .fila-presentacion .desplegable {
   width: auto;
 }
+
+/* ---------- registrar varios productos ---------- */
+.opciones-grupo {
+  margin-top: 2px;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8b9a95;
+}
+
+.modal-lote {
+  width: 560px;
+}
+
+.lote-vacio {
+  padding: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: #7c8b86;
+}
+
+/* a mano: buscador y productos */
+.lote-buscador {
+  max-width: none;
+  background: #f9fbfa;
+  border-color: #e0e7e4;
+}
+
+.lote-buscador:focus-within {
+  border-color: #a9dcc6;
+  background: #fff;
+}
+
+.lote-buscador svg {
+  color: #8b9a95;
+}
+
+.lote-productos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.lote-producto {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #edf1f0;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+}
+
+.lote-producto:hover:not(:disabled) {
+  background: #f7faf9;
+  border-color: #d5dedb;
+}
+
+.lote-producto:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lote-producto .tarjeta-codigo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  font-size: 12px;
+}
+
+.lote-producto b {
+  display: block;
+  font-size: 13px;
+  color: #17211f;
+}
+
+.lote-producto small {
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+/* codigo: camara */
+.escaner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  max-height: 300px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #17211f;
+}
+
+.escaner video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* guia donde poner el codigo */
+.escaner-marco {
+  position: absolute;
+  inset: 30% 12%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  box-shadow: 0 0 0 999px rgba(23, 33, 31, 0.35);
+}
+
+.escaner-marco::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  background: #3fb98f;
+  animation: linea-escaner 1.6s ease-in-out infinite;
+}
+
+@keyframes linea-escaner {
+  0%, 100% { transform: translateY(-28px); }
+  50% { transform: translateY(28px); }
+}
+
+.escaner-aviso {
+  position: absolute;
+  inset: auto 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #54635e;
+}
+
+.fila-codigo {
+  display: flex;
+  gap: 8px;
+}
+
+.fila-codigo .btn {
+  flex: none;
+  padding: 0 16px;
+  border-radius: 12px;
+}
+
+.leidos {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.leidos li {
+  padding: 8px 11px;
+  border-radius: 10px;
+  animation: aparecer 0.2s ease;
+}
+
+.leido-ok {
+  background: #effaf5;
+  color: #2d8e6c;
+}
+
+.leido-nuevo {
+  background: #fdf2e3;
+  color: #b9691b;
+}
+
+/* voz: boton de mantener presionado */
+.voz {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 2px;
+  text-align: center;
+}
+
+.microfono {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border: 0;
+  border-radius: 50%;
+  background: #e6f5ee;
+  color: #2d8e6c;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.microfono svg {
+  width: 38px;
+  height: 38px;
+}
+
+.microfono:hover:not(:disabled) {
+  background: #d8f0e5;
+}
+
+.microfono.grabando {
+  background: #e05a4f;
+  color: #fff;
+  transform: scale(1.08);
+  animation: grabando 1.2s ease-out infinite;
+}
+
+.microfono:disabled {
+  background: #eef2f1;
+  color: #a9b7b2;
+  cursor: not-allowed;
+}
+
+@keyframes grabando {
+  0% { box-shadow: 0 0 0 0 rgba(224, 90, 79, 0.45); }
+  100% { box-shadow: 0 0 0 22px rgba(224, 90, 79, 0); }
+}
+
+.voz-estado {
+  font-weight: 600;
+  font-size: 13px;
+  color: #54635e;
+}
+
+.voz-aviso {
+  font-size: 12px;
+  color: #b9691b;
+}
+
+.entendido {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f9fbfa;
+  border: 1px solid #eef2f1;
+}
+
+.entendido > span {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8b9a95;
+  text-transform: uppercase;
+}
+
+.entendido ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.entendido li b {
+  font-weight: 700;
+}
+
+/* debajo: lo que falta (naranja) y los datos dichos (gris) */
+.entendido li small {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.entendido li small.entendido-aviso {
+  font-weight: 600;
+  color: #b9691b;
+}
+
+/* la lista */
+.lote-lista,
+.lote-resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lote-fila {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #e5eae8;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.lote-fila.con-problema {
+  border-color: #f0c9c5;
+  background: #fffafa;
+}
+
+.lote-fila .tarjeta-codigo {
+  width: 36px;
+  height: 36px;
+  font-size: 12px;
+}
+
+.lote-fila-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.lote-fila-info b {
+  font-size: 13px;
+}
+
+.lote-fila-info small {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.lote-problema {
+  flex-basis: 100%;
+  font-weight: 600;
+  font-size: 11px;
+  color: #c1423c;
+}
+
+.lote-fila-cantidad {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lote-fila-cantidad b {
+  display: block;
+  font-size: 18px;
+}
+
+.lote-fila-cantidad span {
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.lote-fila-botones {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icono {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5eae8;
+  border-radius: 10px;
+  background: #fff;
+  color: #54635e;
+}
+
+.btn-icono:hover {
+  border-color: #bcdaeb;
+  background: #f2f8fc;
+  color: #2f7fb5;
+}
+
+.btn-icono-rojo:hover {
+  border-color: #f0c9c5;
+  background: #fbeceb;
+  color: #c1423c;
+}
+
+.btn-anadir {
+  padding: 12px;
+  border: 1.5px dashed #9cc7e2;
+  border-radius: 14px;
+  background: #f2f8fc;
+  color: #23698f;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.btn-anadir:hover {
+  background: #e7f1f8;
+}
+
+/* confirmar */
+.lote-resumen li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f9fbfa;
+}
+
+.lote-resumen li > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lote-resumen b {
+  font-size: 13px;
+}
+
+.lote-resumen small {
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.lote-cambio {
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lote-cambio em {
+  display: block;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.lote-cambio.ingreso em { color: #2d8e6c; }
+.lote-cambio.salida em { color: #c96b16; }
+
+/* editar una fila */
+.lote-origen {
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #f2f8fc;
+  font-size: 12px;
+  color: #23698f;
+}
+
+.lote-crear {
+  align-self: flex-start;
+  font-size: 12px;
+}
+
+/* flecha para volver a la ventana anterior (arriba a la izquierda) */
+.btn-volver {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-right: -2px;
+  border: 1px solid #e5eae8;
+  border-radius: 10px;
+  background: #fff;
+  color: #54635e;
+}
+
+.btn-volver:hover {
+  border-color: #bcdaeb;
+  background: #f2f8fc;
+  color: #2f7fb5;
+}
+
+/* el producto nuevo se guardara con su tamaño en el nombre */
+.aviso-nombre {
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #f2f8fc;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #23698f;
+}
+
+/* descarga del modelo de voz (la primera vez) */
+.voz-descarga {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 340px;
+  font-size: 12px;
+  color: #54635e;
+}
+
+.voz-descarga-barra {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e6f5ee;
+}
+
+.voz-descarga-barra div {
+  height: 100%;
+  border-radius: 99px;
+  background: #3fb98f;
+  transition: width 0.3s ease;
+}
+
+/* con que se esta reconociendo la voz */
+.voz-modo {
+  font-size: 11px;
+  color: #8b9a95;
+}
+
+/* una sola explicacion arriba de la lista */
+.lote-ayuda {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #fbeceb;
+  font-weight: 600;
+  font-size: 12px;
+  color: #c1423c;
+}
+
+.lote-ayuda svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* codigo de barras: ayuda y botones de linterna y foto */
+.escaner-ayuda {
+  margin-top: -6px;
+  text-align: center;
+  font-size: 12px;
+  color: #7c8b86;
+}
+
+.escaner-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.escaner-botones .btn {
+  flex: 1 1 180px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.escaner-botones .ocupado {
+  opacity: 0.6;
+  cursor: progress;
+}

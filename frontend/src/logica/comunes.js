@@ -88,13 +88,35 @@ export function textoTotal(item) {
   return `${Math.round(total * 100) / 100} ${medida} en total`;
 }
 
+// ---------- nombres de productos con el mismo formato ----------
+// 'leche evaporada gloria 1 l' -> 'Leche Evaporada Gloria 1 L'
+// las palabras cortas (de, en, con...) van en minuscula, salvo al inicio;
+// las medidas quedan como se escriben (g, kg, ml, L) y lo que ya trae mayusculas no se toca (UHT, M)
+const conectores = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'u', 'en', 'con', 'sin', 'para', 'por', 'a', 'al', 'x']);
+const medidasEscritas = { g: 'g', kg: 'kg', mg: 'mg', ml: 'ml', l: 'L', cc: 'cc', oz: 'oz', lb: 'lb', gr: 'g' };
+
+export function formatoNombre(texto) {
+  const limpio = String(texto).trim();
+  // todo en mayusculas (bloq mayus): las palabras largas se normalizan, las siglas cortas (UHT) quedan
+  const todoMayuscula = limpio === limpio.toUpperCase() && /\p{L}{4}/u.test(limpio);
+  return limpio.split(/\s+/).map((original, i) => {
+    const palabra = todoMayuscula && original.length > 3 ? original.toLowerCase() : original;
+    const minuscula = palabra.toLowerCase();
+    if (minuscula in medidasEscritas && i > 0) return medidasEscritas[minuscula];
+    // solo letras y todo en minuscula: se le pone mayuscula
+    if (palabra !== minuscula || !/^\p{L}+$/u.test(palabra)) return palabra;
+    if (i > 0 && conectores.has(minuscula)) return minuscula;
+    return minuscula.charAt(0).toUpperCase() + minuscula.slice(1);
+  }).join(' ');
+}
+
 // 'Leche Évaporada' -> ['leche', 'evaporada']
 export function palabras(texto) {
   return texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
 }
 
 // distancia entre dos palabras (letras distintas)
-function distancia(a, b) {
+export function distancia(a, b) {
   const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     let diagonal = fila[0];
@@ -109,7 +131,7 @@ function distancia(a, b) {
 }
 
 // parecidas: empiezan igual o tienen 1 o 2 errores
-function palabraParecida(escrita, otra) {
+export function palabraParecida(escrita, otra) {
   if (otra.startsWith(escrita)) return true;
   if (escrita.length < 4) return false;
   return distancia(escrita, otra) <= (escrita.length >= 8 ? 2 : 1);

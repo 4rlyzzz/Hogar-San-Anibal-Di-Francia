@@ -341,6 +341,25 @@
     animation: subir 0.28s ease;
   }
 
+  /* lista de varios productos: sin el cuadrito para que entre el nombre */
+  .lote-fila {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .lote-fila .tarjeta-codigo {
+    display: none;
+  }
+
+  .btn-icono {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lote-productos {
+    max-height: 52vh;
+  }
+
   .campo input,
   .campo textarea,
   .desplegable-campo,
@@ -679,5 +698,12 @@
   .menu-movil button.activo {
     background: #e6f5ee;
     color: #2d8e6c;
+  }
+}
+
+@media (max-width: 767px) {
+  .btn-volver {
+    width: 40px;
+    height: 40px;
   }
 }

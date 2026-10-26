@@ -18,6 +18,8 @@ export const estado = {
   busqueda: '',
   // ventana abierta: { tipo, ... } o null
   modal: null,
+  // lista de varios productos que se esta armando (o null)
+  lote: null,
   toast: null,
   menuUsuario: false,
   menuFijo: false,

@@ -144,6 +144,35 @@ export function telefono(entrada) {
   return { ok: true, valor };
 }
 
+// codigo de barras: EAN/UPC son solo numeros; code 128 y 39 pueden tener letras
+export function codigoBarras(entrada, { opcional = false } = {}) {
+  const valor = limpiarTexto(entrada).replace(/\s/g, '');
+  if (!valor) return opcional ? { ok: true, valor: '' } : { ok: false, error: 'Escribe o escanea el código.' };
+  if (!/^[0-9A-Za-z-]{4,32}$/.test(valor)) return { ok: false, error: 'El código solo puede tener de 4 a 32 números o letras, sin espacios ni signos.' };
+  // EAN-13, UPC-A y EAN-8 traen un ultimo numero de control: si no cuadra, se escribio mal
+  if (/^(\d{8}|\d{12}|\d{13})$/.test(valor) && !digitoControlValido(valor)) {
+    return { ok: false, error: 'Ese código no es válido: revisa que esté bien escrito (sobre todo el último número).' };
+  }
+  return { ok: true, valor };
+}
+
+function digitoControlValido(codigo) {
+  const numeros = codigo.split('').map(Number);
+  const control = numeros.pop();
+  // desde la derecha: el primero pesa 3, el siguiente 1, y asi
+  const suma = numeros.reverse().reduce((total, n, i) => total + n * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (suma % 10)) % 10 === control;
+}
+
+// lo que se dijo: solo se usa para buscar productos, no se guarda
+// los signos raros se cambian por espacios en vez de rechazar todo el texto
+export function dictado(entrada) {
+  const valor = limpiarTexto(entrada).replace(/[^\p{Script=Latin}0-9 .,;:\-/()%+&'°#¿?¡!]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!valor) return { ok: false, error: 'No hay nada que revisar: graba o escribe lo que se dijo.' };
+  if (valor.length > 500) return { ok: false, error: 'Es demasiado texto de una vez: graba en partes (hasta 500 caracteres).' };
+  return { ok: true, valor };
+}
+
 export function nombreUsuario(entrada) {
   const valor = limpiarTexto(entrada).toLowerCase();
   if (!valor) return { ok: false, error: 'Escribe el usuario.' };
@@ -196,6 +225,9 @@ export const reglas = {
   claveLogin,
   vencimiento,
   fechaFiltro,
+  codigoBarras: entrada => codigoBarras(entrada),
+  codigoBarrasOpcional: entrada => codigoBarras(entrada, { opcional: true }),
+  dictado,
 };
 
 // maxlength de los inputs
@@ -209,6 +241,8 @@ export const largos = {
   nino: 30,
   nota: 120,
   observaciones: 200,
+  codigoBarras: 32,
+  dictado: 500,
   nombreCuenta: 40,
   nombreUsuario: 20,
   clave: 64,

@@ -5,13 +5,14 @@ import { usuario, actividadesDonacion, ninos } from './data/datos.js';
 import { reglas, cantidadDe, numero as reglaNumero, opcion, limpiarTexto, fechaFiltro, largos } from './validacion.js';
 import {
   iniciales, nombreCategoria, motivoCorreccion, motivosAjuste, movimientosEntre, palabras, coincideNombre, palabrasEnComun,
-  pluralizar, envaseSingular, mismoId, redondear, fechaActual, ninosDe,
+  pluralizar, envaseSingular, mismoId, redondear, fechaActual, ninosDe, textoPresentacion, formatoNombre,
 } from './logica/comunes.js';
 import { planDescuento, descontar, nuevoLote, disponible, cantidadVencida, lotesVencidos } from './logica/lotes.js';
 import { inventarioVacio } from './logica/inventario.js';
 import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js';
 import { listaDonadores, actividadesDe } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
+import { interpretarDictado } from './logica/dictado.js';
 
 // envases (en plural)
 export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes', 'botellas', 'frascos', 'sobres'];
@@ -64,13 +65,20 @@ export function intentar(accion) {
 // ---------- ventanas y avisos ----------
 let siguienteModal = 1;
 
+// si se abre encima de otra ventana, el boton "volver" regresa a ella
+// volver: null para que no tenga; una funcion para decidir a donde vuelve
 export function abrirModal(modal) {
-  estado.modal = { ...modal, id: siguienteModal++ };
+  const anterior = estado.modal;
+  const volver = 'volver' in modal ? modal.volver : anterior ? () => abrirModal({ ...anterior, volver: anterior.volver ?? null }) : null;
+  estado.modal = { ...modal, volver, id: siguienteModal++ };
   estado.menuUsuario = false;
   refrescar();
 }
 
+// alCerrar: la ventana decide a donde volver (por ejemplo, de editar a la lista)
 export function cerrarModal() {
+  const alCerrar = estado.modal?.alCerrar;
+  if (alCerrar) return alCerrar();
   estado.modal = null;
   refrescar();
 }
@@ -304,12 +312,6 @@ export function productosParecidos(nombre) {
   return todos.filter(({ item }) => coincideNombre(nombre, item.nombre)).slice(0, 3);
 }
 
-// mismo nombre sin contar tildes ni mayusculas
-function productoIgual(nombre) {
-  const buscado = palabras(nombre).join(' ');
-  return productosParecidos(nombre).find(({ item }) => palabras(item.nombre).join(' ') === buscado);
-}
-
 // ---------- campos que se repiten ----------
 // para quienes es la salida ([] = uso general)
 function leerPara(v) {
@@ -380,9 +382,11 @@ function registrarActividad(accion, texto, detalle) {
   estado.actividad.unshift({ id: Date.now(), fecha: new Date(), quienId: usuario.id, quien: usuario.nombre, accion, texto, detalle });
 }
 
+// varios en el mismo momento no repiten id
+let siguienteDonador = 0;
 function nuevoDonador(nombre, telefono) {
   registrarActividad('donador', 'Agregó donador', nombre);
-  return { id: Date.now(), nombre, telefono, creadoPor: usuario.nombre, creadoPorId: usuario.id, creado: new Date() };
+  return { id: Date.now() + siguienteDonador++, nombre, telefono, creadoPor: usuario.nombre, creadoPorId: usuario.id, creado: new Date() };
 }
 
 // ---------- ingreso o salida ----------
@@ -426,36 +430,62 @@ export function confirmarMovimiento(modal, datos) {
   if (estado.modal !== modal) return;
   const { item, categoria, movimiento: tipo } = modal;
   const donador = guardarDonadorElegido(datos.donador);
+  registrarMovimiento({ ...datos, item, categoria, tipo, donador });
+  estado.modal = null;
+  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${item.nombre}`);
+}
 
-  const cambio = tipo === 'Ingreso' ? datos.cantidad : -datos.cantidad;
-  item.cantidad = redondear(item.cantidad + cambio);
-  const lote = tipo === 'Ingreso' ? nuevoLote(item, { cantidad: datos.cantidad, vence: datos.vence }) : null;
+// cambia el stock y anota el movimiento (ya validado)
+// plan: de que lotes sale; si no viene, se calcula ahora
+// inicial: primer ingreso de un producto nuevo
+function registrarMovimiento({ item, categoria, tipo, cantidad, vence = null, plan, donador = '', actividad = '', para = [], observaciones = '', inicial = false }) {
+  const usados = tipo === 'Salida' ? descontar(plan ?? planDescuento(item, cantidad)) : null;
+  item.cantidad = redondear(item.cantidad + (tipo === 'Ingreso' ? cantidad : -cantidad));
+  const lote = tipo === 'Ingreso' ? nuevoLote(item, { cantidad, vence }) : null;
 
   estado.historial.unshift({
     fecha: fechaActual(),
     insumo: item.nombre,
     categoria,
     movimiento: tipo,
-    cantidad: datos.cantidad,
+    cantidad,
     unidad: item.unidad,
     responsable: usuario.nombre,
     donador,
-    actividad: datos.actividad,
-    para: datos.para,
-    observaciones: datos.observaciones,
+    actividad,
+    para,
+    observaciones,
     saldo: item.cantidad,
+    ...(inicial && { inicial: true }),
     // lote creado o lotes usados
-    ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: descontar(datos.plan) }),
+    ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: usados }),
   });
-
-  estado.modal = null;
-  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${item.nombre}`);
 }
 
 // ---------- producto nuevo ----------
-export function abrirProducto(categoria) {
-  if (!permitido(categoria, ['Alimentos', 'Salud'])) return;
-  abrirModal({ tipo: 'producto', categoria });
+// se crea desde un ingreso, cuando lo que entra no esta registrado:
+// aqui solo se define (nombre, presentacion, minimo, codigo); cuanto entra, vence y donador van en su fila
+// desde: { itemId } para completar esa fila (sin itemId se agrega una), nombre y codigoBarras para empezar
+export function abrirProducto(categoria, desde = {}) {
+  if (estado.lote?.tipo !== 'Ingreso' || !permitido(categoria, ['Alimentos', 'Salud'])) return;
+  abrirModal({ ...desde, tipo: 'producto', categoria });
+}
+
+// producto que tiene ese codigo de barras: { item, categoria } o null
+export function productoPorCodigo(codigo) {
+  for (const categoria of ['Alimentos', 'Salud']) {
+    const item = listaDe(categoria).find(i => i.codigosBarras?.includes(codigo));
+    if (item) return { item, categoria };
+  }
+  return null;
+}
+
+// codigo de barras que no tenga otro producto
+function leerCodigoBarras(v, campo, { opcional = false, delProducto = null } = {}) {
+  const codigo = leer(v, campo, opcional ? reglas.codigoBarrasOpcional : reglas.codigoBarras);
+  const otro = codigo && productoPorCodigo(codigo);
+  if (otro && otro.item !== delProducto) falla(`Ese código ya es de "${otro.item.nombre}".`, campo);
+  return codigo;
 }
 
 // { unidad, envase, contenido, medida }
@@ -480,46 +510,129 @@ function leerPresentacion(v, categoria) {
   return { unidad, envase: singular, contenido, medida };
 }
 
+// ---------- nombres de productos con varios tamaños ----------
+// el historial, los filtros y las uniones reconocen al producto por su nombre, asi que dos tamaños no pueden llamarse igual
+// la regla: si un producto tiene un solo tamaño, el nombre va sin tamaño ("Avena 3 Ositos");
+// si tiene varios, TODOS llevan su tamaño ("Leche Evaporada Gloria 400 g" y "Leche Evaporada Gloria 1 L")
+
+// el envase sale de la unidad (latas -> Lata), no hace falta compararlo
+function mismaPresentacion(a, b) {
+  const igual = (x, y) => String(x ?? '').toLowerCase() === String(y ?? '').toLowerCase();
+  return igual(a.unidad, b.unidad) && igual(a.contenido, b.contenido) && igual(a.medida, b.medida);
+}
+
+// lo que se agrega al nombre: '400 g', o 'Bolsa 1 L' si hace falta distinguir el envase; suelto: 'a Granel'
+function sufijoTamano(p, conEnvase = false) {
+  if (!p.contenido) return 'a Granel';
+  const envase = p.envase || envaseSingular(p.unidad);
+  return `${conEnvase && envase ? `${envase} ` : ''}${redondear(p.contenido)} ${p.medida === 'l' ? 'L' : p.medida}`;
+}
+
+// el nombre sin su tamaño al final: 'Leche Evaporada Gloria 400 g' -> 'Leche Evaporada Gloria'
+function baseDe(nombre, p) {
+  for (const sufijo of [sufijoTamano(p, true), sufijoTamano(p)]) {
+    if (nombre.toLowerCase().endsWith(` ${sufijo.toLowerCase()}`)) return nombre.slice(0, -sufijo.length - 1);
+  }
+  return nombre;
+}
+
+const mismaBase = (a, b) => palabras(a).join(' ') === palabras(b).join(' ');
+
+// los tamaños que ya hay de ese producto, incluidos los nuevos de la lista: [{ item, categoria, nuevo }]
+function familia(base, exceptoItem) {
+  const existentes = todosLosProductos().filter(({ item }) => mismaBase(baseDe(item.nombre, item), base)).map(p => ({ ...p, nuevo: false }));
+  const enLista = (estado.lote?.items ?? [])
+    .filter(x => x.id !== exceptoItem && x.productoNuevo && mismaBase(baseDe(x.productoNuevo.nombre, x.productoNuevo), base))
+    .map(x => ({ item: x.productoNuevo, categoria: x.categoria, nuevo: true }));
+  return [...existentes, ...enLista];
+}
+
+// con que nombre se guardaria un producto nuevo de esa presentacion:
+// { nombre, renombrar: [{ item, categoria, nuevo, nombre }] } o { repetido } si ya existe de ese mismo tamaño
+export function nombreDisponible(escrito, presentacion, exceptoItem = null) {
+  const base = baseDe(formatoNombre(escrito), presentacion);
+  const hermanos = familia(base, exceptoItem);
+  if (hermanos.length === 0) return { nombre: base, renombrar: [] };
+
+  const repetido = hermanos.find(h => mismaPresentacion(h.item, presentacion));
+  if (repetido) return { repetido };
+
+  // el nuevo con su tamaño; si otro ya se llama asi (mismo tamaño, otro envase), se agrega el envase
+  let nombre = `${base} ${sufijoTamano(presentacion)}`;
+  if (hermanos.some(h => mismaBase(h.item.nombre, nombre))) nombre = `${base} ${sufijoTamano(presentacion, true)}`;
+
+  // los que todavia no tienen el tamaño en el nombre, lo reciben
+  const renombrar = hermanos
+    .filter(h => mismaBase(h.item.nombre, base))
+    .map(h => {
+      const suyo = `${base} ${sufijoTamano(h.item)}`;
+      return { ...h, nombre: mismaBase(suyo, nombre) ? `${base} ${sufijoTamano(h.item, true)}` : suyo };
+    });
+  return { nombre, renombrar };
+}
+
+// cambia el nombre de un producto y de sus movimientos (el historial lo reconoce por el nombre)
+function renombrarProducto(item, categoria, nombre) {
+  const viejo = item.nombre;
+  if (viejo === nombre) return;
+  for (const fila of estado.historial) if (fila.categoria === categoria && fila.insumo === viejo) fila.insumo = nombre;
+  if (estado.historialFiltros.producto === viejo) estado.historialFiltros.producto = nombre;
+  item.nombre = nombre;
+}
+
+// el producto queda en su fila hasta confirmar el ingreso; recien ahi se crea
 export function guardarProducto(modal, v) {
   const { categoria } = modal;
-  if (!permitido(categoria, ['Alimentos', 'Salud'])) return;
+  const lote = estado.lote;
+  if (lote?.tipo !== 'Ingreso' || !permitido(categoria, ['Alimentos', 'Salud'])) return;
 
-  const nombre = leer(v, 'nombre', reglas.nombreProducto);
-  const igual = productoIgual(nombre);
-  if (igual) falla(`Ya existe "${igual.item.nombre}" en ${nombreCategoria(igual.categoria)}. Para sumar stock, registra un ingreso de ese producto.`, 'nombre');
-
+  const escrito = leer(v, 'nombre', reglas.nombreProducto);
   const { unidad, envase, contenido, medida } = leerPresentacion(v, categoria);
-  const cantidad = leer(v, 'cantidad', cantidadDe(unidad));
+  const otros = lote.items.filter(x => x.id !== modal.itemId && x.productoNuevo);
+
+  const libre = nombreDisponible(escrito, { unidad, envase, contenido, medida }, modal.itemId);
+  if (libre.repetido) {
+    const { item, categoria: suya, nuevo } = libre.repetido;
+    falla(nuevo
+      ? `"${item.nombre}" de ese tamaño ya se está creando en esta lista.`
+      : `Ya existe "${item.nombre}" (${textoPresentacion(item) || `suelto, en ${item.unidad}`}) en ${nombreCategoria(suya)}: elígelo en vez de crearlo otra vez.`, 'nombre');
+  }
+  const { nombre } = libre;
+  for (const r of libre.renombrar) {
+    if (!reglas.nombreProducto(r.nombre).ok) falla(`Con su tamaño, "${r.item.nombre}" quedaría "${r.nombre}", que es muy largo: escribe un nombre más corto.`, 'nombre');
+  }
+  if (!reglas.nombreProducto(nombre).ok) falla(`Con su tamaño el nombre quedaría "${nombre}", que es muy largo: acórtalo.`, 'nombre');
   const minimo = leer(v, 'minimo', cantidadDe(unidad, { que: 'el stock mínimo', puedeSerCero: true }));
-  const vence = leerVencimiento(v);
-  const actividad = leerActividad(v);
-  const donador = guardarDonadorElegido(elegirDonador(v));
+  const codigoBarras = leerCodigoBarras(v, 'codigo-barras', { opcional: true });
+  if (codigoBarras && otros.some(x => x.productoNuevo.codigosBarras?.includes(codigoBarras))) falla('Ese código ya es de otro producto nuevo de esta lista.', 'codigo-barras');
 
-  const item = { id: Date.now(), codigo: nombre.slice(0, 2).toUpperCase(), nombre, envase, contenido, medida, cantidad, minimo, unidad };
-  const lote = nuevoLote(item, { cantidad, vence });
-  listaDe(categoria).push(item);
+  // los nuevos de esta lista se renombran ya; los que existen, al confirmar
+  for (const r of libre.renombrar) if (r.nuevo) r.item.nombre = r.nombre;
 
-  // el producto nuevo cuenta como su primer ingreso
-  estado.historial.unshift({
-    fecha: fechaActual(),
-    insumo: nombre,
-    categoria,
-    movimiento: 'Ingreso',
-    cantidad,
-    unidad,
-    responsable: usuario.nombre,
-    donador,
-    actividad,
-    para: [],
-    saldo: cantidad,
-    inicial: true,
-    loteId: lote.id,
-    vence,
-  });
+  const productoNuevo = { nombre, codigo: nombre.slice(0, 2).toUpperCase(), envase, contenido, medida, unidad, minimo, cantidad: 0, lotes: [] };
+  if (codigoBarras) productoNuevo.codigosBarras = [codigoBarras];
 
-  estado.modal = null;
-  estado.filtro = 'Todos';
-  mostrarToast('Producto agregado · ' + nombre);
+  let x = lote.items.find(i => i.id === modal.itemId);
+  if (!x) {
+    x = nuevoItem({});
+    lote.items.push(x);
+  }
+  Object.assign(x, { categoria, productoId: null, productoNuevo, dudas: [], avisos: {} });
+  abrirItem(x.id, { nuevo: !modal.itemId });
+}
+
+// "ya existe algo parecido": se usa ese producto en la fila
+export function usarExistente(modal, categoria, id) {
+  const item = productoPorId(categoria, id);
+  const lote = estado.lote;
+  if (!item || !lote) return;
+  let x = lote.items.find(i => i.id === modal.itemId);
+  if (!x) {
+    x = nuevoItem({});
+    lote.items.push(x);
+  }
+  Object.assign(x, { categoria, productoId: item.id, productoNuevo: null, dudas: [], avisos: {} });
+  abrirItem(x.id, { nuevo: !modal.itemId });
 }
 
 // ---------- detalle de un producto ----------
@@ -808,13 +921,360 @@ export function cambiarRol(id, rol) {
 }
 
 // ---------- boton "+" segun la pestaña ----------
+// en Inicio, inventario e Historial deja elegir: registrar varios, producto nuevo, donador...
 export function agregar() {
-  if (estado.seccion === 'Alimentos' || estado.seccion === 'Salud') abrirProducto(estado.seccion);
-  else if (estado.seccion === 'Donadores') abrirModal({ tipo: 'donador' });
+  if (estado.seccion === 'Donadores') abrirModal({ tipo: 'donador' });
   else if (estado.seccion === 'Usuarios') abrirUsuario();
   else abrirModal({ tipo: 'elegir' });
 }
 
 export function abrirUsuario() {
   if (esAdmin()) abrirModal({ tipo: 'usuario' });
+}
+
+// ---------- registrar varios productos a la vez (a mano, con codigo o con voz) ----------
+// estado.lote mientras se arma la lista: { tipo, items }
+// cada item (una fila):
+//   origen: 'manual' | 'codigo' | 'voz'; dicho: lo que se dijo; codigoBarras: lo escaneado
+//   categoria + productoId, o productoNuevo (se crea al confirmar); dudas: claves de productos parecidos
+//   cantidad; vence: undefined = falta decidir, null = no tiene fecha
+//   donador: '' (compra del hogar), id del donador o 'nuevo' (con donadorNuevo { nombre, telefono })
+//   donadorDicho: nombre que se dijo y no se encontro; actividad
+//   para, observaciones
+//   avisos: { presentacion: { texto, unidad, tamano } } lo dicho que no esta registrado ("bolsas de 10 L"); se quita al editar la fila
+//   nombreDicho: palabras del producto, para proponer el nombre si hay que crearlo
+
+let siguienteItem = 1;
+
+function nuevoItem(datos) {
+  return {
+    id: siguienteItem++, origen: 'manual', categoria: null, productoId: null, productoNuevo: null, dudas: [], cantidad: null, vence: undefined,
+    donador: '', donadorNuevo: null, donadorDicho: '', actividad: '', para: [], observaciones: '', dicho: '', nombreDicho: '', codigoBarras: '', avisos: {},
+    ...datos,
+  };
+}
+
+// 'Alimentos:3' identifica un producto en los desplegables; 'nuevo' es el producto que se esta creando
+export const claveProducto = (categoria, id) => `${categoria}:${id}`;
+
+export function productoPorClave(clave) {
+  const corte = String(clave).indexOf(':');
+  if (corte < 0) return null;
+  const categoria = clave.slice(0, corte);
+  if (!permitido(categoria, ['Alimentos', 'Salud'])) return null;
+  const item = productoPorId(categoria, clave.slice(corte + 1));
+  return item ? { item, categoria } : null;
+}
+
+export function todosLosProductos() {
+  return [...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })), ...estado.salud.map(item => ({ item, categoria: 'Salud' }))];
+}
+
+// { item, categoria, nuevo } o null si todavia no se sabe que producto es
+export function productoDeItem(x) {
+  if (x.productoNuevo) return { item: x.productoNuevo, categoria: x.categoria, nuevo: true };
+  if (x.productoId == null) return null;
+  const item = productoPorId(x.categoria, x.productoId);
+  return item ? { item, categoria: x.categoria, nuevo: false } : null;
+}
+
+export function nombreItem(x) {
+  const producto = productoDeItem(x);
+  if (producto) return producto.item.nombre;
+  if (x.dicho) return `"${x.dicho}"`;
+  return `Código ${x.codigoBarras}`;
+}
+
+// nombre del donador de una fila ('' si es compra del hogar)
+export function donadorDeItem(x) {
+  if (x.donador === 'nuevo') return x.donadorNuevo?.nombre ?? '';
+  if (!x.donador) return '';
+  return estado.donadores.find(d => mismoId(d.id, x.donador))?.nombre ?? '';
+}
+
+function filasDelMismo(x) {
+  return estado.lote.items.filter(o => o.productoId != null && !o.productoNuevo && o.categoria === x.categoria && mismoId(o.productoId, x.productoId));
+}
+
+// lo que falta corregir en una fila (vacio si esta lista)
+export function problemasItem(x) {
+  const { tipo } = estado.lote;
+  const producto = productoDeItem(x);
+  // avisos cortos: arriba de la lista se explica que se corrigen con el lapiz
+  if (!producto) {
+    if (x.dudas.length) return [`¿Cuál es? ${x.dudas.map(c => productoPorClave(c)?.item.nombre).filter(Boolean).join(' o ')}`];
+    if (!x.dicho) return ['Código sin producto'];
+    return ['No está en los productos'];
+  }
+
+  const { item } = producto;
+  const problemas = [];
+  // lo dicho que no esta registrado (se quita al guardar la fila)
+  const otra = x.avisos.presentacion;
+  if (otra) problemas.push(`No está registrada ${otra.texto.startsWith('de ') ? '' : 'en '}${otra.texto}`);
+  if (x.cantidad == null) problemas.push('Falta la cantidad');
+  else if (!otra) {
+    const r = cantidadDe(item.unidad)(String(x.cantidad));
+    if (!r.ok) problemas.push(r.error);
+  }
+  if (tipo === 'Ingreso') {
+    if (x.vence === undefined) problemas.push('Falta la fecha de vencimiento');
+    if (x.donadorDicho && !x.donador) problemas.push(`Donador "${x.donadorDicho}" no registrado`);
+    if (x.donador && !x.actividad) problemas.push('Falta la actividad de la donación');
+    // "donacion libre" sin decir quien: es una donacion, falta el donador
+    if (!x.donador && !x.donadorDicho && x.actividad) problemas.push(`Dijiste "${x.actividad}": falta el donador`);
+  }
+  if (tipo === 'Salida' && x.cantidad) {
+    const filas = filasDelMismo(x);
+    const total = redondear(filas.reduce((s, o) => s + (o.cantidad || 0), 0));
+    if (total > disponible(item)) problemas.push(`Solo hay ${disponible(item)} ${item.unidad}${filas.length > 1 ? ` (en la lista suman ${total})` : ''}`);
+  }
+  return problemas;
+}
+
+// ---------- abrir y moverse entre pantallas ----------
+// empieza una lista; si ya habia una del mismo tipo, sigue con esa
+export function empezarLote(tipo) {
+  if (!permitido(tipo, ['Ingreso', 'Salida'])) return;
+  if (estado.lote?.tipo !== tipo) estado.lote = { tipo, items: [] };
+  if (estado.lote.items.length) abrirLista();
+  else abrirMetodos();
+}
+
+export function descartarLote() {
+  estado.lote = null;
+  estado.modal = null;
+  mostrarToast('Lista descartada');
+}
+
+// cerrar con × o fuera de la ventana: la lista no se pierde, sigue en el boton "+"
+function cerrarLote() {
+  estado.modal = null;
+  if (estado.lote?.items.length) mostrarToast('La lista quedó guardada: la encuentras en el botón +');
+  else {
+    estado.lote = null;
+    refrescar();
+  }
+}
+
+export function abrirLista() {
+  if (estado.lote) abrirModal({ tipo: 'lote-lista', volver: null, alCerrar: cerrarLote });
+}
+
+// volver desde elegir metodo: a la lista, o al menu "+" si todavia no hay nada
+export function abrirMetodos() {
+  if (!estado.lote) return;
+  const volver = () => {
+    if (estado.lote?.items.length) return abrirLista();
+    estado.lote = null;
+    abrirModal({ tipo: 'elegir', volver: null });
+  };
+  abrirModal({ tipo: 'lote-metodo', volver, alCerrar: cerrarLote });
+}
+
+export function abrirMetodo(metodo) {
+  if (estado.lote && permitido(metodo, ['manual', 'codigo', 'voz'])) abrirModal({ tipo: `lote-${metodo}`, volver: abrirMetodos, alCerrar: cerrarLote });
+}
+
+// ---------- agregar a la lista ----------
+// a mano: se agrega y se abre para poner la cantidad
+export function agregarManual(categoria, id) {
+  const item = productoPorId(categoria, id);
+  if (!item || !estado.lote) return;
+  const x = nuevoItem({ categoria, productoId: item.id });
+  estado.lote.items.push(x);
+  abrirItem(x.id, { nuevo: true });
+}
+
+// codigo escaneado o escrito; el mismo codigo otra vez suma 1
+// devuelve el nombre del producto o null si el codigo no esta registrado
+export function agregarCodigo(texto) {
+  if (!estado.lote) return null;
+  const codigo = leer({ codigo: texto }, 'codigo', reglas.codigoBarras);
+  const encontrado = productoPorCodigo(codigo);
+  const repetido = estado.lote.items.find(x => x.origen === 'codigo' && x.codigoBarras === codigo);
+  if (repetido) repetido.cantidad = redondear((repetido.cantidad ?? 0) + 1);
+  else {
+    estado.lote.items.push(nuevoItem({
+      origen: 'codigo',
+      codigoBarras: codigo,
+      cantidad: 1,
+      ...(encontrado && { categoria: encontrado.categoria, productoId: encontrado.item.id }),
+    }));
+  }
+  refrescar();
+  return encontrado ? encontrado.item.nombre : null;
+}
+
+// lo que se dijo (o se escribio) se separa en productos, cada uno con su donador
+export function agregarDictado(v) {
+  const lote = estado.lote;
+  if (!lote) return;
+  const texto = leer(v, 'dictado', reglas.dictado);
+  const entendido = interpretarDictado(texto, todosLosProductos(), { donadores: estado.donadores, actividades: opcionesActividad() });
+  if (entendido.length === 0) falla('No reconocí ningún producto. Prueba con algo como "dos kilos de arroz y tres latas de leche".', 'dictado');
+
+  const esIngreso = lote.tipo === 'Ingreso';
+  for (const r of entendido) {
+    lote.items.push(nuevoItem({
+      origen: 'voz',
+      dicho: r.dicho.slice(0, 100),
+      nombreDicho: r.nombreDicho.slice(0, largos.nombreProducto),
+      cantidad: r.cantidad,
+      dudas: r.dudas.map(d => claveProducto(d.categoria, d.item.id)),
+      avisos: r.presentacion ? { presentacion: r.presentacion } : {},
+      // la fecha dicha, si es valida (no pasada ni muy lejana)
+      ...(esIngreso && r.vence && reglas.vencimiento(r.vence).ok && { vence: r.vence }),
+      ...(r.producto && { categoria: r.producto.categoria, productoId: r.producto.item.id }),
+      // quien dono solo cuenta en los ingresos
+      ...(esIngreso && {
+        donador: r.donador ? String(r.donador.id) : '',
+        donadorDicho: r.donadorDicho.slice(0, largos.nombreDonador),
+        actividad: r.actividad ?? '',
+      }),
+    }));
+  }
+  abrirLista();
+}
+
+// ---------- editar o quitar una fila ----------
+// nuevo: si se vuelve sin guardar, la fila se quita y se regresa a donde se eligio (la busqueda)
+export function abrirItem(id, { nuevo = false } = {}) {
+  if (!estado.lote?.items.some(x => x.id === id)) return;
+  const anterior = estado.modal;
+  const volver = () => {
+    if (nuevo) {
+      estado.lote.items = estado.lote.items.filter(x => x.id !== id);
+      if (anterior) return abrirModal({ ...anterior, volver: anterior.volver ?? null });
+    }
+    if (estado.lote.items.length) abrirLista();
+    else abrirMetodos();
+  };
+  abrirModal({ tipo: 'lote-item', itemId: id, volver, alCerrar: volver });
+}
+
+export function quitarItem(id) {
+  if (!estado.lote) return;
+  estado.lote.items = estado.lote.items.filter(x => x.id !== id);
+  refrescar();
+}
+
+// donador de una fila: { donador, donadorNuevo, actividad }
+function leerDonadorItem(v, x) {
+  const elegido = v.donador ?? '';
+  if (elegido === '') return { donador: '', donadorNuevo: null, actividad: '' };
+  if (elegido !== 'nuevo') {
+    if (!estado.donadores.some(d => mismoId(d.id, elegido))) falla('Elige el donador de la lista.', 'donador');
+    return { donador: elegido, donadorNuevo: null, actividad: leerActividad(v) };
+  }
+  // un donador nuevo puede repetirse en otras filas de la misma lista: se crea una vez
+  const { nombre, telefono } = leerDonadorNuevo(v, 'donador-nombre', 'donador-telefono');
+  const enOtraFila = estado.lote.items.find(o => o !== x && o.donadorNuevo && o.donadorNuevo.nombre.toLowerCase() === nombre.toLowerCase());
+  if (enOtraFila && enOtraFila.donadorNuevo.telefono !== telefono) falla(`"${nombre}" ya está en otra fila con otro número.`, 'donador-telefono');
+  return { donador: 'nuevo', donadorNuevo: { nombre, telefono }, actividad: leerActividad(v) };
+}
+
+export function guardarItem(modal, v) {
+  const lote = estado.lote;
+  const x = lote?.items.find(i => i.id === modal.itemId);
+  if (!x) return;
+  const esIngreso = lote.tipo === 'Ingreso';
+
+  // 'nuevo' deja el producto que se esta creando
+  const clave = v.producto ?? '';
+  const elegido = clave === 'nuevo' && x.productoNuevo ? { item: x.productoNuevo, categoria: x.categoria, nuevo: true } : productoPorClave(clave);
+  if (!elegido) falla('Elige qué producto es.', 'producto');
+  const { item, categoria } = elegido;
+
+  // el codigo escaneado se le guardara a este producto
+  const duenoCodigo = x.codigoBarras && productoPorCodigo(x.codigoBarras);
+  if (duenoCodigo && duenoCodigo.item !== item) falla(`El código ${x.codigoBarras} es de "${duenoCodigo.item.nombre}".`, 'producto');
+
+  const cantidad = leer(v, 'cantidad', cantidadDe(item.unidad));
+  if (!esIngreso) {
+    const otras = redondear(filasDelMismo({ categoria, productoId: item.id }).filter(o => o !== x).reduce((s, o) => s + (o.cantidad || 0), 0));
+    if (cantidad + otras > disponible(item)) {
+      falla(`Solo se pueden sacar ${disponible(item)} ${item.unidad}${otras ? ` y en otras filas ya van ${otras}` : ''}.`, 'cantidad');
+    }
+  }
+  const vence = esIngreso ? leerVencimiento(v) : undefined;
+  const donador = esIngreso ? leerDonadorItem(v, x) : { donador: '', donadorNuevo: null, actividad: '' };
+  const para = !esIngreso && categoria === 'Salud' ? leerPara(v) : [];
+  const observaciones = leer(v, 'observaciones', reglas.observaciones);
+
+  Object.assign(x, {
+    categoria, productoId: elegido.nuevo ? null : item.id, productoNuevo: elegido.nuevo ? x.productoNuevo : null, cantidad, vence, ...donador, donadorDicho: '', para, observaciones, dudas: [], avisos: {},
+  });
+
+  // "mismo donador para los que no tienen": ahorra elegirlo fila por fila (no toca a los que dijeron otro)
+  if (esIngreso && v['donador-todos'] && x.donador) {
+    for (const o of lote.items) {
+      // la actividad que ya tenia la fila ("donacion libre") se respeta
+      if (o !== x && !o.donador && !o.donadorDicho) Object.assign(o, { donador: x.donador, donadorNuevo: x.donadorNuevo, actividad: o.actividad || x.actividad, donadorDicho: '' });
+    }
+  }
+  abrirLista();
+}
+
+// ---------- revisar y guardar todo ----------
+// paso 1: todas las filas listas
+export function revisarLote() {
+  const lote = estado.lote;
+  if (!lote) return;
+  if (lote.items.length === 0) falla('La lista está vacía: añade al menos un producto.');
+  for (const x of lote.items) {
+    const problemas = problemasItem(x);
+    if (problemas.length) falla(`${nombreItem(x)}: ${problemas[0]}. Corrígelo con el lápiz.`);
+    // la fecha pudo pasar mientras se armaba la lista
+    if (x.vence) {
+      const r = reglas.vencimiento(x.vence);
+      if (!r.ok) falla(`${nombreItem(x)}: ${r.error}`);
+    }
+  }
+}
+
+// paso 2: guarda un movimiento por fila
+export function confirmarLote(modal) {
+  if (estado.modal !== modal || !estado.lote) return;
+  const { tipo, items } = estado.lote;
+  // donadores y productos nuevos se crean una sola vez aunque esten en varias filas
+  const donadoresNuevos = new Map();
+  const productosNuevos = new Map();
+
+  for (const x of items) {
+    let { item, categoria, nuevo } = productoDeItem(x);
+    if (nuevo) {
+      if (!productosNuevos.has(x.productoNuevo)) {
+        // los otros tamaños que todavia no lo tienen reciben su tamaño en el nombre
+        const { renombrar = [] } = nombreDisponible(x.productoNuevo.nombre, x.productoNuevo, x.id);
+        for (const r of renombrar) if (!r.nuevo) renombrarProducto(r.item, r.categoria, r.nombre);
+        const creado = { ...x.productoNuevo, id: Date.now() + productosNuevos.size, lotes: [] };
+        listaDe(categoria).push(creado);
+        productosNuevos.set(x.productoNuevo, creado);
+      }
+      item = productosNuevos.get(x.productoNuevo);
+    }
+    // la proxima vez el codigo ya se reconoce
+    if (x.codigoBarras && !productoPorCodigo(x.codigoBarras)) item.codigosBarras = [...(item.codigosBarras ?? []), x.codigoBarras];
+
+    let donador = '';
+    if (tipo === 'Ingreso' && x.donador === 'nuevo') {
+      const clave = x.donadorNuevo.nombre.toLowerCase();
+      if (!donadoresNuevos.has(clave)) {
+        estado.donadores.push(nuevoDonador(x.donadorNuevo.nombre, x.donadorNuevo.telefono));
+        donadoresNuevos.set(clave, x.donadorNuevo.nombre);
+      }
+      donador = donadoresNuevos.get(clave);
+    } else if (tipo === 'Ingreso') donador = donadorDeItem(x);
+
+    registrarMovimiento({
+      item, categoria, tipo, cantidad: x.cantidad, vence: x.vence ?? null, donador, actividad: donador ? x.actividad : '', para: x.para, observaciones: x.observaciones,
+      inicial: nuevo,
+    });
+  }
+
+  estado.lote = null;
+  estado.modal = null;
+  estado.filtro = 'Todos';
+  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`);
 }

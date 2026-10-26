@@ -14,7 +14,7 @@ import { fechaVence } from '../logica/lotes.js';
 import { problemasDe, coloresPrioridad, orden, grupos } from '../logica/alertas.js';
 import { actividadesDe } from '../logica/donadores.js';
 import { actividadDe, coloresActividad, nombreDia } from '../logica/actividad.js';
-import { Fondo } from './Formulario.jsx';
+import { Fondo, BotonVolver } from './Formulario.jsx';
 import { Desplegable } from './Desplegable.jsx';
 import { MovimientosEntre, clasesMovimiento } from './Comunes.jsx';
 import { TablaLotes } from './Lotes.jsx';
@@ -90,6 +90,7 @@ export function PanelProducto({ modal }) {
     <Fondo panel>
       <aside className="panel-actividad panel-movimiento" aria-label={item.nombre}>
         <div className="panel-actividad-cabecera">
+          <BotonVolver />
           <span className={`tarjeta-codigo ${colorVencimiento(item)}`}>{item.codigo}</span>
           <div>
             <div className="modal-titulo">{item.nombre}</div>
@@ -236,6 +237,7 @@ export function PanelMovimiento({ modal }) {
     <Fondo panel>
       <aside className="panel-actividad panel-movimiento" aria-label="Detalle del movimiento">
         <div className="panel-actividad-cabecera">
+          <BotonVolver />
           <span className={`pastilla mov-tipo ${clasesMovimiento[fila.movimiento]}`}>{fila.inicial ? 'Registro inicial' : fila.movimiento}</span>
           <div>
             <div className="modal-titulo">{fila.insumo}</div>
@@ -289,6 +291,7 @@ export function PanelDonador({ modal }) {
     <Fondo panel>
       <aside className="panel-actividad" aria-label={`Donaciones de ${d.nombre}`}>
         <div className="panel-actividad-cabecera">
+          <BotonVolver />
           <span className="avatar avatar-verde">{iniciales(d.nombre)}</span>
           <div>
             <div className="modal-titulo">{d.nombre}</div>
@@ -361,6 +364,7 @@ export function PanelActividad({ modal }) {
     <Fondo panel>
       <aside className="panel-actividad" aria-label={`Actividad de ${cuenta.nombre}`}>
         <div className="panel-actividad-cabecera">
+          <BotonVolver />
           <span className={`avatar ${cuenta.rol === 'Administrador' ? '' : 'avatar-verde'}`}>{iniciales(cuenta.nombre)}</span>
           <div>
             <div className="modal-titulo">{esPropio ? 'Mi actividad' : cuenta.nombre}</div>
@@ -420,6 +424,7 @@ export function PanelAlertas({ alertas }) {
     <Fondo panel>
       <aside className="panel-actividad" aria-label="Alertas">
         <div className="panel-actividad-cabecera">
+          <BotonVolver />
           <div>
             <div className="modal-titulo">Alertas</div>
             <div className="modal-sub">{urgentes ? `${urgentes} urgentes de ${alertas.length}` : `${alertas.length} para revisar`}</div>

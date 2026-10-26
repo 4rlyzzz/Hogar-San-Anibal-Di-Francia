@@ -84,3 +84,23 @@ export const IconoFiltro = () => (
 export const IconoAjustar = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 7h9M18 7h1M5 17h1M10 17h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><circle cx="16" cy="7" r="2" stroke="currentColor" strokeWidth="1.8"/><circle cx="8" cy="17" r="2" stroke="currentColor" strokeWidth="1.8"/></svg>
 );
+
+export const IconoMano = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V10m0-.5V4.5a1.5 1.5 0 0 1 3 0V10m0-3.5a1.5 1.5 0 0 1 3 0V13c0 4.4-2.6 7-6.3 7-2.7 0-4.2-1.3-5.6-3.6L4.3 13a1.5 1.5 0 0 1 2.6-1.5L8 13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+);
+
+export const IconoCodigo = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h2M18 4h2a1 1 0 0 1 1 1v2M21 17v2a1 1 0 0 1-1 1h-2M6 20H4a1 1 0 0 1-1-1v-2M7 8v8M10 8v8M13 8v8M15.5 8v8M17.5 8v8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+);
+
+export const IconoMicrofono = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.7"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+);
+
+export const IconoEditar = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+);
+
+export const IconoBorrar = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+);

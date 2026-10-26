@@ -21,10 +21,11 @@ quitarPantallaCarga();
 // celular: deslizar hacia abajo cierra el panel
 activarDeslizar(hoja => (hoja.classList.contains('panel-filtros') ? cerrarFiltros() : cerrarModal()));
 
-// Escape cierra la ventana, los filtros y el menu del usuario
+// Escape vuelve a la ventana anterior (o la cierra), y cierra los filtros y el menu del usuario
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (estado.modal) cerrarModal();
+  if (estado.modal?.volver) estado.modal.volver();
+  else if (estado.modal) cerrarModal();
   if (estado.filtrosAbiertos) cerrarFiltros();
   if (estado.menuUsuario) cambiar(x => (x.menuUsuario = false));
 });

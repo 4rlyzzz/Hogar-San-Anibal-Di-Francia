@@ -2,6 +2,7 @@
 import { estado } from '../estado.js';
 import { calcularAlertas } from '../logica/alertas.js';
 import { ModalMovimiento, ModalProducto, ModalAjuste, ModalUnir, ModalBaja, ModalElegir, ModalDonador, ModalUsuario } from './Modales.jsx';
+import { ModalLoteMetodo, ModalLoteManual, ModalLoteCodigo, ModalLoteVoz, ModalLoteLista, ModalLoteItem } from './Lote.jsx';
 import { PanelProducto, PanelMovimiento, PanelDonador, PanelActividad, PanelAlertas } from './Paneles.jsx';
 
 const ventanas = {
@@ -13,6 +14,12 @@ const ventanas = {
   elegir: ModalElegir,
   donador: ModalDonador,
   usuario: ModalUsuario,
+  'lote-metodo': ModalLoteMetodo,
+  'lote-manual': ModalLoteManual,
+  'lote-codigo': ModalLoteCodigo,
+  'lote-voz': ModalLoteVoz,
+  'lote-lista': ModalLoteLista,
+  'lote-item': ModalLoteItem,
   'panel-producto': PanelProducto,
   'panel-movimiento': PanelMovimiento,
   'panel-donador': PanelDonador,

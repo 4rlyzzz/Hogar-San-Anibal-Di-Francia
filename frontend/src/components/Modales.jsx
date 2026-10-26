@@ -2,15 +2,15 @@
 import { useEffect, useState } from 'react';
 import { usuario } from '../data/datos.js';
 import { largos, decimalesDe, cantidadDe } from '../validacion.js';
-import { IconoAlimentos, IconoSalud, IconoDonadores, IconoUsuarios } from '../assets/iconos.jsx';
+import { IconoDonadores, IconoUsuarios, IconoIngreso, IconoSalida } from '../assets/iconos.jsx';
 import { estado } from '../estado.js';
 import {
-  cerrarModal, abrirModal, abrirProducto, abrirUsuario, abrirMovimiento, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
+  cerrarModal, abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
-  guardarDonador, guardarUsuario, roles, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
+  guardarDonador, guardarUsuario, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
 } from '../acciones.js';
 import {
-  nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, redondear, fechaActual, textoPara,
+  nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, pluralizar, redondear, fechaActual, textoPara, formatoNombre,
 } from '../logica/comunes.js';
 import { cantidadVencida, disponible, lotesVencidos, fechaLote, fechaVence } from '../logica/lotes.js';
 import { useFormulario, CampoNumero, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
@@ -144,7 +144,7 @@ function ConfirmarMovimiento({ modal, datos, onVolver }) {
 
   return (
     <form className="modal" id="form-movimiento-confirmar" noValidate onSubmit={e => { e.preventDefault(); confirmarMovimiento(modal, datos); }}>
-      <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item, esIngreso ? 'Revisa el ingreso' : 'Revisa la salida')} />
+      <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item, esIngreso ? 'Revisa el ingreso' : 'Revisa la salida')} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
         <Cambio antes={item.cantidad} despues={despues} signo={esIngreso ? '+' : '−'} cantidad={datos.cantidad} clase={esIngreso ? 'ingreso' : 'salida'} unidad={item.unidad} />
@@ -161,25 +161,28 @@ function ConfirmarMovimiento({ modal, datos, onVolver }) {
       </div>
 
       <div className="modal-footer">
-        <button type="button" className="btn btn-blanco" data-accion="volver-movimiento" onClick={onVolver}>Volver y corregir</button>
         <button type="submit" className="btn btn-verde">Confirmar {esIngreso ? 'ingreso' : 'salida'}</button>
       </div>
     </form>
   );
 }
 
-// ---------- producto nuevo ----------
+// ---------- producto nuevo (dentro de un ingreso) ----------
+// solo se define el producto; cuanto entra, vence y donador se ponen en su fila de la lista
 export function ModalProducto({ modal }) {
   const { categoria } = modal;
   const esSalud = categoria === 'Salud';
   const f = useFormulario();
-  const [parecidos, setParecidos] = useState([]);
+  const [parecidos, setParecidos] = useState(() => (modal.nombre ? productosParecidos(modal.nombre) : []));
   // lo que hace falta para mostrar u ocultar campos y la vista previa
-  const [envase, setEnvase] = useState('');
-  const [medida, setMedida] = useState(esSalud ? medidasSalud[0] : medidasAlimentos[0]);
+  // presentacion: la que se dijo por voz ("bolsas de 10 L"), para empezar ya rellenado
+  const dicha = modal.presentacion;
+  const medidas = esSalud ? medidasSalud : medidasAlimentos;
+  const [envase, setEnvase] = useState(() => ((esSalud ? envasesSalud : envasesAlimentos).includes(dicha?.unidad) ? dicha.unidad : ''));
+  const [medida, setMedida] = useState(() => (medidas.includes(dicha?.tamano?.medida) ? dicha.tamano.medida : medidas[0]));
   const [envaseOtro, setEnvaseOtro] = useState('');
-  const [cantidad, setCantidad] = useState('');
-  const [contenido, setContenido] = useState('');
+  const [contenido, setContenido] = useState(dicha?.tamano ? String(dicha.tamano.valor) : '');
+  const [nombre, setNombre] = useState(modal.nombre ?? '');
 
   const suelto = envase.startsWith('suelto:');
   // decimales segun lo elegido
@@ -189,9 +192,8 @@ export function ModalProducto({ modal }) {
   // al cambiar los decimales, corrige lo que ya estaba escrito
   useEffect(() => {
     const campos = f.formulario.current.elements;
-    for (const campo of [campos.cantidad, campos.minimo]) filtrarNumero(campo, decimalesCantidad);
+    filtrarNumero(campos.minimo, decimalesCantidad);
     filtrarNumero(campos['contenido-envase'], decimalesContenido);
-    setCantidad(campos.cantidad.value);
     setContenido(campos['contenido-envase'].value);
   }, [decimalesCantidad, decimalesContenido, f.formulario]);
 
@@ -199,37 +201,51 @@ export function ModalProducto({ modal }) {
     if (envase === 'otro') f.formulario.current.elements['envase-otro'].focus();
   }, [envase, f.formulario]);
 
-  // vista previa: "Caja x 10 tabletas · 100 tabletas en total"
+  // vista previa: "Lata x 400 g"
   const numero = texto => {
     const r = cantidadDe('kg')(texto);
     return r.ok ? r.valor : 0;
   };
   let previa = '';
   const nombreEnvase = envase === 'otro' ? envaseOtro : envase && envaseSingular(envase);
-  if (suelto) {
-    previa = `Suelto, se cuenta en ${envase.slice(7)}`;
-  } else if (envase && nombreEnvase && numero(contenido)) {
-    const total = numero(cantidad) ? ` · ${redondear(numero(cantidad) * numero(contenido))} ${medida} en total` : '';
-    previa = `${nombreEnvase} x ${numero(contenido)} ${medida}${total}`;
-  }
+  if (suelto) previa = `Suelto, se cuenta en ${envase.slice(7)}`;
+  else if (envase && nombreEnvase && numero(contenido)) previa = `${nombreEnvase} x ${numero(contenido)} ${medida}`;
+
+  // como se guardara el nombre: con mayusculas parejas y, si hay otros tamaños, con su tamaño
+  let avisoNombre = '';
+  const escrito = nombre.trim();
+  if (escrito && previa) {
+    const presentacion = suelto
+      ? { unidad: envase.slice(7), envase: null, contenido: null, medida: null }
+      : { unidad: envase === 'otro' ? pluralizar(envaseOtro) : envase, envase: nombreEnvase, contenido: numero(contenido), medida };
+    const libre = nombreDisponible(escrito, presentacion, modal.itemId);
+    if (libre.repetido) avisoNombre = 'Ya existe con este mismo tamaño: elígelo arriba en vez de crearlo.';
+    else if (libre.renombrar.length) {
+      const todos = [...libre.renombrar.map(r => r.nombre), libre.nombre].map(n => `"${n}"`);
+      avisoNombre = `Ya hay de otro tamaño. Para no confundirlos, se guardarán como ${todos.slice(0, -1).join(', ')} y ${todos.at(-1)}.`;
+    } else if (libre.nombre !== escrito) avisoNombre = `Se guardará como "${libre.nombre}".`;
+  } else if (escrito && formatoNombre(escrito) !== escrito) avisoNombre = `Se guardará como "${formatoNombre(escrito)}".`;
+
+  // al cambiar de categoria se conserva de donde vino
+  const desde = { itemId: modal.itemId, nombre: modal.nombre, codigoBarras: modal.codigoBarras, presentacion: modal.presentacion, volver: modal.volver, alCerrar: modal.alCerrar };
 
   return (
     <Fondo>
       <form className="modal" id="form-producto" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarProducto(modal, v))}>
-        <Cabecera codigo="+" color={esSalud ? 'azul' : 'verde'} titulo="Agregar producto" subtitulo={nombreCategoria(categoria)} />
+        <Cabecera codigo="+" color={esSalud ? 'azul' : 'verde'} titulo="Producto nuevo" subtitulo="Se guarda junto con el ingreso" />
 
         <div className="modal-cuerpo">
           <div className="campo">
             <label>CATEGORÍA</label>
             <div className="filtros selector-categoria">
               {['Alimentos', 'Salud'].map(c => (
-                <button key={c} type="button" className={c === categoria ? 'activo' : ''} data-accion="agregar-producto" onClick={() => abrirProducto(c)}>{c}</button>
+                <button key={c} type="button" className={c === categoria ? 'activo' : ''} data-accion="categoria-producto" onClick={() => abrirProducto(c, desde)}>{nombreCategoria(c)}</button>
               ))}
             </div>
           </div>
 
           <div className="campo">
-            <label>NOMBRE</label>
+            <label htmlFor="nombre">NOMBRE</label>
             <input
               id="nombre"
               name="nombre"
@@ -237,17 +253,20 @@ export function ModalProducto({ modal }) {
               maxLength={largos.nombreProducto}
               autoComplete="off"
               autoFocus
-              placeholder={esSalud ? 'Ej. Ibuprofeno 400 mg' : 'Ej. Fideos Don Vittorio'}
-              onInput={e => setParecidos(productosParecidos(e.target.value))}
+              defaultValue={modal.nombre}
+              placeholder={esSalud ? 'Ej. Ibuprofeno 400 mg' : 'Ej. Leche Evaporada Gloria'}
+              onInput={e => {
+                setNombre(e.target.value);
+                setParecidos(productosParecidos(e.target.value));
+              }}
             />
-            <div id="coincidencias"><Coincidencias parecidos={parecidos} /></div>
+            <div id="coincidencias"><Coincidencias parecidos={parecidos} onElegir={(cat, id) => usarExistente(modal, cat, id)} /></div>
           </div>
 
-          {/* "10 cajas de 10 tabletas" o "25 kg" */}
+          {/* "caja de 10 tabletas", "lata de 400 g" o "suelto en kg" */}
           <div className="campo">
-            <label htmlFor="cantidad">CANTIDAD QUE ENTRA</label>
+            <label htmlFor="envase">EN QUÉ VIENE Y CUÁNTO TRAE CADA UNO</label>
             <div className={`fila-presentacion ${!envase || suelto ? 'sin-envase' : ''}`} id="fila-presentacion">
-              <CampoNumero id="cantidad" decimales={decimalesCantidad} placeholder="0" aria-label="Cantidad" onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
               <Desplegable
                 id="envase"
                 name="envase"
@@ -264,7 +283,7 @@ export function ModalProducto({ modal }) {
                 ]}
               />
               <span className="fila-presentacion-de">de</span>
-              <CampoNumero id="contenido-envase" decimales={decimalesContenido} placeholder={esSalud ? '10' : '1'} aria-label="Cuánto trae cada uno" onAviso={f.setError} onInput={e => setContenido(e.target.value)} />
+              <CampoNumero id="contenido-envase" decimales={decimalesContenido} placeholder={esSalud ? '10' : '400'} aria-label="Cuánto trae cada uno" defaultValue={dicha?.tamano?.valor ?? ''} onAviso={f.setError} onInput={e => setContenido(e.target.value)} />
               <Desplegable id="medida" name="medida" aria-label="Medida" valor={medida} onChange={setMedida} opciones={(esSalud ? medidasSalud : medidasAlimentos).map(m => [m, m])} />
             </div>
             <input
@@ -276,43 +295,45 @@ export function ModalProducto({ modal }) {
               hidden={envase !== 'otro'}
               onInput={e => setEnvaseOtro(e.target.value.trim())}
             />
-            <small>{esSalud ? 'Ej. 5 blísters de 10 unidades · 3 frascos de 60 ml · 4 paquetes de 40 unidades' : 'Ej. 12 bolsas de 1 kg · 24 latas de 400 g · 25 kg sueltos'}</small>
+            <small>Cada tamaño es un producto distinto: la lata de 400 g y la caja de 1 L se registran por separado.</small>
           </div>
 
           <p className="presentacion-previa" id="presentacion-previa" hidden={!previa}>{previa}</p>
+          {avisoNombre && <p className="aviso-nombre" id="aviso-nombre">{avisoNombre}</p>}
 
           <div className="dos-columnas">
             <div className="campo">
-              <label>STOCK MÍNIMO</label>
+              <label htmlFor="minimo">STOCK MÍNIMO</label>
               <CampoNumero id="minimo" decimales={decimalesCantidad} placeholder="0" onAviso={f.setError} />
             </div>
-            <CampoVencimiento />
+            <div className="campo">
+              <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
+              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="Ej. 7751271010016" />
+            </div>
           </div>
-
-          <CampoDonador donadores={estado.donadores} actividades={opcionesActividad()} />
 
           <MensajeError texto={f.error} />
         </div>
 
-        <Botones textoGuardar="Agregar producto" />
+        <Botones textoGuardar="Crear y seguir" />
       </form>
     </Fondo>
   );
 }
 
-// productos parecidos al que se agrega; tocar uno abre su ingreso (no se crea repetido)
-function Coincidencias({ parecidos }) {
+// productos parecidos al que se crea: tocar uno lo usa en vez de crear uno repetido
+function Coincidencias({ parecidos, onElegir }) {
   if (parecidos.length === 0) return null;
   return (
     <div className="coincidencias">
-      <span>Ya existe algo parecido. ¿Es alguno de estos?</span>
+      <span>Ya existe algo parecido. ¿Es alguno de estos? Si es de otro tamaño, sigue y créalo.</span>
       {parecidos.map(({ item, categoria }) => (
-        <button key={item.id} type="button" className="coincidencia" data-accion="registrar" onClick={() => abrirMovimiento(categoria, item.id, 'Ingreso')}>
+        <button key={`${categoria}-${item.id}`} type="button" className="coincidencia" data-accion="usar-existente" onClick={() => onElegir(categoria, item.id)}>
           <span>
             <b>{item.nombre}</b>
-            <small>{nombreCategoria(categoria)} · {item.cantidad} {item.unidad}{textoPresentacion(item) ? ' · ' + textoPresentacion(item) : ''}</small>
+            <small>{nombreCategoria(categoria)} · {textoPresentacion(item) || `suelto, en ${item.unidad}`} · {item.cantidad} {item.unidad}</small>
           </span>
-          <em>Registrar ingreso →</em>
+          <em>Usar este →</em>
         </button>
       ))}
     </div>
@@ -428,7 +449,7 @@ function ConfirmarAjuste({ modal, ajuste, onVolver }) {
 
   return (
     <form className="modal" id="form-ajuste-confirmar" noValidate onSubmit={e => { e.preventDefault(); confirmarAjuste(modal, ajuste); }}>
-      <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item, 'Revisa el ajuste')} />
+      <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item, 'Revisa el ajuste')} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
         <Cambio
@@ -463,7 +484,6 @@ function ConfirmarAjuste({ modal, ajuste, onVolver }) {
       </div>
 
       <div className="modal-footer">
-        <button type="button" className="btn btn-blanco" data-accion="volver-ajuste" onClick={onVolver}>Volver y corregir</button>
         <button type="submit" className="btn btn-verde">Confirmar ajuste</button>
       </div>
     </form>
@@ -563,11 +583,33 @@ export function ModalBaja({ modal }) {
   );
 }
 
-// ---------- "+" en Inicio e Historial: que agregar ----------
+// ---------- "+": registrar varios productos o agregar algo nuevo ----------
+function OpcionAgregar({ o }) {
+  return (
+    <button type="button" className="opcion-agregar" data-accion={o.accion} data-categoria={o.categoria} onClick={o.abrir}>
+      <span className={`tarjeta-codigo ${o.color}`}><o.Icono /></span>
+      <span>
+        <b>{o.titulo}</b>
+        <small>{o.detalle}</small>
+      </span>
+      <span className="opcion-flecha">›</span>
+    </button>
+  );
+}
+
 export function ModalElegir() {
+  const lote = estado.lote;
+  const registrar = [
+    { accion: 'registrar-ingreso', color: 'verde', Icono: IconoIngreso, titulo: 'Registrar ingreso', detalle: 'Lo que entra: donaciones o compras. Si un producto es nuevo, lo creas ahí', abrir: () => empezarLote('Ingreso') },
+    { accion: 'registrar-salida', color: 'naranja', Icono: IconoSalida, titulo: 'Registrar salida', detalle: 'Lo que se usa o se entrega', abrir: () => empezarLote('Salida') },
+  ];
+  // una lista que se cerro sin guardar
+  if (lote?.items.length) {
+    const n = lote.items.length;
+    registrar.unshift({ accion: 'continuar-lista', color: 'azul', Icono: lote.tipo === 'Ingreso' ? IconoIngreso : IconoSalida, titulo: `Continuar la lista de ${lote.tipo.toLowerCase()}`, detalle: `${n} ${n === 1 ? 'producto' : 'productos'} sin guardar`, abrir: abrirLista });
+  }
+  // los productos nuevos se crean al registrar su ingreso
   const opciones = [
-    { accion: 'agregar-producto', color: 'verde', Icono: IconoAlimentos, titulo: 'Alimento', detalle: 'Producto perecible', abrir: () => abrirProducto('Alimentos') },
-    { accion: 'agregar-producto', color: 'azul', Icono: IconoSalud, titulo: 'Salud e higiene', detalle: 'Medicinas, pañales, aseo', abrir: () => abrirProducto('Salud') },
     { accion: 'agregar-donador', color: 'naranja', Icono: IconoDonadores, titulo: 'Donador', detalle: 'Persona o institución', abrir: () => abrirModal({ tipo: 'donador' }) },
   ];
   if (esAdmin()) {
@@ -577,18 +619,12 @@ export function ModalElegir() {
   return (
     <Fondo>
       <div className="modal">
-        <Cabecera codigo="+" color="verde" titulo="¿Qué quieres agregar?" subtitulo="Elige una opción" />
+        <Cabecera codigo="+" color="verde" titulo="¿Qué quieres hacer?" subtitulo="Elige una opción" />
         <div className="modal-cuerpo">
-          {opciones.map(o => (
-            <button key={o.titulo} type="button" className="opcion-agregar" data-accion={o.accion} onClick={o.abrir}>
-              <span className={`tarjeta-codigo ${o.color}`}><o.Icono /></span>
-              <span>
-                <b>{o.titulo}</b>
-                <small>{o.detalle}</small>
-              </span>
-              <span className="opcion-flecha">›</span>
-            </button>
-          ))}
+          <span className="opciones-grupo">REGISTRAR</span>
+          {registrar.map(o => <OpcionAgregar key={o.accion} o={o} />)}
+          <span className="opciones-grupo">OTROS</span>
+          {opciones.map(o => <OpcionAgregar key={o.titulo} o={o} />)}
         </div>
       </div>
     </Fondo>
