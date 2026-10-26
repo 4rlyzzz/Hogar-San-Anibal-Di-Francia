@@ -1,10 +1,9 @@
 /* tablet */
 @media (max-width: 1100px) {
   .grilla {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .marca-sub,
   .usuario-datos {
     display: none;
   }
@@ -14,7 +13,26 @@
   }
 
   .fila {
-    grid-template-columns: 96px 1.4fr 100px 110px 100px 1fr;
+    grid-template-columns: 88px 1.2fr 118px 88px 78px 78px 1.3fr 88px;
+  }
+
+  .usuario-fila {
+    grid-template-columns: 1.5fr 136px 120px 1fr 1.3fr 104px;
+  }
+
+  .uf-movimientos,
+  .uf-creado {
+    display: none;
+  }
+
+  /* inicio: todo en una columna */
+  .panel-recuadros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel-medio,
+  .panel-bajo {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -32,11 +50,19 @@
 
   .marca-sub-movil {
     display: block;
-    font-size: 10px;
+    font-size: 11px;
   }
 
-  .menu {
+  .lateral {
     display: none;
+  }
+
+  .principal {
+    margin-left: 0;
+  }
+
+  .topbar .marca {
+    display: flex;
   }
 
   .buscador {
@@ -47,6 +73,10 @@
 
   .buscador input {
     font-size: 16px;
+  }
+
+  body[data-seccion="Inicio"] .buscador {
+    display: none;
   }
 
   .usuario {
@@ -72,7 +102,15 @@
   }
 
   .encabezado h1 {
-    font-size: 21px;
+    font-size: 22px;
+  }
+
+  .encabezado-derecha {
+    margin-left: 0;
+  }
+
+  .encabezado-derecha .filtros {
+    flex: 1;
   }
 
   .encabezado p {
@@ -90,11 +128,118 @@
 
   .grilla {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 10px;
+  }
+
+  /* tarjeta compacta: tres lineas en vez de cuatro bloques
+     los bloques de adentro se "abren" (display: contents) para acomodar sus partes en una sola grilla:
+       codigo | nombre y descripcion   | cantidad
+       codigo | estado del stock       | vencimiento
+       botones                                    */
+  .tarjeta {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    grid-template-areas:
+      'codigo info cantidad'
+      'codigo aviso vence'
+      'botones botones botones';
+    gap: 6px 10px;
+    padding: 12px 14px;
+    border-radius: 16px;
+  }
+
+  .tarjeta-top,
+  .aviso-minimo {
+    display: contents;
+  }
+
+  .tarjeta-codigo {
+    grid-area: codigo;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    font-size: 11px;
+  }
+
+  .tarjeta-info {
+    grid-area: info;
+  }
+
+  .tarjeta-nombre {
+    margin-bottom: 2px;
+    font-size: 14px;
+  }
+
+  /* la descripcion en una sola linea */
+  .tarjeta-descripcion {
+    margin-bottom: 0;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .aviso-minimo-cantidad {
+    grid-area: cantidad;
+    align-self: start;
+    font-size: 18px;
+    color: #17211f;
+  }
+
+  .aviso-minimo-cantidad span {
+    font-size: 11px;
+  }
+
+  /* estado del stock en una linea */
+  .aviso-minimo-linea {
+    display: none;
+  }
+
+  .aviso-minimo > div:not(.aviso-minimo-cantidad) {
+    grid-area: aviso;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    min-width: 0;
+  }
+
+  .aviso-minimo-titulo {
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .aviso-minimo-titulo::before {
+    content: '● ';
+  }
+
+  .aviso-minimo-nota {
+    font-size: 11px;
+  }
+
+  /* fondo blanco: el color del estado queda solo en el texto */
+  .aviso-minimo.verde,
+  .aviso-minimo.naranja,
+  .aviso-minimo.rojo {
+    background: none;
+  }
+
+  .tarjeta-top .etiqueta {
+    grid-area: vence;
+    align-self: center;
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .tarjeta .botones {
+    grid-area: botones;
+    gap: 6px;
+    margin-top: 4px;
   }
 
   .tarjeta .btn {
-    min-height: 46px;
+    min-height: 44px;
+    padding: 8px;
   }
 
   /* la alerta queda dentro de la pagina */
@@ -115,7 +260,7 @@
   }
 
   .producto-nombre {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .comparacion-fila {
@@ -133,13 +278,6 @@
     height: 18px;
   }
 
-  .boton-alerta {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 86px;
-  }
-
   .toast {
     bottom: 140px;
   }
@@ -150,6 +288,52 @@
     padding: 0;
   }
 
+  /* el panel de actividad ocupa toda la pantalla */
+  /* detalle y actividad: hoja que sube desde abajo, como los formularios */
+  .fondo-modal.fondo-panel {
+    align-items: flex-end;
+  }
+
+  .panel-actividad {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -12px 40px -16px rgba(23, 33, 31, 0.35);
+    animation: subir 0.28s ease;
+  }
+
+  /* la lista de adentro es la que hace scroll, no la hoja */
+  .panel-actividad-lista,
+  .panel-movimiento-cuerpo {
+    min-height: 0;
+  }
+
+  /* rayita de arriba: indica que la hoja se puede deslizar para cerrarla */
+  .modal::before,
+  .panel-actividad::before,
+  .panel-filtros::before {
+    content: '';
+    display: block;
+    flex-shrink: 0;
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    margin: 8px auto 0;
+    border-radius: 99px;
+    background: #d5dedb;
+  }
+
+  .panel-filtros::before {
+    margin: -8px auto 0;
+  }
+
+  /* la cabecera es la zona para arrastrar */
+  .modal-header,
+  .panel-actividad-cabecera,
+  .panel-filtros-cabecera {
+    touch-action: none;
+  }
+
   .modal {
     width: 100%;
     max-height: 92vh;
@@ -157,7 +341,28 @@
     animation: subir 0.28s ease;
   }
 
+  /* lista de varios productos: sin el cuadrito para que entre el nombre */
+  .lote-fila {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .lote-fila .tarjeta-codigo {
+    display: none;
+  }
+
+  .btn-icono {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lote-productos {
+    max-height: 52vh;
+  }
+
   .campo input,
+  .campo textarea,
+  .desplegable-campo,
   .input-fijo {
     min-height: 46px;
     font-size: 16px;
@@ -167,98 +372,338 @@
     grid-template-columns: 1fr;
   }
 
-  /* historial como tarjetas */
+  /* tablas como lista: una sola tarjeta con lineas entre filas */
   .tabla {
-    background: none;
-    border: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    border-radius: 16px;
   }
 
   .tabla-header {
-    padding: 0;
-    border: 0;
+    padding: 12px 14px;
   }
 
   .fila-titulos {
     display: none;
   }
 
+  /* historial en dos lineas */
   .fila {
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto 1fr auto;
     grid-template-areas:
       'insumo insumo cantidad'
-      'categoria movimiento fecha'
-      'responsable responsable responsable';
-    gap: 9px 8px;
-    padding: 14px;
-    background: #fff;
-    border: 1px solid #e5eae8;
-    border-radius: 16px;
+      'movimiento responsable fecha'
+      'detalle detalle detalle';
+    gap: 5px 10px;
+    padding: 11px 14px;
+  }
+
+  .fila-categoria,
+  .fila-saldo,
+  .fila-detalle:empty {
+    display: none;
+  }
+
+  .fila-detalle {
+    grid-area: detalle;
+    font-size: 11px;
   }
 
   .fila-insumo { grid-area: insumo; }
   .fila-cantidad { grid-area: cantidad; justify-self: end; }
-  .fila-categoria { grid-area: categoria; }
-  .fila-movimiento { grid-area: movimiento; font-size: 10.5px; }
-  .fila-fecha { grid-area: fecha; font-size: 10.5px; }
+  .fila-movimiento { grid-area: movimiento; font-size: 11px; }
+  .fila-fecha { grid-area: fecha; font-size: 11px; }
   .fila-responsable { grid-area: responsable; font-size: 11px; }
 
+  /* donador: nombre y telefono a la izquierda, donaciones a la derecha */
   .donador-fila {
     grid-template-columns: 1fr auto;
-    padding: 14px;
-    background: #fff;
-    border: 1px solid #e5eae8;
-    border-radius: 16px;
+    grid-template-areas:
+      'nombre donaciones'
+      'telefono donaciones'
+      'actividades actividades';
+    gap: 3px 12px;
+    padding: 11px 14px;
   }
 
-  .donador-fila .fila-cantidad {
+  .donador-nombre { grid-area: nombre; }
+  .donador-telefono { grid-area: telefono; }
+  .donador-actividades { grid-area: actividades; margin-top: 4px; }
+
+  .donador-ultima,
+  .donador-actividades:has(.uf-nada) {
+    display: none;
+  }
+  .donador-donaciones {
+    grid-area: donaciones;
+    font-family: inherit;
+    font-size: 12px;
+    color: #6f7e79;
+  }
+
+  /* usuario: rol y desactivar quedan en su panel (se abre al tocarlo) */
+  .usuario-fila {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'usuario estado'
+      'acceso actividad';
+    gap: 6px 10px;
+    padding: 11px 14px;
+  }
+
+  .uf-usuario { grid-area: usuario; }
+  .uf-estado { grid-area: estado; justify-self: end; align-self: start; }
+  .uf-acceso { grid-area: acceso; font-size: 12px; }
+  .uf-actividad { grid-area: actividad; text-align: right; font-size: 12px; min-width: 0; }
+
+  .uf-rol,
+  .uf-acciones {
     display: none;
   }
 
-  .form-donador .btn {
-    flex: 1;
+  /* lo de abajo va en una linea: la fecha exacta sobra */
+  .uf-acceso small,
+  .uf-actividad small {
+    display: none;
   }
 
-  /* menu de abajo */
+  .solo-movil {
+    display: inline;
+  }
+
+  .solo-desktop {
+    display: none;
+  }
+
+  /* barra: resumen a la izquierda y botones chicos a la derecha */
+  .barra-tabla {
+    gap: 8px;
+  }
+
+  .barra-tabla-resumen {
+    font-size: 12px;
+  }
+
+  .barra-tabla-orden {
+    display: none;
+  }
+
+  .btn-filtros,
+  .btn-descargar {
+    min-height: 38px;
+  }
+
+  /* el panel de filtros sube desde abajo, encima de la barra de iconos */
+  .filtros-fondo {
+    z-index: 85;
+    background: rgba(23, 33, 31, 0.34);
+  }
+
+  .panel-filtros {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 86;
+    width: auto;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+    animation: subir 0.25s ease;
+  }
+
+  .campo-filtro select,
+  .campo-filtro input,
+  .desplegable-filtro {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* opciones grandes para el dedo */
+  .desplegable-opcion {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .panel-filtros-ver {
+    min-height: 48px;
+  }
+
+  .panel-actividad-controles {
+    padding: 12px 16px;
+  }
+
+  .fila-presentacion {
+    flex-wrap: wrap;
+  }
+
+  .fila-presentacion #envase {
+    flex-basis: 150px;
+  }
+
+  /* pasos del producto mas angostos */
+  .mov-paso {
+    grid-template-columns: 82px 1fr auto 62px;
+    gap: 6px;
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .mov-cambio b {
+    font-size: 22px;
+  }
+
+  .panel-actividad-controles .btn-mini {
+    min-height: 42px;
+  }
+
+  /* inicio */
+  .panel-recuadros {
+    gap: 12px;
+  }
+
+  .recuadro {
+    padding: 14px;
+  }
+
+  .recuadro-cabecera {
+    gap: 9px;
+    margin-bottom: 12px;
+  }
+
+  .recuadro-icono {
+    width: 36px;
+    height: 36px;
+  }
+
+  .recuadro-icono svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .recuadro-titulo {
+    font-size: 12px;
+  }
+
+  .recuadro-numero {
+    font-size: 24px;
+  }
+
+  /* en celular el detalle va debajo del titulo */
+  .recuadro-fila {
+    flex-wrap: wrap;
+    gap: 3px 6px;
+  }
+
+  .recuadro-detalle {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .panel {
+    padding: 16px 14px;
+  }
+
+  .grafico,
+  .grafico-eje {
+    height: 190px;
+  }
+
+  .grafico-eje {
+    flex-basis: 30px;
+  }
+
+  .grafico-nombres span {
+    font-size: 11px;
+    padding: 0 2px;
+  }
+
+  .grafico-cabecera {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .grafico-cabecera .filtros {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .grafico-cabecera .filtros button,
+  .grafico-cabecera .pestanas-grafico button {
+    flex: none;
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  .alerta-fila {
+    grid-template-columns: 1fr auto auto;
+    grid-template-areas:
+      'insumo categoria prioridad'
+      'tipo tipo tipo';
+    gap: 6px 8px;
+    padding: 11px 14px;
+  }
+
+  .alerta-fila.fila-titulos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+  }
+
+  .alerta-fila .fila-insumo { grid-area: insumo; }
+  .alerta-fila-prioridad { grid-area: prioridad; justify-self: end; }
+  .alerta-fila-tipo { grid-area: tipo; }
+  .alerta-fila-categoria { grid-area: categoria; justify-self: end; }
+
+  /* menu de abajo: flotante, solo iconos, siempre visible */
   .menu-movil {
     display: flex;
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
     z-index: 60;
+    justify-content: space-between;
     gap: 4px;
-    padding: 8px 10px 14px;
-    background: rgba(255, 255, 255, 0.96);
-    border-top: 1px solid #e4eae8;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid #e4eae8;
+    border-radius: 24px;
+    box-shadow: 0 12px 30px -12px rgba(23, 33, 31, 0.28);
   }
 
   .menu-movil button {
     flex: 1;
-    min-height: 54px;
+    height: 52px;
+    max-width: 72px;
     border: 0;
-    border-radius: 13px;
+    border-radius: 16px;
     background: transparent;
     color: #8b9a95;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    font-weight: 600;
-    font-size: 11px;
+    display: grid;
+    place-items: center;
+  }
+
+  .menu-movil button svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* agregar producto: el "+" flota encima de la barra de abajo */
+  .btn-flotante {
+    right: 18px;
+    bottom: calc(94px + env(safe-area-inset-bottom));
   }
 
   .menu-movil button.activo {
     background: #e6f5ee;
     color: #2d8e6c;
   }
+}
 
-  .menu-movil-icono {
-    font-family: 'IBM Plex Mono', monospace;
-    font-weight: 700;
-    font-size: 11.5px;
+@media (max-width: 767px) {
+  .btn-volver {
+    width: 40px;
+    height: 40px;
   }
 }

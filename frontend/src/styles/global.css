@@ -7,13 +7,16 @@ body {
   background: #f5f8f7;
   color: #17211f;
   font-family: 'Manrope', sans-serif;
+  /* textos largos sin espacios bajan de linea */
+  overflow-wrap: anywhere;
 }
 
 h1, h2, p {
   margin: 0;
 }
 
-button, input {
+/* los controles del navegador no heredan la letra solos */
+button, input, select, textarea {
   font-family: inherit;
 }
 
@@ -26,7 +29,7 @@ button {
 }
 
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* colores de estado */
@@ -46,7 +49,167 @@ button {
   to { opacity: 1; transform: none; }
 }
 
+/* ---------- menu lateral (desktop) ---------- */
+/* cerrado: solo iconos; se abre al pasar el mouse */
+.lateral {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px 12px;
+  background: #fff;
+  box-shadow: 1px 0 0 rgba(23, 33, 31, 0.04);
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: width 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lateral:hover,
+.lateral:focus-within {
+  width: 240px;
+  box-shadow: 8px 0 30px -12px rgba(23, 33, 31, 0.18);
+}
+
+/* en el menu lateral solo va el logo (ya trae el nombre) */
+.lateral .marca {
+  justify-content: center;
+  min-height: 72px;
+}
+
+.lateral .marca > div {
+  display: none;
+}
+
+.lateral .marca-logo {
+  width: 48px;
+  height: 48px;
+  transition: width 0.2s ease, height 0.2s ease;
+}
+
+.lateral:hover .marca-logo,
+.lateral:focus-within .marca-logo {
+  width: 72px;
+  height: 72px;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* lo que solo se lee con el menu abierto */
+.menu-grupo,
+.menu button span {
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.lateral:hover .menu-grupo,
+.lateral:hover .menu button span,
+.lateral:focus-within .menu-grupo,
+.lateral:focus-within .menu button span {
+  opacity: 1;
+}
+
+.menu-grupo {
+  margin: 14px 0 6px;
+  padding: 0 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #8b9a95;
+}
+
+.menu-grupo:first-child {
+  margin-top: 0;
+}
+
+/* el icono queda centrado con el menu cerrado y no se mueve al abrirlo */
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #6f7e79;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: left;
+}
+
+.menu button svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.menu button:hover {
+  background: #f1f5f4;
+  color: #17211f;
+}
+
+.menu button.activo {
+  background: #e6f5ee;
+  color: #2d8e6c;
+}
+
+/* boton para fijar el menu, al fondo */
+.menu-pie {
+  margin-top: auto;
+}
+
+.menu-pie svg {
+  transition: transform 0.2s ease;
+}
+
+/* menu fijo siempre abierto */
+@media (min-width: 768px) {
+  .menu-fijo .lateral {
+    width: 240px;
+    box-shadow: 1px 0 0 rgba(23, 33, 31, 0.04);
+  }
+
+  .menu-fijo .lateral .marca-logo {
+    width: 72px;
+    height: 72px;
+  }
+
+  .menu-fijo .menu-grupo,
+  .menu-fijo .menu button span {
+    opacity: 1;
+  }
+
+  .menu-fijo .menu-pie svg {
+    transform: scaleX(-1);
+  }
+
+  .menu-fijo .principal {
+    margin-left: 240px;
+  }
+}
+
+.principal {
+  transition: margin-left 0.2s ease;
+}
+
+/* todo lo que va a la derecha del menu lateral */
+.principal {
+  margin-left: 76px;
+  min-width: 0;
+}
+
 /* ---------- barra de arriba ---------- */
+/* sin borde: se funde con el fondo de la pagina */
 .topbar {
   position: sticky;
   top: 0;
@@ -55,9 +218,8 @@ button {
   align-items: center;
   gap: 24px;
   padding: 14px 32px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(245, 248, 247, 0.88);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid #e4eae8;
 }
 
 .marca {
@@ -67,15 +229,10 @@ button {
 }
 
 .marca-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  background: #3fb98f;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 13px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .marca-nombre {
@@ -83,9 +240,8 @@ button {
   font-size: 14px;
 }
 
-.marca-sub,
 .marca-sub-movil {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: #7c8b86;
 }
@@ -94,7 +250,10 @@ button {
   display: none;
 }
 
-.menu,
+.topbar .marca {
+  display: none;
+}
+
 .filtros {
   display: flex;
   gap: 3px;
@@ -104,7 +263,6 @@ button {
   border-radius: 12px;
 }
 
-.menu button,
 .filtros button {
   border: 0;
   padding: 8px 15px;
@@ -112,11 +270,10 @@ button {
   background: transparent;
   color: #6f7e79;
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
-.menu button.activo,
 .filtros button.activo {
   background: #fff;
   color: #17211f;
@@ -130,7 +287,7 @@ button {
   align-items: center;
   gap: 9px;
   padding: 9px 14px;
-  background: #f1f5f4;
+  background: #fff;
   border: 1px solid #e4eae8;
   border-radius: 12px;
 }
@@ -156,21 +313,28 @@ button {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: #f1f5f4;
+  background: #fff;
   border: 1px solid #e4eae8;
   display: grid;
   place-items: center;
 }
 
-.campana-punto {
+/* cuantas alertas urgentes hay */
+.campana-numero {
   position: absolute;
-  top: 6px;
-  right: 7px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #e07b28;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border: 2px solid #fff;
+  border-radius: 99px;
+  background: #d9534f;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
 }
 
 .usuario {
@@ -178,9 +342,85 @@ button {
   align-items: center;
   gap: 10px;
   padding: 5px 12px 5px 5px;
-  background: #f1f5f4;
+  background: #fff;
   border: 1px solid #e4eae8;
   border-radius: 999px;
+  color: inherit;
+  text-align: left;
+}
+
+.usuario:hover {
+  border-color: #d5dedb;
+}
+
+/* menu que se abre al tocar el usuario */
+.usuario-caja {
+  position: relative;
+}
+
+.usuario-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  width: 220px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e5eae8;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px -16px rgba(23, 33, 31, 0.3);
+  animation: aparecer 0.15s ease;
+}
+
+.usuario-menu-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #eef2f1;
+}
+
+.usuario-menu-datos b {
+  font-size: 13px;
+}
+
+.usuario-menu-datos span {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.usuario-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #c1423c;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.usuario-menu button:hover {
+  background: #fbeceb;
+}
+
+/* opciones normales del menu; cerrar sesion queda en rojo */
+.usuario-menu .usuario-menu-opcion {
+  color: #3d4b46;
+}
+
+.usuario-menu .usuario-menu-opcion:hover {
+  background: #f1f5f4;
+}
+
+.usuario-menu button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .avatar {
@@ -206,27 +446,28 @@ button {
 }
 
 .usuario-rol {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   color: #7c8b86;
 }
 
 /* ---------- contenido ---------- */
+/* ancho para pantallas grandes sin dejar franjas vacias a los lados */
 .contenedor {
-  max-width: 1320px;
+  max-width: 1680px;
   margin: 0 auto;
-  padding: 32px 32px 64px;
+  padding: 20px 32px 64px;
 }
 
 .encabezado {
   display: flex;
   align-items: flex-end;
   gap: 24px;
-  margin-bottom: 26px;
+  margin-bottom: 20px;
 }
 
 .encabezado h1 {
-  font-size: 27px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.02em;
   margin-bottom: 6px;
@@ -252,7 +493,7 @@ button {
   padding: 0;
   color: #2f7fb5;
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .link:hover {
@@ -278,18 +519,18 @@ button {
   border-radius: 9px;
   display: grid;
   place-items: center;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .titulo-seccion h2 {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
 }
 
 .titulo-seccion-detalle {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: #7c8b86;
 }
@@ -323,6 +564,7 @@ button {
 .btn-verde-claro:hover { background: #e2f4ec; }
 .btn-blanco { border: 1px solid #e0e7e4; background: #fff; color: #3d4b46; }
 .btn-verde { border: 1px solid #2d8e6c; background: #3fb98f; color: #fff; font-weight: 700; }
+.btn-rojo { border: 1px solid #b8402f; background: #d9534f; color: #fff; font-weight: 700; }
 .btn-verde:hover { background: #37a982; }
 
 .btn-cerrar {
@@ -334,7 +576,7 @@ button {
   border: 1px solid #e5eae8;
   background: #f7faf9;
   color: #6f7e79;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .btn-cerrar.naranja-claro {
@@ -359,7 +601,7 @@ button {
   background: #17211f;
   color: #fff;
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13px;
   white-space: nowrap;
   box-shadow: 0 14px 30px -12px rgba(23, 33, 31, 0.5);
 }

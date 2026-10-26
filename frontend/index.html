@@ -2,12 +2,99 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- solo deja correr el js de la app (agregar la url del backend en connect-src)
+       wasm-unsafe-eval: compilar WebAssembly (Whisper y el lector de codigos), no permite eval de texto
+       huggingface: de ahi se descarga el modelo de Whisper la primera vez -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Inventario - Hogar San Aníbal</title>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/src/assets/logo.png">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- estilos de la pantalla de carga -->
+  <style>
+    .pantalla-carga {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      background: rgba(245, 248, 247, 0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: opacity 0.45s ease-out;
+      will-change: opacity;
+    }
+
+    .pantalla-carga img {
+      width: clamp(140px, 11vw, 210px);
+      height: clamp(140px, 11vw, 210px);
+      object-fit: contain;
+      animation: logo-entra 0.7s ease both, logo-late 2.4s ease-in-out 0.7s infinite;
+    }
+
+    /* barrita que va y viene mientras carga */
+    .pantalla-carga-barra {
+      position: relative;
+      width: clamp(110px, 8vw, 160px);
+      height: 4px;
+      border-radius: 99px;
+      background: #dfe7e4;
+      overflow: hidden;
+      animation: logo-entra 0.7s ease 0.2s both;
+    }
+
+    .pantalla-carga-barra::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 40%;
+      border-radius: 99px;
+      background: #3fb98f;
+      animation: barra-carga 1.1s ease-in-out infinite;
+    }
+
+    /* al terminar solo se desvanece: animar el desenfoque se traba */
+    .pantalla-carga.oculta {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @keyframes logo-entra {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes logo-late {
+      50% { transform: scale(1.04); }
+    }
+
+    @keyframes barra-carga {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(250%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pantalla-carga img,
+      .pantalla-carga-barra,
+      .pantalla-carga-barra::after {
+        animation: none;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div class="pantalla-carga" id="pantalla-carga" role="status" aria-label="Cargando">
+    <img src="/src/assets/logo.png" alt="Hogar San Aníbal di Francia">
+    <div class="pantalla-carga-barra"></div>
+  </div>
+
   <div id="app"></div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
