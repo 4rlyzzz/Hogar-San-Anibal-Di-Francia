@@ -1,5 +1,16 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import BasePermission
+
+class IsAdminRole(BasePermission):
+    """Permite el acceso únicamente a usuarios con el rol 'Administrador'."""
+    def has_permission(self, request, view):
+        return bool(
+            request.user and 
+            request.user.is_authenticated and 
+            getattr(request.user, 'rol', None) == 'Administrador'
+        )
+
 
 class CouchDBUser:
     """Usuario en memoria para Django/DRF basado en los datos de CouchDB."""

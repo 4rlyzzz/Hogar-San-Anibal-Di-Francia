@@ -167,7 +167,6 @@ export async function iniciarSesion(v) {
   }
 
   try {
-    // Llama a tu función de api.js que ya guarda los tokens
     const res = await login(usuarioTexto, clave);
 
     const cuenta = res.usuario || {
@@ -179,7 +178,7 @@ export async function iniciarSesion(v) {
 
     entrar(cuenta);
     await cargarDatosDesdeDB();
-    return null; // Éxito
+    return null;
   } catch (err) {
     console.error('Error en login:', err);
     return { error: 'Usuario o contraseña incorrectos', campo: 'login-clave' };
@@ -1039,14 +1038,11 @@ export async function guardarUsuario(v) {
 
   const fechaActual = new Date();
 
-  // Documento enviado a Django / CouchDB
   const usuarioDoc = {
     tipo: 'usuario',
     nombre,
     usuario: usuarioTexto,
-    username: usuarioTexto, // Para Django
     clave,
-    password: clave,        // Para Django
     rol,
     activo: true,
     creado: fechaActual.toISOString(),

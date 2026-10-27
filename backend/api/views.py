@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from .authentication import IsAdminRole
 
 from .couchdb_service import (
     get_all_documents,
@@ -17,66 +18,54 @@ from .couchdb_service import (
 
 class CustomLoginView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []  # <--- CRÍTICO: Ignora tokens viejos enviadas en los headers
+    authentication_classes = []
 
     def post(self, request):
-        username_input = (
-            request.data.get('username') or 
+        usuario_input = (
             request.data.get('usuario') or 
+            request.data.get('username') or 
             request.data.get('login-usuario') or ''
         ).strip()
-        
-        password_input = (
-            request.data.get('password') or 
+
+        clave_input = (
             request.data.get('clave') or 
+            request.data.get('password') or 
             request.data.get('login-clave') or ''
         ).strip()
 
-        print(f"\n================= DEBUG LOGIN =================")
-        print(f"📥 Payload recibido: usuario='{username_input}'")
-
-        if not username_input or not password_input:
+        if not usuario_input or not clave_input:
             return Response({'error': 'Usuario y contraseña requeridos'}, status=400)
 
         docs, status_code = get_documents_by_type('usuario')
         if status_code != 200 or not isinstance(docs, list):
             return Response({'error': 'Error al consultar CouchDB'}, status=500)
 
-        # Buscar coincidencia de usuario
+        # 1. Buscar usuario por campo 'usuario' (o 'username')
         user_doc = None
         for doc in docs:
-            u_name = doc.get('username') or doc.get('usuario') or ''
-            if u_name.lower() == username_input.lower():
+            u_name = doc.get('usuario') or doc.get('username') or ''
+            if u_name.lower() == usuario_input.lower():
                 user_doc = doc
                 break
 
         if not user_doc:
-            print(f"❌ Usuario '{username_input}' no encontrado en CouchDB.")
             return Response({'error': 'Usuario no encontrado'}, status=401)
 
         if not user_doc.get('activo', True):
-            print(f"❌ Cuenta '{username_input}' desactivada.")
             return Response({'error': 'Esta cuenta se encuentra desactivada'}, status=401)
 
-        stored_hash = user_doc.get('password') or user_doc.get('clave') or ''
+        # 2. Validación ESTRICTA por Hash de Django
+        stored_hash = user_doc.get('clave') or user_doc.get('password') or ''
 
-        # Validar contraseña
-        if not stored_hash.startswith('pbkdf2_sha256$') and stored_hash == password_input:
-            es_valido = True
-        else:
-            es_valido = check_password(password_input, stored_hash)
-
-        if not es_valido:
-            print(f"❌ Contraseña incorrecta para '{username_input}'.")
+        if not stored_hash or not check_password(clave_input, stored_hash):
             return Response({'error': 'Contraseña incorrecta'}, status=401)
 
         rol_final = user_doc.get('rol', 'Usuario')
-        print(f"✅ LOGIN EXITOSO | Usuario: {username_input} | Rol: {rol_final}")
-        print("===============================================\n")
 
+        # 3. Emisión de Token JWT
         refresh = RefreshToken()
         refresh['user_id'] = user_doc.get('_id') or user_doc.get('id')
-        refresh['username'] = username_input
+        refresh['username'] = usuario_input
         refresh['rol'] = rol_final
 
         return Response({
@@ -84,12 +73,66 @@ class CustomLoginView(APIView):
             'refresh': str(refresh),
             'usuario': {
                 'id': user_doc.get('_id') or user_doc.get('id'),
-                'nombre': user_doc.get('nombre', username_input),
-                'usuario': username_input,
+                'nombre': user_doc.get('nombre', usuario_input),
+                'usuario': usuario_input,
                 'rol': rol_final
             }
         }, status=200)
 
+
+class UsuariosListCreateView(APIView):
+    # Solo administradores autenticados pueden listar o crear usuarios
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def get(self, request):
+        data, status_code = get_documents_by_type('usuario')
+        return Response(data, status=status_code)
+
+    def post(self, request):
+        """Crea un usuario en CouchDB convirtiendo la clave en un hash pbkdf2_sha256."""
+        try:
+            doc_data = request.data.copy()
+            doc_data['tipo'] = 'usuario'
+
+            raw_password = doc_data.get('clave') or doc_data.get('password') or ''
+            if isinstance(raw_password, list):
+                raw_password = raw_password[0] if raw_password else ''
+            
+            raw_password = str(raw_password).strip()
+
+            if raw_password:
+                # Generar el hash pbkdf2_sha256 oficial de Django
+                doc_data['clave'] = make_password(raw_password)
+
+            # Limpiar llaves sobrantes
+            doc_data.pop('password', None)
+            doc_data.pop('username', None)
+
+            data, status_code = create_document(doc_data)
+            return Response(data, status=status_code)
+
+        except Exception as e:
+            return Response({'error': f'Error interno: {str(e)}'}, status=500)
+
+
+class UsuarioDetailView(APIView):
+    # Solo administradores autenticados pueden modificar usuarios
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def put(self, request, doc_id):
+        """Actualiza el rol o estado activo/desactivado de un usuario requiriendo _rev."""
+        doc_data = request.data.copy()
+        doc_data['tipo'] = 'usuario'
+        
+        rev = doc_data.get('_rev') or request.data.get('_rev')
+        if not rev:
+            return Response(
+                {"error": "Se requiere la propiedad '_rev' para actualizar el usuario"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        data, status_code = update_document(doc_id, doc_data, rev)
+        return Response(data, status=status_code)
 
 class InventarioListCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -167,64 +210,4 @@ class DonadoresListCreateView(APIView):
         doc_data = request.data.copy()
         doc_data['tipo'] = 'donador'
         data, status_code = create_document(doc_data)
-        return Response(data, status=status_code)
-
-
-class UsuariosListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        data, status_code = get_documents_by_type('usuario')
-        return Response(data, status=status_code)
-
-    def post(self, request):
-        """Crea un nuevo usuario en CouchDB encriptando su clave de forma segura."""
-        try:
-            print("\n================= CREANDO USUARIO =================")
-            print(f"📥 Datos recibidos en request.data: {request.data}")
-
-            doc_data = request.data.copy()
-            doc_data['tipo'] = 'usuario'
-
-            # Obtener contraseña asegurando que sea un string limpio
-            raw_password = doc_data.get('password') or doc_data.get('clave') or ''
-            if isinstance(raw_password, list):
-                raw_password = raw_password[0] if raw_password else ''
-            
-            raw_password = str(raw_password).strip()
-
-            if raw_password:
-                hashed = make_password(raw_password)
-                doc_data['password'] = hashed
-                doc_data['clave'] = hashed
-
-            data, status_code = create_document(doc_data)
-            print(f"✅ Respuesta CouchDB ({status_code}): {data}")
-            print("===================================================\n")
-
-            return Response(data, status=status_code)
-
-        except Exception as e:
-            print(f"❌ ERROR EN POST /api/usuarios/: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return Response({'error': f'Error interno en Django: {str(e)}'}, status=500)
-
-
-class UsuarioDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def put(self, request, doc_id):
-        """Actualiza el rol o estado activo/desactivado de un usuario requiriendo _rev."""
-        doc_data = request.data.copy()
-        doc_data['tipo'] = 'usuario'
-        
-        rev = doc_data.get('_rev') or request.data.get('_rev')
-        if not rev:
-            return Response(
-                {"error": "Se requiere la propiedad '_rev' para actualizar el usuario"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        data, status_code = update_document(doc_id, doc_data, rev)
         return Response(data, status=status_code)
