@@ -1477,14 +1477,15 @@ export function confirmarLote(modal) {
 // Carga los documentos de CouchDB en el estado global de React
 export async function cargarDatosDesdeDB() {
   try {
-    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = await Promise.all([
+    const peticiones = [
       getInventario().catch(() => []),
       getHistorialAPI().catch(() => []),
       getDonadoresAPI().catch(() => []),
-      getUsuariosAPI().catch(() => [])
-    ]);
+      esAdmin() ? getUsuariosAPI().catch(() => []) : Promise.resolve([])
+    ];
 
-    // 1. Inventario (se mantiene igual)
+    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = await Promise.all(peticiones);
+
     const documentos = Array.isArray(respuestaInv) ? respuestaInv : (respuestaInv?.docs || []);
     if (documentos.length > 0) {
       const formateados = documentos.map(doc => ({

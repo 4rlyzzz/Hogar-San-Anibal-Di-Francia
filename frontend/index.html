@@ -6,10 +6,7 @@
   <!-- solo deja correr el js de la app (agregar la url del backend en connect-src)
        wasm-unsafe-eval: compilar WebAssembly (Whisper y el lector de codigos), no permite eval de texto
        huggingface: de ahi se descarga el modelo de Whisper la primera vez -->
-  <!--
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co; object-src 'none'; base-uri 'self'; form-action 'self'">
-  -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 http://127.0.0.1:5984; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src-elem 'self' 'unsafe-inline' 'wasm-unsafe-eval';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 http://127.0.0.1:5984; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; script-src-elem 'self' 'unsafe-inline' 'wasm-unsafe-eval';">
   <title>Inventario - Hogar San Aníbal</title>
   <link rel="icon" type="image/png" href="/src/assets/logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
