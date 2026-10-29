@@ -64,6 +64,7 @@ SECRET_KEY=django-insecure-default-key
 DEBUG=True
 ```
 > **Nota:**  No compartas ni subas el archivo `.env` al repositorio, son credenciales reales y datos críticos.
+
 Para inicializar el servicio Django ejecutar (**1ra terminal**):
 
 ```powershell
