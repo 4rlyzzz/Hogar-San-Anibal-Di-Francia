@@ -16,7 +16,6 @@ Programas necesarios:
 
 1. Instalar e iniciar Apache CouchDB y crear la cuenta de administrador.
 2. Comprueba que CouchDB esté disponible en <http://127.0.0.1:5984/>.
-3. En la carpeta `couchdb`, configura las credenciales a partir de `.env.example`: crea un archivo `.env` y completa los campos solicitados.
 4. Ejecutar en una terminal:
 
    ```powershell
@@ -34,7 +33,7 @@ Programas necesarios:
 5. Entrar a Fauxton: <http://127.0.0.1:5984/_utils/>. Buscar **Configuración → CORS**, activar CORS y agregar los origenes de ejecutación: `http://localhost:5173` `http://localhost:8000`.
 
 
-> **Nota:** La configuración de CORS debe permitir el origen real del frontend. Si el frontend se abre desde otra dirección o puerto, agrega ese origen en CouchDB. No compartas ni subas el archivo `.env` con credenciales reales al repositorio.
+> **Nota:** La configuración de CORS debe permitir el origen real del frontend. Si el frontend se abre desde otra dirección o puerto, agrega ese origen en CouchDB.
 
 ## 3. Configurar backend (Django)
 
@@ -64,7 +63,7 @@ COUCHDB_DB=<database name>
 SECRET_KEY=django-insecure-default-key
 DEBUG=True
 ```
-
+> **Nota:**  No compartas ni subas el archivo `.env` al repositorio, son credenciales reales y datos críticos.
 Para inicializar el servicio Django ejecutar (**1ra terminal**):
 
 ```powershell
