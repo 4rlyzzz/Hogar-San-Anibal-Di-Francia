@@ -1,4 +1,5 @@
 // registrar varios productos a la vez: elegir como (a mano, codigo o voz), la lista, editar una fila y confirmar
+import { procesarTextoConOmniroute } from '../servicios/Omniroute';
 import { useEffect, useRef, useState } from 'react';
 import { estado } from '../estado.js';
 import { usuario } from '../data/datos.js';
@@ -18,6 +19,7 @@ import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
 } from './Formulario.jsx';
 import { Desplegable } from './Desplegable.jsx';
+
 
 // lo que cambia entre ingreso y salida
 const tipos = {
@@ -387,201 +389,159 @@ export function ModalLoteVoz() {
   const f = useFormulario();
   const [texto, setTexto] = useState('');
   const [grabando, setGrabando] = useState(false);
-  const [escribiendo, setEscribiendo] = useState(false);
+  const [cargandoIA, setCargandoIA] = useState(false);
+  const [itemsEntendidos, setItemsEntendidos] = useState([]);
   const [aviso, setAviso] = useState('');
-  const [segundos, setSegundos] = useState(0);
-  // 'navegador' (escribe mientras se habla) o 'grabacion' (Whisper al terminar); cambia si el navegador falla
-  const [modo, setModo] = useState(modoVoz);
-  const grabadora = useRef(null);
   const reconocedor = useRef(null);
-  // mientras se abre el microfono no se puede volver a presionar
-  const abriendo = useRef(false);
-  const conVoz = Boolean(modo) && window.isSecureContext && (modo === 'navegador' || (typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)));
-  // por que no se puede grabar: el navegador solo presta el microfono en https (o en localhost)
-  let sinVoz = 'Este navegador no puede grabar audio. Escribe lo que se dijo.';
-  if (!window.isSecureContext) sinVoz = 'El micrófono solo funciona con conexión segura (https). Desde esta dirección escribe lo que se dijo.';
-  else if (!modo) sinVoz = 'El reconocimiento de voz no está disponible. Mientras tanto, escribe lo que se dijo.';
-  // descarga del modelo de Whisper (solo la primera vez): porcentaje o null
-  const [descarga, setDescarga] = useState(null);
 
-  // con Whisper, el modelo empieza a bajar al abrir la pantalla (o al pasar a Whisper), asi esta listo al terminar de hablar
-  useEffect(() => {
-    if (modo !== 'grabacion' || !usaWhisper() || whisperPreparado()) return;
-    const archivos = new Map();
-    const quitar = escucharWhisper(m => {
-      if (m.tipo === 'progreso') {
-        archivos.set(m.archivo, m);
-        const todos = [...archivos.values()];
-        setDescarga(Math.round(todos.reduce((s, a) => s + a.cargado, 0) / todos.reduce((s, a) => s + a.total, 0) * 100));
-      } else if (m.tipo === 'preparado') setDescarga(null);
-      else if (m.tipo === 'error') {
-        setDescarga(null);
-        setAviso('No se pudo descargar el reconocimiento de voz. Revisa la conexión; mientras tanto, escribe lo que se dijo.');
+  // Procesa con OmniRoute y obtiene la lista visual para el bloque "ENTENDÍ"
+  const procesarConOmni = async (textoDictado) => {
+    if (!textoDictado.trim()) return;
+    setCargandoIA(true);
+    setAviso('');
+
+    try {
+      // 1. Petición a OmniRoute
+      const json = await procesarTextoConOmniroute(textoDictado);
+      
+      // 2. Mapeo para previsualización gráfica en UI
+      const mapeados = json.map(i => ({
+        cantidad: i.cantidad,
+        unidadDicha: i.unidad,
+        nombreDicho: i.producto,
+        producto: null,
+        dudas: []
+      }));
+      setItemsEntendidos(mapeados);
+    } catch (err) {
+      // Fallback: Si OmniRoute da error, usamos la interpretación local nativa
+      if (typeof interpretarDictado === 'function') {
+        const local = interpretarDictado(textoDictado, todosLosProductos(), {
+          donadores: estado.donadores,
+          actividades: opcionesActividad()
+        });
+        setItemsEntendidos(local);
+      } else {
+        setAviso('Error al conectar con OmniRoute. Usando procesamiento local.');
       }
-    });
-    prepararWhisper();
-    return quitar;
-  }, [modo]);
+    } finally {
+      setCargandoIA(false);
+    }
+  };
 
-  // vista previa de lo que se entendio
-  const entendido = texto.trim() ? interpretarDictado(texto.slice(0, largos.dictado), todosLosProductos(), { donadores: estado.donadores, actividades: opcionesActividad() }) : [];
-
-  // un toque empieza a escuchar y otro termina
-  function alternar() {
-    if (grabando) terminar();
-    else if (modo === 'navegador') escucharConNavegador();
-    else empezar();
-  }
-
-  // ---------- con el reconocimiento del navegador ----------
-  function escucharConNavegador() {
+  function escucharNavegador() {
     const Reconocedor = reconocedorNavegador();
+    if (!Reconocedor) {
+      setAviso('Usa Edge o Chrome para habilitar la voz nativa.');
+      return;
+    }
+
     const r = new Reconocedor();
     r.lang = 'es-PE';
     r.continuous = true;
-    r.interimResults = true;
-    // lo que ya estaba escrito queda; lo nuevo se va agregando mientras se habla
-    const antes = texto.trim();
-    r.onresult = e => {
-      const dicho = [...e.results].map(resultado => resultado[0].transcript).join(' ').replace(/\s+/g, ' ').trim();
-      setTexto([antes, dicho].filter(Boolean).join(', ').slice(0, largos.dictado));
+    r.interimResults = false;
+
+    r.onresult = (e) => {
+      let trascripcion = '';
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        trascripcion += e.results[i][0].transcript + ' ';
+      }
+      setTexto(prev => {
+        const nuevoTexto = (prev + ' ' + trascripcion).trim();
+        return nuevoTexto;
+      });
     };
-    r.onerror = e => {
-      if (e.error === 'not-allowed') setAviso('No diste permiso para usar el micrófono.');
-      else if (e.error === 'no-speech') setAviso('No se escuchó nada. Acércate al micrófono y vuelve a intentarlo.');
-      else if (e.error !== 'aborted') {
-        // sin internet (o el navegador no lo permite): desde ahora se usa Whisper, que funciona sin conexión
-        dejarNavegador();
-        setModo(modoVoz());
-        // Vivaldi, Brave y Opera traen la funcion pero sin el servicio detras: falla aunque haya internet
-        setAviso(navigator.onLine
-          ? 'Este navegador no trae reconocimiento de voz (sí lo traen Chrome y Edge). Se usará el de este equipo: presiona otra vez para hablar.'
-          : 'No hay internet. Se usará el reconocimiento de este equipo: presiona otra vez para hablar.');
+
+    r.onerror = (e) => {
+      if (e.error !== 'no-speech') {
+        setAviso('Error o corte en el micrófono.');
+        setGrabando(false);
       }
     };
+
     r.onend = () => {
-      reconocedor.current = null;
-      setGrabando(false);
+      if (reconocedor.current?.debeSeguir) {
+        try { r.start(); } catch {}
+      } else {
+        setGrabando(false);
+      }
     };
-    setAviso('');
+
+    r.debeSeguir = true;
     reconocedor.current = r;
     r.start();
-    setSegundos(0);
     setGrabando(true);
   }
 
-  // ---------- grabando para Whisper ----------
-  async function empezar() {
-    if (abriendo.current || escribiendo) return;
-    abriendo.current = true;
-    setAviso('');
-    let flujo;
-    try {
-      flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      setAviso(e.name === 'NotAllowedError' ? 'No diste permiso para usar el micrófono.' : 'No se pudo abrir el micrófono.');
-      return;
-    } finally {
-      abriendo.current = false;
+  function alternar() {
+    if (grabando) {
+      if (reconocedor.current) reconocedor.current.debeSeguir = false;
+      reconocedor.current?.stop();
+      setGrabando(false);
+      // Al apagar el micrófono (Tiempo 2), consultamos a OmniRoute
+      procesarConOmni(texto);
+    } else {
+      escucharNavegador();
     }
-
-    const partes = [];
-    const g = new MediaRecorder(flujo);
-    const inicio = Date.now();
-    g.ondataavailable = e => e.data.size && partes.push(e.data);
-    g.onstop = async () => {
-      flujo.getTracks().forEach(t => t.stop());
-      if (Date.now() - inicio < 700) return setAviso('La grabación fue muy corta: presiona, habla y vuelve a presionar al terminar.');
-      setEscribiendo(true);
-      try {
-        const dicho = (await transcribir(new Blob(partes, { type: g.mimeType }))).trim();
-        if (!dicho) setAviso('No se escuchó nada. Acércate al micrófono y vuelve a intentarlo.');
-        else {
-          setAviso('');
-          setTexto(t => [t.trim(), dicho].filter(Boolean).join(', ').slice(0, largos.dictado));
-        }
-      } catch {
-        setAviso('No se pudo entender el audio. Vuelve a intentarlo o escríbelo.');
-      } finally {
-        setEscribiendo(false);
-      }
-    };
-    grabadora.current = g;
-    g.start();
-    setSegundos(0);
-    setGrabando(true);
   }
-
-  function terminar() {
-    if (reconocedor.current) {
-      // al terminar llega el ultimo resultado y despues onend
-      reconocedor.current.stop();
-      return;
-    }
-    if (grabadora.current?.state === 'recording') grabadora.current.stop();
-    grabadora.current = null;
-    setGrabando(false);
-  }
-
-  // contador y tope de un minuto
-  useEffect(() => {
-    if (!grabando) return;
-    const reloj = setInterval(() => setSegundos(s => {
-      if (s + 1 >= maximoGrabacion) terminar();
-      return s + 1;
-    }), 1000);
-    return () => clearInterval(reloj);
-  }, [grabando]);
-
-  // al salir de la pantalla se apaga el microfono
-  useEffect(() => () => {
-    reconocedor.current?.abort();
-    if (grabadora.current?.state === 'recording') grabadora.current.stop();
-  }, []);
-
-  let estadoVoz = 'Presiona para hablar';
-  if (grabando) estadoVoz = `Escuchando… 0:${String(segundos).padStart(2, '0')} · presiona otra vez para terminar`;
-  else if (escribiendo) estadoVoz = descarga != null ? 'Escribirá lo que dijiste cuando termine de prepararse…' : 'Escribiendo lo que dijiste…';
-  const comoReconoce = modo === 'navegador' ? 'Reconocimiento del navegador (usa internet)' : 'Reconocimiento en este equipo (Whisper)';
 
   return (
     <Fondo>
-      <form className="modal" id="form-voz" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, agregarDictado)}>
+      <form
+        className="modal"
+        id="form-voz"
+        ref={f.formulario}
+        noValidate
+        /* 
+           Simplemente pasamos agregarDictado como callback a f.enviar. 
+           f.enviar le enviará la referencia del formulario (v) donde 
+           leer(v, 'dictado') extraerá automáticamente el valor del textarea.
+        */
+        onSubmit={e => f.enviar(e, agregarDictado)}
+      >
         <CabeceraLote subtitulo='Ej. "dos kilos de arroz y tres latas de leche"' />
         <div className="modal-cuerpo">
+          
           <div className="voz">
             <button
               type="button"
-              id="microfono"
               className={`microfono ${grabando ? 'grabando' : ''}`}
-              aria-label={grabando ? 'Terminar de grabar' : 'Empezar a grabar'}
-              aria-pressed={grabando}
-              disabled={!conVoz || escribiendo}
               onClick={alternar}
+              disabled={cargandoIA}
             >
               <IconoMicrofono />
             </button>
-            <p className="voz-estado" aria-live="polite">{conVoz ? estadoVoz : sinVoz}</p>
-            {conVoz && <small className="voz-modo" id="voz-modo">{comoReconoce}</small>}
-            {descarga != null && (
-              <div className="voz-descarga" id="voz-descarga">
-                <span>Preparando el reconocimiento de voz (solo la primera vez) · {descarga}%</span>
-                <div className="voz-descarga-barra"><div style={{ width: `${descarga}%` }} /></div>
-              </div>
-            )}
+            <p className="voz-estado">
+              {grabando ? 'Escuchando... vuelve a presionar para procesar' : 'Presiona el micrófono para hablar'}
+            </p>
             {aviso && <p className="voz-aviso">{aviso}</p>}
           </div>
 
           <div className="campo">
             <label htmlFor="dictado">LO QUE SE DIJO</label>
-            <textarea id="dictado" name="dictado" rows={3} maxLength={largos.dictado} value={texto} onChange={e => setTexto(e.target.value)} placeholder="Aparece aquí lo que digas. También puedes escribir o corregir." />
+            <textarea
+              id="dictado"
+              name="dictado" // 👈 Nombre crucial requerido por leer(v, 'dictado')
+              rows={2}
+              value={texto}
+              onChange={e => {
+                setTexto(e.target.value);
+                procesarConOmni(e.target.value);
+              }}
+              placeholder="Aparecerá lo que digas..."
+            />
           </div>
 
-          {entendido.length > 0 && (
+          {cargandoIA && <p style={{ textAlign: 'center', color: '#007acc' }}>🤖 Procesando lista con OmniRoute...</p>}
+
+          {/* Renderizado de la lista entendida */}
+          {itemsEntendidos.length > 0 && (
             <div className="entendido">
-              <span>Entendí</span>
+              <span>ENTENDÍ</span>
               <ul>
-                {entendido.map((r, i) => <LineaEntendida key={i} r={r} />)}
+                {itemsEntendidos.map((r, idx) => (
+                  <LineaEntendida key={idx} r={r} />
+                ))}
               </ul>
             </div>
           )}
