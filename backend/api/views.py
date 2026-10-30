@@ -2,6 +2,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .couchdb_service import (
@@ -13,10 +14,29 @@ from .couchdb_service import (
 )
 from .authentication import IsAdminRole
 
+# Hash de relleno: se usa cuando el usuario no existe para que la respuesta
+# tarde lo mismo y no se pueda averiguar qué usuarios existen por el tiempo.
+DUMMY_HASH = make_password('relleno-para-igualar-tiempos')
+
+# Listas blancas: solo estos campos se aceptan desde el cliente
+CAMPOS_PRODUCTO = (
+    'nombre', 'categoria', 'cantidad', 'unidad', 'stock_minimo', 'minimo',
+    'codigo', 'codigosBarras', 'lotes', 'almacen', 'ubicacion',
+    'envase', 'contenido', 'medida',
+)
+CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo')
+
+
+def _solo_campos(data, permitidos):
+    return {k: data[k] for k in permitidos if k in data}
+
 
 class CustomLoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    # Limita intentos por IP (la tasa 'login' se define en settings.py)
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
     def post(self, request):
         usuario_input = (request.data.get('usuario') or request.data.get('username') or '').strip()
@@ -25,7 +45,7 @@ class CustomLoginView(APIView):
         if not usuario_input or not clave_input:
             return Response({'error': 'Usuario y contraseña requeridos'}, status=400)
 
-        docs, status_code = get_documents_by_type('usuario')
+        docs, status_code = get_documents_by_type('usuario', con_secretos=True)
         if status_code != 200 or not isinstance(docs, list):
             return Response({'error': 'Error al consultar la base de datos'}, status=500)
 
@@ -36,15 +56,16 @@ class CustomLoginView(APIView):
                 user_doc = doc
                 break
 
-        if not user_doc:
-            return Response({'error': 'Usuario no encontrado'}, status=401)
+        # Siempre se ejecuta check_password (aunque no exista el usuario)
+        real_hash = (user_doc.get('clave') or user_doc.get('password') or '') if user_doc else ''
+        password_ok = check_password(clave_input, real_hash or DUMMY_HASH) and bool(real_hash)
+
+        # Mismo mensaje para "no existe" y "contraseña incorrecta"
+        if not user_doc or not password_ok:
+            return Response({'error': 'Credenciales inválidas'}, status=401)
 
         if not user_doc.get('activo', True):
             return Response({'error': 'Esta cuenta se encuentra desactivada'}, status=401)
-
-        stored_hash = user_doc.get('clave') or user_doc.get('password') or ''
-        if not stored_hash or not check_password(clave_input, stored_hash):
-            return Response({'error': 'Contraseña incorrecta'}, status=401)
 
         rol_final = user_doc.get('rol', 'Usuario')
 
@@ -102,7 +123,7 @@ class InventarioDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, doc_id):
-        data, status_code = get_document_by_id(doc_id)
+        data, status_code = get_document_by_id(doc_id, 'producto')
         return Response(data, status=status_code)
 
     def put(self, request, doc_id):
@@ -110,11 +131,10 @@ class InventarioDetailView(APIView):
         if not rev:
             return Response({"error": "Se requiere '_rev' para actualizar"}, status=400)
 
-        # Sanitizar conservando todos los datos del producto
-        doc_data = request.data.copy()
-        doc_data['tipo'] = 'producto'
+        # Solo campos de producto permitidos; el resto del documento se conserva
+        doc_data = _solo_campos(request.data, CAMPOS_PRODUCTO)
 
-        data, status_code = update_document(doc_id, doc_data, rev)
+        data, status_code = update_document(doc_id, doc_data, rev, 'producto', fusionar=True)
         return Response(data, status=status_code)
 
     def delete(self, request, doc_id):
@@ -125,7 +145,7 @@ class InventarioDetailView(APIView):
         if not rev:
             return Response({"error": "Se requiere '_rev' para eliminar"}, status=400)
 
-        data, status_code = delete_document(doc_id, rev)
+        data, status_code = delete_document(doc_id, rev, 'producto')
         return Response(data, status=status_code)
 
 
@@ -139,7 +159,6 @@ class HistorialListCreateView(APIView):
     def post(self, request):
         datos = request.data
 
-        # Mapeo completo garantizando todas las propiedades enviadas por registrarMovimiento
         doc_data = {
             'tipo': 'movimiento',
             'producto_id': datos.get('producto_id', None),
@@ -151,7 +170,8 @@ class HistorialListCreateView(APIView):
             'unidad': datos.get('unidad', 'unidades'),
             'fecha': datos.get('fecha', ''),
             'canal': datos.get('canal', 'manual'),
-            'usuario_id': datos.get('usuario_id', getattr(request.user, 'id', '')),
+            # El autor sale del token, no del cliente (evita suplantar a otro usuario)
+            'usuario_id': getattr(request.user, 'id', ''),
             'responsable': datos.get('responsable', getattr(request.user, 'username', 'Usuario')),
             'donador': datos.get('donador', ''),
             'actividad': datos.get('actividad', ''),
@@ -188,8 +208,9 @@ class DonadoresListCreateView(APIView):
             'telefono': datos.get('telefono', datos.get('contacto', '')),
             'contacto': datos.get('contacto', datos.get('telefono', '')),
             'email': datos.get('email', ''),
-            'creadoPor': datos.get('creadoPor', getattr(request.user, 'username', '')),
-            'creadoPorId': datos.get('creadoPorId', getattr(request.user, 'id', '')),
+            # Quién lo creó sale del token, no del cliente
+            'creadoPor': getattr(request.user, 'username', ''),
+            'creadoPorId': getattr(request.user, 'id', ''),
             'creado': datos.get('creado', None)
         }
 
@@ -204,23 +225,30 @@ class UsuariosListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
 
     def get(self, request):
+        # get_documents_by_type ya quita el hash 'clave' por defecto
         data, status_code = get_documents_by_type('usuario')
         return Response(data, status=status_code)
 
     def post(self, request):
-        doc_data = request.data.copy()
+        doc_data = _solo_campos(request.data, CAMPOS_USUARIO)
         doc_data['tipo'] = 'usuario'
 
-        raw_password = doc_data.get('clave') or doc_data.get('password') or ''
-        if isinstance(raw_password, list):
-            raw_password = raw_password[0] if raw_password else ''
+        nombre_usuario = str(doc_data.get('usuario', '')).strip()
+        raw_password = str(request.data.get('clave') or request.data.get('password') or '').strip()
 
-        raw_password = str(raw_password).strip()
-        if raw_password:
-            doc_data['clave'] = make_password(raw_password)
+        if not nombre_usuario or not raw_password:
+            return Response({'error': 'Usuario y contraseña son obligatorios'}, status=400)
 
-        doc_data.pop('password', None)
-        doc_data.pop('username', None)
+        # Evitar usuarios duplicados (un duplicado podría "tapar" a otro en el login)
+        existentes, status_code = get_documents_by_type('usuario')
+        if status_code != 200:
+            return Response(existentes, status=status_code)
+        if any((d.get('usuario') or d.get('username') or '').lower() == nombre_usuario.lower()
+               for d in existentes):
+            return Response({'error': 'Ese usuario ya existe'}, status=409)
+
+        doc_data['usuario'] = nombre_usuario
+        doc_data['clave'] = make_password(raw_password)
 
         data, status_code = create_document(doc_data)
         return Response(data, status=status_code)
@@ -230,16 +258,17 @@ class UsuarioDetailView(APIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
 
     def put(self, request, doc_id):
-        doc_data = request.data.copy()
-        doc_data['tipo'] = 'usuario'
-
-        rev = doc_data.get('_rev') or request.data.get('_rev')
+        rev = request.data.get('_rev')
         if not rev:
             return Response({"error": "Se requiere '_rev' para actualizar el usuario"}, status=400)
 
-        # Si se envió una nueva contraseña al actualizar, encriptarla
-        if 'clave' in doc_data and doc_data['clave'] and not doc_data['clave'].startswith('pbkdf2_sha256$'):
-            doc_data['clave'] = make_password(doc_data['clave'])
+        doc_data = _solo_campos(request.data, CAMPOS_USUARIO)
 
-        data, status_code = update_document(doc_id, doc_data, rev)
+        # Solo se cambia la contraseña si llega una nueva (siempre se hashea);
+        # si no llega, fusionar=True conserva el hash actual.
+        nueva = str(request.data.get('clave') or request.data.get('password') or '').strip()
+        if nueva:
+            doc_data['clave'] = make_password(nueva)
+
+        data, status_code = update_document(doc_id, doc_data, rev, 'usuario', fusionar=True)
         return Response(data, status=status_code)

@@ -1,74 +1,189 @@
+import logging
 import os
+from urllib.parse import quote
+
 import requests
+from django.core.exceptions import ImproperlyConfigured
+
+logger = logging.getLogger(__name__)
 
 COUCHDB_URL = os.getenv('COUCHDB_URL', 'http://127.0.0.1:5984')
-COUCHDB_DB = os.getenv('COUCHDB_DB', 'casa_hogar')
 COUCHDB_USER = os.getenv('COUCHDB_USER', 'casa_app')
-COUCHDB_PASSWORD = os.getenv('COUCHDB_PASSWORD', '')
+COUCHDB_PASSWORD = os.getenv('COUCHDB_PASSWORD')
 
-AUTH = (COUCHDB_USER, COUCHDB_PASSWORD)
-BASE_DB_URL = f"{COUCHDB_URL}/{COUCHDB_DB}"
+# Sin contraseña la app no debe arrancar (antes fallaba "raro" más tarde)
+if not COUCHDB_PASSWORD:
+    raise ImproperlyConfigured('Falta la variable de entorno COUCHDB_PASSWORD')
+
+# Cada tipo de documento vive en su propia base. Debe coincidir con setup.ps1.
+# Esta tabla es también la lista blanca de tipos válidos.
+DBS = {
+    'usuario':    os.getenv('COUCHDB_DB_USUARIOS', 'casa_usuarios'),
+    'producto':   os.getenv('COUCHDB_DB_INVENTARIO', 'casa_inventario'),
+    'donador':    os.getenv('COUCHDB_DB_DONADORES', 'casa_donadores'),
+    'movimiento': os.getenv('COUCHDB_DB_MOVIMIENTOS', 'casa_movimientos'),
+}
+TIPOS_VALIDOS = set(DBS)
+
+TIMEOUT = 10
+PAGINA = 200
+MAX_PAGINAS = 100
+
+# Campos que nunca deben salir hacia el cliente
+CAMPOS_SECRETOS = ('clave', 'password')
+
+# Una sola sesión reutiliza conexiones TCP en vez de abrir una por llamada
+session = requests.Session()
+session.auth = (COUCHDB_USER, COUCHDB_PASSWORD)
 
 
-def get_all_documents():
-    """Obtiene todos los documentos guardados en CouchDB descartando los del sistema."""
-    url = f"{BASE_DB_URL}/_all_docs?include_docs=true"
-    response = requests.get(url, auth=AUTH)
-    
-    if response.status_code == 200:
-        rows = response.json().get('rows', [])
-        # Filtrar documentos internos de CouchDB (los que empiezan con _)
-        documents = [row['doc'] for row in rows if not row['id'].startswith('_')]
-        return documents, 200
-    return {"error": "Error al consultar CouchDB"}, response.status_code
+
+def _request(method, url, **kwargs):
+    """Hace la petición a CouchDB con timeout y errores controlados.
+    Nunca devuelve al cliente detalles internos (se registran en el log)."""
+    try:
+        response = session.request(method, url, timeout=TIMEOUT, **kwargs)
+    except requests.exceptions.RequestException:
+        logger.exception('No se pudo conectar con CouchDB (%s)', method)
+        return {'error': 'Servicio de base de datos no disponible'}, 503
+
+    try:
+        return response.json(), response.status_code
+    except ValueError:
+        logger.error('Respuesta no JSON de CouchDB (%s %s): %s',
+                     method, response.status_code, response.text[:500])
+        return {'error': 'Respuesta inválida de la base de datos'}, 502
 
 
-def get_documents_by_type(doc_type):
-    """Obtiene documentos filtrados por la propiedad 'tipo' (ej: 'producto', 'movimiento')."""
-    url = f"{BASE_DB_URL}/_find"
-    query = {"selector": {"tipo": doc_type}}
-    response = requests.post(url, json=query, auth=AUTH)
-    
-    if response.status_code == 200:
-        docs = response.json().get('docs', [])
-        return docs, 200
-    
-    # Respaldo: si el endpoint _find no encuentra un índice, obtiene todos y filtra localmente
-    docs, code = get_all_documents()
-    if code == 200:
-        filtered = [doc for doc in docs if doc.get('tipo') == doc_type]
-        return filtered, 200
-    return {"error": "Error al consultar CouchDB"}, response.status_code
+def sin_secretos(doc):
+    """Devuelve una copia del documento sin hashes de contraseña."""
+    if not isinstance(doc, dict):
+        return doc
+    return {k: v for k, v in doc.items() if k not in CAMPOS_SECRETOS}
+
+
+def _id_valido(doc_id):
+    """Rechaza IDs vacíos o que empiecen con '_' (_design, _all_docs, _users...)."""
+    doc_id = str(doc_id or '')
+    return bool(doc_id) and not doc_id.startswith('_')
+
+
+def _db_url(tipo):
+    """URL de la base donde viven los documentos de ese tipo."""
+    return f"{COUCHDB_URL}/{DBS[tipo]}"
+
+
+def _doc_url(tipo, doc_id):
+    """Codifica el ID para que '/', '..' o '?' no cambien el destino de la URL."""
+    return f"{_db_url(tipo)}/{quote(str(doc_id), safe='')}"
+
+
+def _quitar_reservados(doc_data):
+    """Elimina campos que empiezan con '_' (_id, _rev, _deleted, _attachments...).
+    Evita que el cliente cree documentos _design/* o manipule metadatos."""
+    return {k: v for k, v in dict(doc_data).items() if not str(k).startswith('_')}
+
+
+def _leer_documento(doc_id, tipo_esperado):
+    """Lee un documento (con secretos, uso interno) de la base de su tipo,
+    verificando además que sea del tipo esperado."""
+    if tipo_esperado not in TIPOS_VALIDOS:
+        return {'error': 'Tipo inválido'}, 400
+    if not _id_valido(doc_id):
+        return {'error': 'ID no válido'}, 400
+
+    data, status = _request('GET', _doc_url(tipo_esperado, doc_id))
+    if status != 200:
+        return data, status
+
+    # Defensa extra: en la base de inventario conviven productos y donadores
+    if data.get('tipo') != tipo_esperado:
+        return {'error': 'No encontrado'}, 404
+    return data, 200
+
+
+def _find_todos(tipo, selector):
+    """Ejecuta _find en la base de ese tipo, pidiendo páginas de PAGINA
+    documentos con 'bookmark' hasta traer todos (o llegar a MAX_PAGINAS)."""
+    docs, bookmark = [], None
+    for _ in range(MAX_PAGINAS):
+        query = {'selector': selector, 'limit': PAGINA}
+        if bookmark:
+            query['bookmark'] = bookmark
+
+        data, status = _request('POST', f"{_db_url(tipo)}/_find", json=query)
+        if status != 200 or not isinstance(data.get('docs'), list):
+            return data, status
+
+        lote = data['docs']
+        docs.extend(lote)
+        bookmark = data.get('bookmark')
+
+        # Si llegó una página incompleta, ya no quedan más resultados
+        if len(lote) < PAGINA or not bookmark:
+            break
+    else:
+        logger.warning('Consulta %s alcanzó el tope de %s documentos',
+                       selector, PAGINA * MAX_PAGINAS)
+    return docs, 200
+
+
+
+def get_documents_by_type(doc_type, con_secretos=False):
+    """Documentos filtrados por 'tipo'. Por defecto NO incluye hashes de contraseña;
+    solo el login debe pedir con_secretos=True."""
+    if doc_type not in TIPOS_VALIDOS:
+        return {'error': 'Tipo inválido'}, 400
+
+    docs, status = _find_todos(doc_type, {'tipo': doc_type})
+    if status != 200:
+        return docs, status
+
+    if not con_secretos:
+        docs = [sin_secretos(d) for d in docs]
+    return docs, 200
 
 
 def create_document(doc_data):
-    """Crea un nuevo documento en CouchDB manejando posibles fallos de conexión."""
-    try:
-        response = requests.post(BASE_DB_URL, json=doc_data, auth=AUTH)
-        try:
-            return response.json(), response.status_code
-        except ValueError:
-            return {"error": "Respuesta no válida de CouchDB", "detalle": response.text}, response.status_code
-    except requests.exceptions.RequestException as e:
-        return {"error": f"No se pudo conectar con CouchDB: {str(e)}"}, 500
+    """Crea un documento en la base de su tipo. Exige un 'tipo' válido y
+    descarta campos reservados."""
+    tipo = doc_data.get('tipo')
+    if tipo not in TIPOS_VALIDOS:
+        return {'error': 'Tipo inválido'}, 400
+    return _request('POST', _db_url(tipo), json=_quitar_reservados(doc_data))
 
 
-def get_document_by_id(doc_id):
-    """Obtiene un documento específico por su ID."""
-    url = f"{BASE_DB_URL}/{doc_id}"
-    response = requests.get(url, auth=AUTH)
-    return response.json(), response.status_code
+def get_document_by_id(doc_id, tipo_esperado):
+    """Obtiene un documento por ID, solo si es del tipo esperado y sin secretos."""
+    data, status = _leer_documento(doc_id, tipo_esperado)
+    if status != 200:
+        return data, status
+    return sin_secretos(data), 200
 
 
-def update_document(doc_id, doc_data, rev):
-    """Actualiza un documento existente enviando su ID y la revisión (_rev)."""
-    doc_data['_rev'] = rev
-    url = f"{BASE_DB_URL}/{doc_id}"
-    response = requests.put(url, json=doc_data, auth=AUTH)
-    return response.json(), response.status_code
+def update_document(doc_id, doc_data, rev, tipo_esperado, fusionar=False):
+    """Actualiza un documento verificando su tipo.
 
-def delete_document(doc_id, rev):
-    """Elimina un documento por ID enviando su revisión (_rev)."""
-    url = f"{BASE_DB_URL}/{doc_id}?rev={rev}"
-    response = requests.delete(url, auth=AUTH)
-    return response.json(), response.status_code
+    fusionar=True conserva los campos actuales que el cliente no envió
+    (por ejemplo, el hash 'clave' de un usuario)."""
+    actual, status = _leer_documento(doc_id, tipo_esperado)
+    if status != 200:
+        return actual, status
+
+    nuevo = _quitar_reservados(doc_data)
+    if fusionar:
+        base = {k: v for k, v in actual.items() if not k.startswith('_')}
+        nuevo = {**base, **nuevo}
+
+    nuevo['tipo'] = tipo_esperado   # el tipo no se puede cambiar desde fuera
+    nuevo['_id'] = actual['_id']
+    nuevo['_rev'] = rev
+    return _request('PUT', _doc_url(tipo_esperado, actual['_id']), json=nuevo)
+
+
+def delete_document(doc_id, rev, tipo_esperado):
+    """Elimina un documento verificando su tipo."""
+    actual, status = _leer_documento(doc_id, tipo_esperado)
+    if status != 200:
+        return actual, status
+    return _request('DELETE', _doc_url(tipo_esperado, actual['_id']),params={'rev': rev})

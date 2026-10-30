@@ -10,9 +10,11 @@
     "vite": "^8.3.2"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
     "axios": "^1.20.0",
     "barcode-detector": "^3.2.3",
     "events": "^3.3.0",
+    "onnxruntime-web": "^1.31.1",
     "pouchdb": "^9.0.0",
     "pouchdb-browser": "^9.0.0",
     "react": "^19.3.1",
