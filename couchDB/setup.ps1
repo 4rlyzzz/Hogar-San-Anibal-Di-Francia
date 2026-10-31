@@ -234,6 +234,7 @@ foreach ($Db in $Bases) {
     }
 }
 
+
 # ============================================
 # [6/8] INDICES
 # ============================================
@@ -293,6 +294,7 @@ elseif ($PSVersionTable.PSVersion.Major -ge 7) {
     Write-Host "Ejecuta el script con Windows PowerShell 5.1 (powershell.exe) o con PowerShell 7.5 o superior."
     exit 1
 }
+
 
 $Crudo = Get-Content $ArchivoDatos -Raw -Encoding UTF8
 $Datos = $Crudo | ConvertFrom-Json @ParamsJson
