@@ -2,9 +2,9 @@
 
 Sistema de software para la gestión de inventario del Hogar San Aníbal Di Francia, proyecto para el curso Computación en la Sociedad CCOMP8-1.
 
-El proyecto utiliza un frontend con Node.js/npm, un backend con Django y CouchDB para la funcionalidad de base de datos local/sincronización mediante PouchDB.
+El proyecto utiliza un frontend con React + Vite (npm), un backend con Django y CouchDB como base de datos.
 
-## Requisitos
+## 1. Requisitos
 
 Programas necesarios:
 
@@ -16,7 +16,7 @@ Programas necesarios:
 
 1. Instalar e iniciar Apache CouchDB y crear la cuenta de administrador.
 2. Comprueba que CouchDB esté disponible en <http://127.0.0.1:5984/>.
-4. Ejecutar en una terminal:
+3. Ejecutar en una terminal:
 
    ```powershell
    cd couchdb
@@ -30,7 +30,7 @@ Programas necesarios:
    .\setup.ps1
    ```
 
-5. Entrar a Fauxton: <http://127.0.0.1:5984/_utils/>. Buscar **Configuración → CORS**, activar CORS y agregar los origenes de ejecutación: `http://localhost:5173` `http://localhost:8000`.
+4. Entrar a Fauxton: <http://127.0.0.1:5984/_utils/>. Buscar **Configuración → CORS**, activar CORS y agregar los origenes de ejecutación: `http://localhost:5173` `http://localhost:8000`.
 
 
 > **Nota:** La configuración de CORS debe permitir el origen real del frontend. Si el frontend se abre desde otra dirección o puerto, agrega ese origen en CouchDB.
@@ -64,6 +64,14 @@ SECRET_KEY=django-insecure-default-key
 DEBUG=True
 ```
 > **Nota:**  No compartas ni subas el archivo `.env` al repositorio, son credenciales reales y datos críticos.
+
+Crear el primer administrador (pide usuario, nombre y contraseña; solo se hace una vez):
+
+```powershell
+python manage.py crear_usuario
+```
+
+Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**.
 
 Para inicializar el servicio Django ejecutar (**1ra terminal**):
 
@@ -101,18 +109,32 @@ Abrir la dirección que indique Vite; por defecto es <http://localhost:5173/>.
 
 Dejar ambas terminales abiertas: una ejecuta Django y la otra el servidor de desarrollo del frontend.
 
-## 6. Prueba de CouchDB/PouchDB en modo local (opcional)
+## 5. Actualizar después de un pull
 
-Si es necesario probar la demo independiente de CouchDB/PouchDB que se sirve como archivos estáticos, ejecutar desde la raíz del proyecto:
+Si alguien agregó dependencias, volver a instalarlas antes de ejecutar:
 
 ```powershell
-cd couchdb
-python -m http.server 8000
+pip install -r requirements.txt
+cd frontend
+npm install
 ```
 
-Luego abrir <http://localhost:8000/web/>.
+## 6. Pruebas de regresión
 
-**Importante:** este servidor HTTP de prueba ocupa el puerto `8000`, que también es el puerto predeterminado de Django. No ejecutes ambos servidores en el mismo puerto al mismo tiempo. Para trabajar con la aplicación completa, usa Django en la primera terminal y npm en la segunda; para probar la demo estática, detén temporalmente el servidor que esté ocupando el puerto 8000 o configura otro puerto.
+Antes de subir cambios (o después de un pull), revisa que todo lo que ya funcionaba siga funcionando. En una terminal en la raíz ejecutar:
+
+```powershell
+.\pruebas.ps1
+```
+
+Ejecuta, en orden: la revisión de Django, las pruebas del backend (login, sesiones, inventario, movimientos de stock, donadores, usuarios y comandos), las pruebas de la lógica del frontend (validaciones, lotes, alertas, filtros, historial y dictado), el lint y el build. Al final muestra un resumen; si algo falla, termina con error y dice qué paso falló.
+
+- No necesita CouchDB encendido ni toca la base real: el backend se prueba con una CouchDB falsa en memoria.
+- `.\pruebas.ps1 -Rapido` corre solo las pruebas (sin lint ni build).
+- Por separado: `python manage.py test api` (en **backend**) o `npm test` (en **frontend**).
+- Las pruebas están en `backend/api/tests/` y `frontend/pruebas/`. Al agregar una funcionalidad nueva, agrega también su prueba.
+
+## 7. Detener o iniciar CouchDB
 
 Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como administrador y ejecutar, según corresponda:
 

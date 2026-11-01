@@ -1,5 +1,9 @@
 import logging
 import os
+import random
+import re
+import time
+import unicodedata
 from urllib.parse import quote
 
 import requests
@@ -96,7 +100,7 @@ def _leer_documento(doc_id, tipo_esperado):
     if status != 200:
         return data, status
 
-    # Defensa extra: en la base de inventario conviven productos y donadores
+    # Defensa extra: el documento tiene que ser del tipo pedido
     if data.get('tipo') != tipo_esperado:
         return {'error': 'No encontrado'}, 404
     return data, 200
@@ -144,13 +148,25 @@ def get_documents_by_type(doc_type, con_secretos=False):
     return docs, 200
 
 
-def create_document(doc_data):
+def create_document(doc_data, doc_id=None):
     """Crea un documento en la base de su tipo. Exige un 'tipo' válido y
-    descarta campos reservados."""
+    descarta campos reservados.
+    doc_id: identificador fijo (por ejemplo 'donador:parroquia-san-jose'); si ya existe,
+    CouchDB responde 409 y no se crea otro igual aunque dos personas lo creen a la vez."""
     tipo = doc_data.get('tipo')
     if tipo not in TIPOS_VALIDOS:
         return {'error': 'Tipo inválido'}, 400
-    return _request('POST', _db_url(tipo), json=_quitar_reservados(doc_data))
+    if doc_id is None:
+        return _request('POST', _db_url(tipo), json=_quitar_reservados(doc_data))
+    if not _id_valido(doc_id):
+        return {'error': 'ID no válido'}, 400
+    return _request('PUT', _doc_url(tipo, doc_id), json=_quitar_reservados(doc_data))
+
+
+def slug(texto):
+    """'Parroquia San José' -> 'parroquia-san-jose' (para identificadores fijos)."""
+    sin_tildes = unicodedata.normalize('NFKD', str(texto or '')).encode('ascii', 'ignore').decode()
+    return re.sub(r'[^a-z0-9]+', '-', sin_tildes.lower()).strip('-')[:80]
 
 
 def get_document_by_id(doc_id, tipo_esperado):
@@ -161,11 +177,18 @@ def get_document_by_id(doc_id, tipo_esperado):
     return sin_secretos(data), 200
 
 
+def get_document_con_secretos(doc_id, tipo_esperado):
+    """Como get_document_by_id pero con el hash de la contraseña:
+    solo para revisar la contraseña actual al cambiarla."""
+    return _leer_documento(doc_id, tipo_esperado)
+
+
 def update_document(doc_id, doc_data, rev, tipo_esperado, fusionar=False):
     """Actualiza un documento verificando su tipo.
 
     fusionar=True conserva los campos actuales que el cliente no envió
-    (por ejemplo, el hash 'clave' de un usuario)."""
+    (por ejemplo, el hash 'clave' de un usuario).
+    rev=None usa la revisión actual (para cambios que no dependen de lo que vio el cliente)."""
     actual, status = _leer_documento(doc_id, tipo_esperado)
     if status != 200:
         return actual, status
@@ -177,8 +200,39 @@ def update_document(doc_id, doc_data, rev, tipo_esperado, fusionar=False):
 
     nuevo['tipo'] = tipo_esperado   # el tipo no se puede cambiar desde fuera
     nuevo['_id'] = actual['_id']
-    nuevo['_rev'] = rev
+    nuevo['_rev'] = rev or actual['_rev']
     return _request('PUT', _doc_url(tipo_esperado, actual['_id']), json=nuevo)
+
+
+class SinCambios(Exception):
+    """Lo lanza cambiar() en actualizar_con_reintento para no guardar nada."""
+
+
+def actualizar_con_reintento(doc_id, tipo_esperado, cambiar, intentos=20):
+    """Lee el documento, aplica cambiar(doc) -> {campos nuevos} y lo guarda con su _rev.
+    Si otra persona lo guardo entre medio (409), vuelve a leer y a aplicar el cambio sobre lo nuevo.
+    cambiar puede lanzar excepciones (validaciones con el dato real): no se guarda nada.
+    Entre intentos espera un poco al azar (cada vez mas): si muchos guardan a la vez, no vuelven a chocar juntos.
+    Devuelve (documento guardado sin secretos, status)."""
+    for intento in range(intentos):
+        if intento:
+            time.sleep(random.uniform(0, 0.01 * 2 ** min(intento, 6)))
+        actual, status = _leer_documento(doc_id, tipo_esperado)
+        if status != 200:
+            return actual, status
+        campos = cambiar(dict(actual))
+        nuevo = {**{k: v for k, v in actual.items() if not k.startswith('_')}, **_quitar_reservados(campos)}
+        nuevo['tipo'] = tipo_esperado
+        nuevo['_id'] = actual['_id']
+        nuevo['_rev'] = actual['_rev']
+        data, status = _request('PUT', _doc_url(tipo_esperado, actual['_id']), json=nuevo)
+        if status == 409:
+            continue
+        if status not in (200, 201):
+            return data, status
+        nuevo['_rev'] = data.get('rev')
+        return sin_secretos(nuevo), 200
+    return {'error': 'conflicto'}, 409
 
 
 def delete_document(doc_id, rev, tipo_esperado):

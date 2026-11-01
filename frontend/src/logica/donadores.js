@@ -1,5 +1,19 @@
 import { fechaDe, meses } from './comunes.js';
 
+// nombres de donadores con la primera letra de cada palabra en mayuscula: 'parroquia san josé' -> 'Parroquia San José'
+// las siglas escritas en mayusculas se respetan ('ONG Manos Unidas'), salvo que todo el nombre venga en mayusculas
+// tambien a los que ya estaban guardados, para que el historial y la lista coincidan
+// (igual que _nombre_donador en backend/api/views.py)
+export function nombreDonador(nombre) {
+  const limpio = String(nombre ?? '').trim().replace(/\s+/g, ' ');
+  const todoMayuscula = limpio === limpio.toLocaleUpperCase('es');
+  return limpio.split(' ').map(palabra => {
+    if (!todoMayuscula && palabra.length > 1 && palabra === palabra.toLocaleUpperCase('es')) return palabra;
+    const minuscula = palabra.toLocaleLowerCase('es');
+    return minuscula.charAt(0).toLocaleUpperCase('es') + minuscula.slice(1);
+  }).join(' ');
+}
+
 // 'Agregado por Cocina · 20 oct'
 export function textoAgregado(d) {
   if (!d.creadoPor) return '';

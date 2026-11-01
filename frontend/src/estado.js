@@ -1,6 +1,5 @@
 // estado de toda la app; las acciones lo cambian y llaman a refrescar() para que React vuelva a dibujar
 import { useSyncExternalStore } from 'react';
-import { alimentos, salud, historial, donadores, cuentas, actividad } from './data/datos.js';
 import { inventarioVacio } from './logica/inventario.js';
 import { filtrosHistorialVacios } from './logica/historial.js';
 
@@ -23,12 +22,12 @@ export const estado = {
   toast: null,
   menuUsuario: false,
   menuFijo: false,
-  alimentos,
-  salud,
-  historial,
-  donadores,
-  cuentas,
-  actividad,
+  // se llenan con los datos del backend al entrar
+  alimentos: [],
+  salud: [],
+  historial: [],
+  donadores: [],
+  cuentas: [],
 };
 
 let version = 0;

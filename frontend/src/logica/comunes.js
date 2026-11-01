@@ -41,12 +41,19 @@ export function tiempoRelativo(d) {
 
 // '07 oct 09:05' -> Date (sin año: si queda en el futuro, es del año pasado)
 export function fechaDe(texto) {
-  const [dia, mes, hora] = texto.split(' ');
+  const [dia, mes, hora = '00:00'] = String(texto ?? '').split(' ');
   const [h, m] = hora.split(':');
   const hoy = new Date();
   const fecha = new Date(hoy.getFullYear(), meses.indexOf(mes), Number(dia), Number(h), Number(m));
   if (fecha > hoy) fecha.setFullYear(hoy.getFullYear() - 1);
   return fecha;
+}
+
+// cuando paso un movimiento, para ordenar: la hora del servidor ('creado');
+// los viejos no la tienen y se usa 'fecha' (sin año)
+export function momento(fila) {
+  const exacta = fila.creado ? new Date(fila.creado) : null;
+  return exacta && !Number.isNaN(exacta.getTime()) ? exacta : fechaDe(fila.fecha);
 }
 
 // ---------- productos ----------

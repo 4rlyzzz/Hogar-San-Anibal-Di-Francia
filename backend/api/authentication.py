@@ -32,10 +32,12 @@ class CouchDBUser:
     is_anonymous = False
     is_active = True
 
-    def __init__(self, user_id, username, rol):
+    def __init__(self, user_id, username, rol, nombre=''):
         self.id = user_id
         self.pk = user_id
         self.username = username
+        # nombre visible: el que sale como responsable en el historial
+        self.nombre = nombre or username
         self.rol = rol
         self.is_staff = (rol == 'Administrador')
         self.is_superuser = (rol == 'Administrador')
@@ -62,7 +64,8 @@ class CouchDBJWTAuthentication(JWTAuthentication):
         username = (datos.get('usuario') or datos.get('username')
                     or validated_token.get("username", ""))
         return CouchDBUser(user_id=user_id, username=username,
-                           rol=datos.get('rol', 'Usuario'))
+                           rol=datos.get('rol', 'Usuario'),
+                           nombre=datos.get('nombre', ''))
 
     def _datos_usuario(self, user_id):
         clave_cache = f"couch_user:{user_id}"
@@ -75,6 +78,7 @@ class CouchDBJWTAuthentication(JWTAuthentication):
         if status == 200:
             datos = {
                 'usuario': doc.get('usuario') or doc.get('username') or '',
+                'nombre': doc.get('nombre', ''),
                 'rol': doc.get('rol', 'Usuario'),
                 'activo': doc.get('activo', True),
             }

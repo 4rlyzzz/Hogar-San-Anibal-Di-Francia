@@ -1,7 +1,8 @@
 import { fechaDe, ninosDe, textoPara } from './comunes.js';
 
 export function filtrosHistorialVacios() {
-  return { movimiento: 'Todos', categoria: 'Todos', responsable: 'Todos', producto: 'Todos', para: 'Todos', donador: 'Todos', actividad: 'Todos', desde: '', hasta: '' };
+  // orden: 'recientes' (lo mas nuevo arriba) o 'antiguos'
+  return { movimiento: 'Todos', categoria: 'Todos', responsable: 'Todos', producto: 'Todos', para: 'Todos', donador: 'Todos', actividad: 'Todos', desde: '', hasta: '', orden: 'recientes' };
 }
 
 // filtros del historial (tambien para el Excel)
@@ -14,7 +15,8 @@ export function filtrarHistorial(estado) {
   const desde = f.desde ? new Date(f.desde + 'T00:00:00') : null;
   const hasta = f.hasta ? new Date(f.hasta + 'T23:59:59') : null;
 
-  return estado.historial.filter(fila => {
+  // el historial ya esta de lo mas nuevo a lo mas antiguo
+  const filas = estado.historial.filter(fila => {
     if (f.movimiento !== 'Todos' && fila.movimiento !== f.movimiento) return false;
     if (f.categoria !== 'Todos' && fila.categoria !== f.categoria) return false;
     if (f.responsable !== 'Todos' && fila.responsable !== f.responsable) return false;
@@ -29,8 +31,9 @@ export function filtrarHistorial(estado) {
       if (hasta && fecha > hasta) return false;
     }
 
-    return [fila.insumo, fila.responsable, fila.donador, textoPara(fila), fila.observaciones].join(' ').toLowerCase().includes(texto);
+    return [fila.insumo, fila.insumoOriginal, fila.responsable, fila.donador, textoPara(fila), fila.observaciones].join(' ').toLowerCase().includes(texto);
   });
+  return f.orden === 'antiguos' ? filas.reverse() : filas;
 }
 
 // valores distintos que aparecen en el historial, ordenados (las listas se abren)
