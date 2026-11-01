@@ -22,6 +22,19 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// si varias peticiones vencen a la vez, comparten una sola renovacion
+let renovando = null;
+function renovarToken() {
+  renovando ??= axios.post(`${API_URL}auth/refresh/`, { refresh: localStorage.getItem('refresh_token') })
+    .then(res => {
+      localStorage.setItem('access_token', res.data.access);
+      if (res.data.refresh) localStorage.setItem('refresh_token', res.data.refresh);
+      return res.data.access;
+    })
+    .finally(() => { renovando = null; });
+  return renovando;
+}
+
 // Interceptor de Respuesta: renueva el token automáticamente en errores 401
 api.interceptors.response.use(
   (response) => response,
@@ -36,24 +49,18 @@ api.interceptors.response.use(
       !originalRequest.url.includes('auth/login')
     ) {
       originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('refresh_token');
 
-      if (refreshToken) {
+      if (localStorage.getItem('refresh_token')) {
         try {
-          // Solicitar un nuevo access_token usando el refresh_token
-          const res = await axios.post(`${API_URL}auth/refresh/`, {
-            refresh: refreshToken,
-          });
-
-          if (res.data.access) {
-            localStorage.setItem('access_token', res.data.access);
-            originalRequest.headers.Authorization = `Bearer ${res.data.access}`;
-            return api(originalRequest); // Reintentar la petición original con el nuevo token
-          }
+          const access = await renovarToken();
+          originalRequest.headers.Authorization = `Bearer ${access}`;
+          return api(originalRequest); // Reintentar la petición original con el nuevo token
         } catch (refreshError) {
-          // Si el refresh token también expiró o es inválido, cerrar sesión
-          logout();
-          window.location.reload();
+          // solo se cierra la sesion si el refresh token vencio (no si el servidor esta caido)
+          if (refreshError.response?.status === 401) {
+            logout();
+            window.location.reload();
+          }
           return Promise.reject(refreshError);
         }
       }
@@ -76,6 +83,7 @@ export const login = async (usuario, clave) => {
 export const logout = () => {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
+  localStorage.removeItem('usuario_sesion');
 };
 
 // --- INVENTARIO ---

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import logo from '../assets/logo.png';
 import { IconoOjo } from '../assets/iconos.jsx';
 import { largos } from '../validacion.js';
-import { iniciarSesion, Invalido } from '../acciones.js';
+import { iniciarSesion } from '../acciones.js';
 import { useFormulario, valoresDe, MensajeError } from '../components/Formulario.jsx';
 
 // pantalla completa, antes de entrar a la app
@@ -55,7 +55,7 @@ export function Login() {
 
           <MensajeError texto={f.error} />
 
-          <button type="submit" className="btn btn-verde login-entrar">Iniciar sesión</button>
+          <button type="submit" className="btn btn-verde login-entrar" disabled={cargando}>{cargando ? 'Entrando…' : 'Iniciar sesión'}</button>
         </form>
       </div>
     </div>

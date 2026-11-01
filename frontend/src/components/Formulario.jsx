@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { largos } from '../validacion.js';
 import { estado } from '../estado.js';
-import { cerrarModal, intentar } from '../acciones.js';
+import { cerrarModal, intentar, Invalido } from '../acciones.js';
 import { textoPresentacion } from '../logica/comunes.js';
 import { Desplegable } from './Desplegable.jsx';
 
@@ -25,7 +25,18 @@ export function useFormulario() {
   // corre la accion con los valores del formulario; devuelve true si salio bien
   function enviar(e, accion) {
     e.preventDefault();
-    const resultado = intentar(() => accion(valoresDe(e.currentTarget)));
+    const valores = valoresDe(e.currentTarget);
+    let salida;
+    const resultado = intentar(() => (salida = accion(valores)));
+
+    // si la accion espera al servidor, el error se muestra al terminar
+    if (!resultado && salida instanceof Promise) {
+      salida.then(
+        () => mostrar(null),
+        err => mostrar(err instanceof Invalido ? { error: err.message, campo: err.campo } : { error: 'No se pudo guardar. Vuelve a intentarlo.' }),
+      );
+      return true;
+    }
     mostrar(resultado);
     return !resultado;
   }

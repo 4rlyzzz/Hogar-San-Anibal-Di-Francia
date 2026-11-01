@@ -4,8 +4,9 @@ import {
   logout,
   getInventario, 
   guardarProductoAPI, 
-  actualizarProductoAPI, 
-  getHistorialAPI, 
+  actualizarProductoAPI,
+  eliminarProductoAPI,
+  getHistorialAPI,
   registrarMovimientoAPI,
   getDonadoresAPI,
   guardarDonadorAPI,
@@ -16,7 +17,7 @@ import {
 // los formularios mandan sus valores como objeto { campo: texto }; si algo no pasa la validacion se lanza Invalido
 import { estado, refrescar } from './estado.js';
 import { usuario, actividadesDonacion, ninos } from './data/datos.js';
-import { reglas, cantidadDe, numero as reglaNumero, opcion, limpiarTexto, fechaFiltro, largos } from './validacion.js';
+import { reglas, cantidadDe, numero as reglaNumero, limpiarTexto, fechaFiltro, largos } from './validacion.js';
 import {
   iniciales, nombreCategoria, motivoCorreccion, motivosAjuste, movimientosEntre, palabras, coincideNombre, palabrasEnComun,
   pluralizar, envaseSingular, mismoId, redondear, fechaActual, ninosDe, textoPresentacion, formatoNombre,
@@ -119,6 +120,46 @@ export function mostrarToast(texto) {
   }, 2600);
 }
 
+// ---------- guardar en la base ----------
+// los guardados van de uno en uno para que no choquen los _rev de CouchDB
+let cola = Promise.resolve();
+function guardarEnBD(trabajo) {
+  cola = cola.then(trabajo).catch(error => {
+    console.error('Error al guardar en la base de datos:', error);
+    mostrarToast('No se pudo guardar en la base de datos. Se recargaron los datos guardados.');
+    return cargarDatosDesdeDB();
+  });
+  return cola;
+}
+
+// producto como lo guarda el backend
+function docProducto(item, categoria) {
+  return {
+    _rev: item._rev,
+    nombre: item.nombre,
+    categoria: categoria.toLowerCase() === 'salud' ? 'salud' : 'alimentos',
+    cantidad: item.cantidad,
+    unidad: item.unidad,
+    stock_minimo: item.minimo || 0,
+    codigo: item.codigo || '',
+    codigosBarras: item.codigosBarras || [],
+    lotes: item.lotes || [],
+    envase: item.envase ?? null,
+    contenido: item.contenido ?? null,
+    medida: item.medida ?? null,
+  };
+}
+
+// crea el producto si todavia no esta en la base, si no lo actualiza
+async function guardarProductoBD(item, categoria) {
+  const yaExiste = typeof item.id === 'string' && item._rev;
+  const res = yaExiste
+    ? await actualizarProductoAPI(item.id, docProducto(item, categoria))
+    : await guardarProductoAPI(docProducto(item, categoria));
+  if (!yaExiste) item.id = res.id || res._id;
+  item._rev = res.rev || res._rev;
+}
+
 // ---------- sesion ----------
 // la sesion dura hasta cerrar el navegador
 function leerSesion() {
@@ -138,6 +179,7 @@ function guardarSesion(cuenta) {
       localStorage.removeItem('usuario_sesion');
     }
   } catch {
+    // sin almacenamiento la sesion dura hasta recargar
   }
 }
 
@@ -151,9 +193,6 @@ export function iniciar() {
     cargarDatosDesdeDB();
   }
 }
-
-// 5 intentos fallidos: esperar 30 segundos
-const intentos = { fallidos: 0, esperarHasta: 0 };
 
 export async function iniciarSesion(v) {
   const usuarioTexto = (v['login-usuario'] || v.usuario || v.username || '').trim();
@@ -201,6 +240,8 @@ export function salir() {
   logout(); // Elimina tokens de localStorage
   guardarSesion(null); // Elimina usuario guardado
   Object.assign(usuario, { id: null, nombre: '', iniciales: '', rol: '' });
+  // no deja los datos del anterior a la vista del siguiente
+  Object.assign(estado, { alimentos: [], salud: [], historial: [], donadores: [], cuentas: [], actividad: [], lote: null });
   estado.modal = null;
   estado.menuUsuario = false;
   refrescar();
@@ -444,14 +485,11 @@ function nuevoDonador(nombre, telefono) {
     creado: fechaCreado.toISOString()
   };
 
-  guardarDonadorAPI(donadorDocBD)
-    .then(res => {
-      if (res?.id || res?._id) {
-        donadorObjeto.id = res.id || res._id;
-        donadorObjeto._rev = res.rev || res._rev;
-      }
-    })
-    .catch(err => console.error('Error al guardar donador en CouchDB:', err));
+  guardarEnBD(async () => {
+    const res = await guardarDonadorAPI(donadorDocBD);
+    donadorObjeto.id = res.id || res._id;
+    donadorObjeto._rev = res.rev || res._rev;
+  });
 
   return donadorObjeto;
 }
@@ -538,46 +576,11 @@ async function registrarMovimiento({ item, categoria, tipo, cantidad, vence = nu
   estado.historial.unshift(movimientoDoc);
   refrescar();
 
-  try {
-    const yaExisteEnDB = Boolean(item.id && typeof item.id === 'string' && item._rev);
-
-    if (yaExisteEnDB && item._rev) {
-      const productoDoc = {
-        _id: item.id,
-        _rev: item._rev,
-        tipo: 'producto',
-        nombre: item.nombre,
-        categoria: catNormalizada.toLowerCase(),
-        cantidad: item.cantidad,
-        unidad: item.unidad,
-        stock_minimo: item.minimo || 0,
-        lotes: item.lotes || []
-      };
-      const res = await actualizarProductoAPI(item.id, productoDoc);
-      if (res?.rev || res?._rev) item._rev = res.rev || res._rev;
-    } else {
-      const productoNuevoDoc = {
-        tipo: 'producto',
-        nombre: item.nombre,
-        categoria: catNormalizada.toLowerCase(),
-        cantidad: item.cantidad,
-        unidad: item.unidad,
-        stock_minimo: item.minimo || 0,
-        lotes: item.lotes || []
-      };
-      const res = await guardarProductoAPI(productoNuevoDoc);
-      
-      if (res?.id || res?._id) {
-        item.id = res.id || res._id;
-        item._rev = res.rev || res._rev;
-        movimientoDoc.producto_id = item.id;
-      }
-    }
-
+  return guardarEnBD(async () => {
+    await guardarProductoBD(item, catNormalizada);
+    movimientoDoc.producto_id = item.id;
     await registrarMovimientoAPI(movimientoDoc);
-  } catch (error) {
-    console.error('Error al guardar en CouchDB:', error);
-  }
+  });
 }
 
 // ---------- producto nuevo ----------
@@ -696,6 +699,7 @@ function renombrarProducto(item, categoria, nombre) {
   for (const fila of estado.historial) if (fila.categoria === categoria && fila.insumo === viejo) fila.insumo = nombre;
   if (estado.historialFiltros.producto === viejo) estado.historialFiltros.producto = nombre;
   item.nombre = nombre;
+  guardarEnBD(() => guardarProductoBD(item, categoria));
 }
 
 // el producto queda en su fila hasta confirmar el ingreso; recien ahi se crea
@@ -802,8 +806,9 @@ export function guardarUnion(modal, v) {
 
   destino.cantidad = redondear(destino.cantidad + item.cantidad);
   destino.lotes = [...(destino.lotes || []), ...(item.lotes || []).filter(l => l.quedan > 0)];
+  let ajuste = null;
   if (item.cantidad > 0) {
-    estado.historial.unshift({
+    ajuste = {
       fecha: fechaActual(),
       insumo: destino.nombre,
       categoria,
@@ -817,11 +822,19 @@ export function guardarUnion(modal, v) {
       saldo: destino.cantidad,
       motivo: 'Unión de productos',
       nota: `Se unió "${item.nombre}"`,
-    });
+    };
+    estado.historial.unshift(ajuste);
   }
   destino.unidos = [...(destino.unidos || []), item.nombre, ...(item.unidos || [])];
   lista.splice(lista.indexOf(item), 1);
   registrarActividad('producto', 'Unió productos', `${item.nombre} → ${destino.nombre}`);
+
+  // en la base: se actualiza el que queda, se anota el ajuste y se borra el otro
+  guardarEnBD(async () => {
+    await guardarProductoBD(destino, categoria);
+    if (ajuste) await registrarMovimientoAPI({ ...ajuste, tipo: 'movimiento', producto_id: destino.id });
+    if (typeof item.id === 'string' && item._rev) await eliminarProductoAPI(item.id, item._rev);
+  });
 
   estado.modal = null;
   mostrarToast(`Productos unidos · ${destino.nombre}: ${destino.cantidad} ${destino.unidad}`);
@@ -894,15 +907,10 @@ export async function confirmarAjuste(modal, ajuste) {
   refrescar();
   mostrarToast(`Stock ajustado · ${item.nombre}: ${ajuste.contado} ${item.unidad}`);
 
-  try {
-    if (item.id && typeof item.id === 'string' && item._rev) {
-      const res = await actualizarProductoAPI(item.id, { ...item, tipo: 'producto', categoria });
-      if (res?._rev) item._rev = res._rev;
-    }
-    await registrarMovimientoAPI(movimientoAjuste);
-  } catch (error) {
-    console.error('Error al guardar ajuste en CouchDB:', error);
-  }
+  return guardarEnBD(async () => {
+    await guardarProductoBD(item, categoria);
+    await registrarMovimientoAPI({ ...movimientoAjuste, producto_id: item.id });
+  });
 }
 
 // ---------- baja por vencimiento ----------
@@ -946,15 +954,10 @@ export async function confirmarBaja(modal, v) {
   refrescar();
   mostrarToast(`Dado de baja · ${vencida} ${item.unidad} de ${item.nombre}`);
 
-  try {
-    if (item.id && typeof item.id === 'string' && item._rev) {
-      const res = await actualizarProductoAPI(item.id, { ...item, tipo: 'producto', categoria });
-      if (res?._rev) item._rev = res._rev;
-    }
-    await registrarMovimientoAPI(movimientoBaja);
-  } catch (error) {
-    console.error('Error al guardar baja en CouchDB:', error);
-  }
+  return guardarEnBD(async () => {
+    await guardarProductoBD(item, categoria);
+    await registrarMovimientoAPI({ ...movimientoBaja, producto_id: item.id });
+  });
 }
 
 // ---------- detalle de un movimiento ----------
@@ -1031,88 +1034,56 @@ export function verActividad(id) {
 export async function guardarUsuario(v) {
   if (!esAdmin()) return;
 
-  const nombre = (v['cuenta-nombre'] || '').trim();
-  const usuarioTexto = (v['cuenta-usuario'] || '').trim();
-  const clave = (v['cuenta-clave'] || '').trim();
+  const nombre = leer(v, 'cuenta-nombre', reglas.nombreCuenta);
+  const usuarioTexto = leer(v, 'cuenta-usuario', reglas.nombreUsuario);
+  const clave = leer(v, 'cuenta-clave', reglas.claveNueva);
   const rol = v['cuenta-rol'] || 'Usuario';
+  if (!permitido(rol, roles)) falla('Elige un rol.', 'cuenta-rol');
+  if (estado.cuentas.some(c => c.usuario?.toLowerCase() === usuarioTexto)) falla('Ese usuario ya existe.', 'cuenta-usuario');
 
-  const fechaActual = new Date();
-
-  const usuarioDoc = {
-    tipo: 'usuario',
-    nombre,
-    usuario: usuarioTexto,
-    clave,
-    rol,
-    activo: true,
-    creado: fechaActual.toISOString(),
-    creadoPor: usuario.nombre,
-    ultimoAcceso: null
-  };
-
+  const creado = new Date();
+  let res;
   try {
-    const res = await guardarUsuarioAPI(usuarioDoc);
-
-    const usuarioObjeto = {
-      ...usuarioDoc,
-      id: res.id || res._id,
-      _rev: res.rev || res._rev,
-      creado: fechaActual
-    };
-
-    estado.cuentas.push(usuarioObjeto);
-    refrescar();
-    cerrarModal();
+    res = await guardarUsuarioAPI({ nombre, usuario: usuarioTexto, clave, rol, activo: true });
   } catch (err) {
-    console.error('Error al guardar el usuario en CouchDB:', err);
+    if (err.response?.status === 409) falla('Ese usuario ya existe.', 'cuenta-usuario');
+    throw err;
   }
+
+  // la contraseña no se guarda en la pantalla
+  estado.cuentas.push({
+    id: res.id || res._id, _rev: res.rev || res._rev,
+    nombre, usuario: usuarioTexto, rol, activo: true, creado, creadoPor: usuario.nombre, ultimoAcceso: null,
+  });
+  registrarActividad('usuario', 'Agregó usuario', nombre);
+  estado.modal = null;
+  refrescar();
+  mostrarToast(`Usuario creado · ${nombre}`);
+}
+
+// cambia un dato de la cuenta y lo guarda en la base
+function actualizarCuenta(c, cambio) {
+  Object.assign(c, cambio);
+  refrescar();
+  guardarEnBD(async () => {
+    const res = await actualizarUsuarioAPI(c.id, { _rev: c._rev, nombre: c.nombre, usuario: c.usuario, rol: c.rol, activo: c.activo });
+    c._rev = res.rev || res._rev;
+  });
 }
 
 // el admin no puede desactivarse ni quitarse el rol a si mismo
-export async function cambiarActivo(id) {
+export function cambiarActivo(id) {
   const c = estado.cuentas.find(x => mismoId(x.id, id));
-  if (!c) return;
-
-  c.activo = !c.activo;
-  refrescar();
-
-  try {
-    const usuarioDoc = {
-      ...c,
-      _id: c.id,
-      tipo: 'usuario',
-      activo: c.activo,
-      creado: c.creado instanceof Date ? c.creado.toISOString() : c.creado,
-      ultimoAcceso: c.ultimoAcceso instanceof Date ? c.ultimoAcceso.toISOString() : c.ultimoAcceso
-    };
-    const res = await actualizarUsuarioAPI(c.id, usuarioDoc);
-    if (res?.rev || res?._rev) c._rev = res.rev || res._rev;
-  } catch (err) {
-    console.error('Error al cambiar estado activo/desactivado en DB:', err);
-  }
+  if (!c || !esAdmin() || mismoId(c.id, usuario.id)) return;
+  actualizarCuenta(c, { activo: !c.activo });
+  registrarActividad('estado', c.activo ? 'Activó a' : 'Desactivó a', c.nombre);
 }
 
-export async function cambiarRol(id, nuevoRol) {
+export function cambiarRol(id, nuevoRol) {
   const c = estado.cuentas.find(x => mismoId(x.id, id));
-  if (!c) return;
-
-  c.rol = nuevoRol;
-  refrescar();
-
-  try {
-    const usuarioDoc = {
-      ...c,
-      _id: c.id,
-      tipo: 'usuario',
-      rol: nuevoRol,
-      creado: c.creado instanceof Date ? c.creado.toISOString() : c.creado,
-      ultimoAcceso: c.ultimoAcceso instanceof Date ? c.ultimoAcceso.toISOString() : c.ultimoAcceso
-    };
-    const res = await actualizarUsuarioAPI(c.id, usuarioDoc);
-    if (res?.rev || res?._rev) c._rev = res.rev || res._rev;
-  } catch (err) {
-    console.error('Error al cambiar rol en DB:', err);
-  }
+  if (!c || !esAdmin() || mismoId(c.id, usuario.id) || !permitido(nuevoRol, roles) || c.rol === nuevoRol) return;
+  actualizarCuenta(c, { rol: nuevoRol });
+  registrarActividad('rol', `Cambió a ${nuevoRol}`, c.nombre);
 }
 
 // ---------- boton "+" segun la pestaña ----------
@@ -1477,17 +1448,21 @@ export function confirmarLote(modal) {
 // Carga los documentos de CouchDB en el estado global de React
 export async function cargarDatosDesdeDB() {
   try {
-    const peticiones = [
-      getInventario().catch(() => []),
-      getHistorialAPI().catch(() => []),
-      getDonadoresAPI().catch(() => []),
-      esAdmin() ? getUsuariosAPI().catch(() => []) : Promise.resolve([])
-    ];
+    const resultados = await Promise.allSettled([
+      getInventario(),
+      getHistorialAPI(),
+      getDonadoresAPI(),
+      esAdmin() ? getUsuariosAPI() : Promise.resolve(null),
+    ]);
 
-    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = await Promise.all(peticiones);
+    // si algo falla se avisa (lo que no cargo queda como estaba)
+    if (resultados.some(r => r.status === 'rejected')) {
+      mostrarToast('No se pudo conectar con el servidor. Algunos datos no se cargaron.');
+    }
+    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = resultados.map(r => (r.status === 'fulfilled' ? r.value : null));
 
-    const documentos = Array.isArray(respuestaInv) ? respuestaInv : (respuestaInv?.docs || []);
-    if (documentos.length > 0) {
+    if (respuestaInv) {
+      const documentos = Array.isArray(respuestaInv) ? respuestaInv : (respuestaInv.docs || []);
       const formateados = documentos.map(doc => ({
         ...doc,
         id: doc._id || doc.id,
@@ -1514,8 +1489,8 @@ export async function cargarDatosDesdeDB() {
       estado.salud = saludDB;
     }
 
-    // 2. Historial (se mantiene igual)
-    if (Array.isArray(respuestaHist) && respuestaHist.length > 0) {
+    // historial
+    if (Array.isArray(respuestaHist)) {
       estado.historial = respuestaHist.map(doc => {
         const rawMov = doc.movimiento || doc.tipo_movimiento || 'Ingreso';
         const movimiento = rawMov.charAt(0).toUpperCase() + rawMov.slice(1).toLowerCase();
@@ -1535,8 +1510,8 @@ export async function cargarDatosDesdeDB() {
       });
     }
 
-    // 3. Donadores (se mantiene igual)
-    if (Array.isArray(respuestaDon) && respuestaDon.length > 0) {
+    // donadores
+    if (Array.isArray(respuestaDon)) {
       estado.donadores = respuestaDon.map(doc => ({
         ...doc,
         id: doc._id || doc.id,
@@ -1549,8 +1524,8 @@ export async function cargarDatosDesdeDB() {
       }));
     }
 
-    // 4. Cuentas de usuario desde CouchDB
-    if (Array.isArray(respuestaUsu) && respuestaUsu.length > 0) {
+    // cuentas de usuario
+    if (Array.isArray(respuestaUsu)) {
       estado.cuentas = respuestaUsu.map(doc => ({
         ...doc,
         id: doc._id || doc.id,

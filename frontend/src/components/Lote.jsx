@@ -13,8 +13,7 @@ import {
 import { nombreCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
 import { fechaVence } from '../logica/lotes.js';
 import { interpretarDictado } from '../logica/dictado.js';
-import { transcribir, modoVoz, usaWhisper, reconocedorNavegador, dejarNavegador, crearLector } from '../servicios/captura.js';
-import { escucharWhisper, prepararWhisper, whisperPreparado } from '../servicios/whisper.js';
+import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
 } from './Formulario.jsx';
@@ -383,7 +382,6 @@ function LineaEntendida({ r }) {
     </li>
   );
 }
-const maximoGrabacion = 60;
 
 export function ModalLoteVoz() {
   const f = useFormulario();
@@ -413,7 +411,7 @@ export function ModalLoteVoz() {
         dudas: []
       }));
       setItemsEntendidos(mapeados);
-    } catch (err) {
+    } catch {
       // Fallback: Si OmniRoute da error, usamos la interpretación local nativa
       if (typeof interpretarDictado === 'function') {
         const local = interpretarDictado(textoDictado, todosLosProductos(), {
@@ -461,7 +459,7 @@ export function ModalLoteVoz() {
 
     r.onend = () => {
       if (reconocedor.current?.debeSeguir) {
-        try { r.start(); } catch {}
+        try { r.start(); } catch { setGrabando(false); }
       } else {
         setGrabando(false);
       }
