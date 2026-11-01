@@ -96,7 +96,7 @@ def _leer_documento(doc_id, tipo_esperado):
     if status != 200:
         return data, status
 
-    # Defensa extra: en la base de inventario conviven productos y donadores
+    # Defensa extra: el documento tiene que ser del tipo pedido
     if data.get('tipo') != tipo_esperado:
         return {'error': 'No encontrado'}, 404
     return data, 200

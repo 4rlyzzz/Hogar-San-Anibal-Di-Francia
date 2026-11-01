@@ -129,18 +129,6 @@
       "creado": "2026-10-28T02:36:33.782Z"
     },
     {
-      "_id": "8d242747bbfbe1fdf7f2be00cd001778",
-      "tipo": "usuario",
-      "nombre": "el wei",
-      "usuario": "elwei",
-      "clave": "pbkdf2_sha256$1000000$mDkMPM8c5S91TIR4bYmj3m$NiZYVEJ8uvwMluE6jwZMB1qOMJ4WNpAF9BPkhP0Y2w4=",
-      "rol": "Usuario",
-      "activo": true,
-      "creado": "2026-10-28T02:40:38.589Z",
-      "creadoPor": "le admin",
-      "ultimoAcceso": null
-    },
-    {
       "_id": "8d242747bbfbe1fdf7f2be00cd00188b",
       "tipo": "producto",
       "nombre": "pastilla1 100mg",
@@ -725,18 +713,6 @@
       "lotes": null
     },
     {
-      "_id": "ec069330cb9ecfbfdbe06a6817005eaf",
-      "tipo": "usuario",
-      "nombre": "le admin",
-      "usuario": "admin1",
-      "clave": "pbkdf2_sha256$1000000$IlIZ121N79sshs4TwEHGsg$wylPL6SmMzRU7yWzOFdazilQuQG6f9zC1hrB83pKNDg=",
-      "rol": "Administrador",
-      "activo": true,
-      "creado": "2026-10-27T15:58:43.913Z",
-      "creadoPor": "Administrador",
-      "ultimoAcceso": null
-    },
-    {
       "_id": "ec069330cb9ecfbfdbe06a68170088b0",
       "tipo": "producto",
       "nombre": "Pañales",
@@ -835,18 +811,6 @@
       "inicial": true,
       "loteId": 1793118467614,
       "vence": "2026-10-31"
-    },
-    {
-      "_id": "ec069330cb9ecfbfdbe06a681700a503",
-      "tipo": "usuario",
-      "nombre": "usuario 1",
-      "usuario": "user1",
-      "clave": "pbkdf2_sha256$1000000$BEmjQebTtCf6h4K44mFn80$lcZMPHmuoVNJ6dNh+NzPp+VI/SyxWPbEWHj0O41y0I8=",
-      "rol": "Usuario",
-      "activo": true,
-      "creado": "2026-10-27T16:28:27.512Z",
-      "creadoPor": "le admin",
-      "ultimoAcceso": null
     },
     {
       "_id": "ec069330cb9ecfbfdbe06a681700a731",

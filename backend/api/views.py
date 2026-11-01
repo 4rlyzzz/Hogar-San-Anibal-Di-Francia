@@ -1,8 +1,11 @@
+import math
+
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .couchdb_service import (
@@ -29,6 +32,21 @@ CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo')
 
 def _solo_campos(data, permitidos):
     return {k: data[k] for k in permitidos if k in data}
+
+
+class DatoInvalido(Exception):
+    pass
+
+
+def _numero(datos, campo, defecto=0):
+    """Lee un numero mayor o igual a 0; si no lo es lanza DatoInvalido."""
+    try:
+        valor = float(datos.get(campo, defecto))
+    except (TypeError, ValueError):
+        raise DatoInvalido(f"'{campo}' debe ser un número")
+    if not math.isfinite(valor) or valor < 0:
+        raise DatoInvalido(f"'{campo}' debe ser un número mayor o igual a 0")
+    return valor
 
 
 class CustomLoginView(APIView):
@@ -86,6 +104,35 @@ class CustomLoginView(APIView):
         }, status=200)
 
 
+class RenovarTokenView(APIView):
+    """Renueva la sesion revisando en CouchDB que el usuario siga activo.
+    (la vista de simplejwt busca al usuario en la tabla de Django y falla)"""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        try:
+            refresh = RefreshToken(str(request.data.get('refresh', '')))
+        except TokenError:
+            return Response({'error': 'La sesión venció'}, status=401)
+
+        doc, status_code = get_document_by_id(refresh.get('user_id'), 'usuario')
+        if status_code in (400, 404):
+            return Response({'error': 'Usuario no encontrado'}, status=401)
+        if status_code != 200:
+            return Response({'error': 'Servicio no disponible'}, status=503)
+        if not doc.get('activo', True):
+            return Response({'error': 'Esta cuenta se encuentra desactivada'}, status=401)
+
+        # token nuevo con el rol actual
+        refresh['rol'] = doc.get('rol', 'Usuario')
+        refresh.set_jti()
+        refresh.set_exp()
+        refresh.set_iat()
+
+        return Response({'access': str(refresh.access_token), 'refresh': str(refresh)}, status=200)
+
+
 class InventarioListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -96,13 +143,19 @@ class InventarioListCreateView(APIView):
     def post(self, request):
         datos = request.data
 
+        try:
+            cantidad = _numero(datos, 'cantidad')
+            minimo = _numero(datos, 'stock_minimo' if 'stock_minimo' in datos else 'minimo')
+        except DatoInvalido as e:
+            return Response({'error': str(e)}, status=400)
+
         doc_data = {
             'tipo': 'producto',
             'nombre': str(datos.get('nombre', '')).strip(),
             'categoria': datos.get('categoria', 'alimentos'),
-            'cantidad': float(datos.get('cantidad', 0)),
+            'cantidad': cantidad,
             'unidad': datos.get('unidad', 'unidades'),
-            'stock_minimo': float(datos.get('stock_minimo', datos.get('minimo', 0))),
+            'stock_minimo': minimo,
             'codigo': datos.get('codigo', ''),
             'codigosBarras': datos.get('codigosBarras', []),
             'lotes': datos.get('lotes', []),
@@ -134,6 +187,13 @@ class InventarioDetailView(APIView):
         # Solo campos de producto permitidos; el resto del documento se conserva
         doc_data = _solo_campos(request.data, CAMPOS_PRODUCTO)
 
+        try:
+            for campo in ('cantidad', 'stock_minimo', 'minimo'):
+                if campo in doc_data:
+                    doc_data[campo] = _numero(doc_data, campo)
+        except DatoInvalido as e:
+            return Response({'error': str(e)}, status=400)
+
         data, status_code = update_document(doc_id, doc_data, rev, 'producto', fusionar=True)
         return Response(data, status=status_code)
 
@@ -159,6 +219,12 @@ class HistorialListCreateView(APIView):
     def post(self, request):
         datos = request.data
 
+        try:
+            cantidad = _numero(datos, 'cantidad')
+            saldo = _numero(datos, 'saldo')
+        except DatoInvalido as e:
+            return Response({'error': str(e)}, status=400)
+
         doc_data = {
             'tipo': 'movimiento',
             'producto_id': datos.get('producto_id', None),
@@ -166,7 +232,7 @@ class HistorialListCreateView(APIView):
             'movimiento': datos.get('movimiento', 'Ingreso'),
             'insumo': datos.get('insumo', datos.get('nombre', '')),
             'categoria': datos.get('categoria', 'Alimentos'),
-            'cantidad': float(datos.get('cantidad', 0)),
+            'cantidad': cantidad,
             'unidad': datos.get('unidad', 'unidades'),
             'fecha': datos.get('fecha', ''),
             'canal': datos.get('canal', 'manual'),
@@ -177,7 +243,7 @@ class HistorialListCreateView(APIView):
             'actividad': datos.get('actividad', ''),
             'para': datos.get('para', []),
             'observaciones': datos.get('observaciones', ''),
-            'saldo': float(datos.get('saldo', 0)),
+            'saldo': saldo,
             'inicial': datos.get('inicial', False),
             'motivo': datos.get('motivo', None),
             'nota': datos.get('nota', None),
@@ -263,6 +329,12 @@ class UsuarioDetailView(APIView):
             return Response({"error": "Se requiere '_rev' para actualizar el usuario"}, status=400)
 
         doc_data = _solo_campos(request.data, CAMPOS_USUARIO)
+
+        # el admin no puede quitarse el rol ni desactivarse (se quedaria sin acceso)
+        if str(doc_id) == str(request.user.id) and (
+            doc_data.get('rol', 'Administrador') != 'Administrador' or doc_data.get('activo', True) is False
+        ):
+            return Response({'error': 'No puedes quitarte el rol ni desactivar tu propia cuenta'}, status=400)
 
         # Solo se cambia la contraseña si llega una nueva (siempre se hashea);
         # si no llega, fusionar=True conserva el hash actual.

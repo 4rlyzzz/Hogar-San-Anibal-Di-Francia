@@ -1,7 +1,7 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     CustomLoginView,
+    RenovarTokenView,
     InventarioListCreateView, 
     InventarioDetailView, 
     HistorialListCreateView, 
@@ -12,7 +12,7 @@ from .views import (
 
 urlpatterns = [
     path('auth/login/', CustomLoginView.as_view(), name='login'),
-    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/refresh/', RenovarTokenView.as_view(), name='token_refresh'),
     path('inventario/', InventarioListCreateView.as_view(), name='inventario-list-create'),
     path('inventario/<str:doc_id>/', InventarioDetailView.as_view(), name='inventario-detail'),
     path('historial/', HistorialListCreateView.as_view(), name='historial-list-create'),
