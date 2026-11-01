@@ -3460,3 +3460,45 @@ button.uf-usuario:hover b {
   opacity: 0.6;
   cursor: progress;
 }
+
+/* ---------- cuentas y contraseñas ---------- */
+.panel-actividad-controles {
+  flex-wrap: wrap;
+}
+
+.panel-actividad-aviso {
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid #eef2f1;
+  background: #f4f8fb;
+  color: #3d5a6e;
+  font-size: 12px;
+}
+
+.donador-observaciones {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #3d4b46;
+  white-space: pre-line;
+}
+
+/* ---------- cuentas y contraseñas ---------- */
+.panel-actividad-controles {
+  flex-wrap: wrap;
+}
+
+.panel-actividad-aviso {
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid #eef2f1;
+  background: #f4f8fb;
+  color: #3d5a6e;
+  font-size: 12px;
+}
+
+.donador-observaciones {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #3d4b46;
+  white-space: pre-line;
+}

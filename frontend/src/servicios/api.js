@@ -58,6 +58,10 @@ api.interceptors.response.use(
         } catch (refreshError) {
           // solo se cierra la sesion si el refresh token vencio (no si el servidor esta caido)
           if (refreshError.response?.status === 401) {
+            // el login muestra por que se cerro (por ejemplo, un admin desactivo la cuenta)
+            avisarAlEntrar(/desactivada/i.test(refreshError.response.data?.error ?? '')
+              ? 'Tu cuenta fue desactivada por un administrador.'
+              : 'Tu sesión venció. Vuelve a ingresar.');
             logout();
             window.location.reload();
           }
@@ -68,6 +72,25 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// aviso para la pantalla de login despues de recargar (se lee una sola vez)
+function avisarAlEntrar(texto) {
+  try {
+    sessionStorage.setItem('aviso-login', texto);
+  } catch {
+    // sin almacenamiento no hay aviso
+  }
+}
+
+export function leerAvisoLogin() {
+  try {
+    const texto = sessionStorage.getItem('aviso-login') ?? '';
+    sessionStorage.removeItem('aviso-login');
+    return texto;
+  } catch {
+    return '';
+  }
+}
 
 // Función para iniciar sesión
 export const login = async (usuario, clave) => {
@@ -84,6 +107,18 @@ export const logout = () => {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('usuario_sesion');
+};
+
+// datos actuales de quien entro (el rol pudo cambiar desde que inicio sesion)
+export const getMiCuentaAPI = async () => {
+  const response = await api.get('auth/yo/');
+  return response.data;
+};
+
+// cambia la contraseña propia (pide la actual)
+export const cambiarClaveAPI = async (actual, nueva) => {
+  const response = await api.post('auth/clave/', { actual, nueva });
+  return response.data;
 };
 
 // --- INVENTARIO ---
@@ -115,8 +150,16 @@ export const getHistorialAPI = async () => {
   return response.data;
 };
 
-export const registrarMovimientoAPI = async (movimiento) => {
-  const response = await api.post('historial/', movimiento);
+// el servidor cambia el stock y anota el movimiento juntos, con el dato de ese momento
+// peticion: { tipo: 'ingreso'|'salida'|'ajuste'|'baja', producto_id, ... } -> { producto, movimiento }
+export const enviarMovimientoAPI = async (peticion) => {
+  const response = await api.post('movimientos/', peticion);
+  return response.data;
+};
+
+// el stock del repetido (origen) pasa al que queda -> { destino, movimiento }
+export const unirProductosAPI = async (origenId, destinoId) => {
+  const response = await api.post('productos/unir/', { origen_id: origenId, destino_id: destinoId });
   return response.data;
 };
 

@@ -8,7 +8,7 @@ import { IconoMano, IconoCodigo, IconoMicrofono, IconoEditar, IconoBorrar, Icono
 import {
   abrirMetodo, abrirMetodos, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
-  opcionesActividad, opcionesNinos, abrirProducto, intentar,
+  opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe,
 } from '../acciones.js';
 import { nombreCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
 import { fechaVence } from '../logica/lotes.js';
@@ -391,39 +391,48 @@ export function ModalLoteVoz() {
   const [itemsEntendidos, setItemsEntendidos] = useState([]);
   const [aviso, setAviso] = useState('');
   const reconocedor = useRef(null);
+  // cada consulta lleva un numero: si llega una respuesta vieja (se siguio escribiendo), no pisa a la nueva
+  const consulta = useRef(0);
 
   // Procesa con OmniRoute y obtiene la lista visual para el bloque "ENTENDÍ"
   const procesarConOmni = async (textoDictado) => {
-    if (!textoDictado.trim()) return;
+    const numero = ++consulta.current;
+    if (!textoDictado.trim()) return setItemsEntendidos([]);
     setCargandoIA(true);
     setAviso('');
 
     try {
       // 1. Petición a OmniRoute
       const json = await procesarTextoConOmniroute(textoDictado);
-      
+      if (numero !== consulta.current) return;
+
       // 2. Mapeo para previsualización gráfica en UI
-      const mapeados = json.map(i => ({
-        cantidad: i.cantidad,
-        unidadDicha: i.unidad,
-        nombreDicho: i.producto,
-        producto: null,
-        dudas: []
-      }));
+      // lo que no trae producto se descarta; una cantidad invalida (0, negativa, texto) queda como "falta la cantidad"
+      const mapeados = (Array.isArray(json) ? json : [])
+        .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
+        .map(i => ({
+          cantidad: cantidadDicha(i.cantidad),
+          unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
+          nombreDicho: i.producto.trim().slice(0, largos.nombreProducto),
+          producto: null,
+          dudas: []
+        }));
       setItemsEntendidos(mapeados);
     } catch {
+      if (numero !== consulta.current) return;
       // Fallback: Si OmniRoute da error, usamos la interpretación local nativa
       if (typeof interpretarDictado === 'function') {
         const local = interpretarDictado(textoDictado, todosLosProductos(), {
           donadores: estado.donadores,
           actividades: opcionesActividad()
         });
-        setItemsEntendidos(local);
+        // igual que al agregar a la lista (agregarDictado)
+        setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
       } else {
         setAviso('Error al conectar con OmniRoute. Usando procesamiento local.');
       }
     } finally {
-      setCargandoIA(false);
+      if (numero === consulta.current) setCargandoIA(false);
     }
   };
 
@@ -643,6 +652,8 @@ export function ModalLoteLista({ modal }) {
 
 // ---------- 4. confirmar ----------
 function ConfirmarLote({ modal, onVolver }) {
+  // se guarda fila por fila en el servidor: mientras tanto el boton queda en "Guardando…"
+  const f = useFormulario();
   const { tipo, items } = estado.lote;
   const esIngreso = tipo === 'Ingreso';
 
@@ -664,7 +675,7 @@ function ConfirmarLote({ modal, onVolver }) {
   ].filter(Boolean).join(' · ');
 
   return (
-    <form className="modal modal-lote" id="form-lote-confirmar" noValidate onSubmit={e => { e.preventDefault(); confirmarLote(modal); }}>
+    <form className="modal modal-lote" id="form-lote-confirmar" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, () => confirmarLote(modal))}>
       <CabeceraLote titulo={esIngreso ? 'Revisa el ingreso' : 'Revisa la salida'} subtitulo={`${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${usuario.nombre} · ${fechaActual()}`} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
@@ -684,11 +695,10 @@ function ConfirmarLote({ modal, onVolver }) {
             </li>
           ))}
         </ul>
+        <MensajeError texto={f.error} />
       </div>
 
-      <div className="modal-footer">
-        <button type="submit" className="btn btn-verde">Confirmar {tipo.toLowerCase()} ({items.length})</button>
-      </div>
+      <Botones textoGuardar={`Confirmar ${tipo.toLowerCase()} (${items.length})`} enviando={f.enviando} conCancelar={false} />
     </form>
   );
 }
@@ -739,8 +749,8 @@ export function ModalLoteItem({ modal }) {
   // presentacion dicha que no esta registrada ("bolsas de 10 L")
   const otra = x.avisos.presentacion;
   const dicho = productoDeItem(x);
-  // el nombre sin su tamaño del final: "Leche Evaporada Gloria 400 g" -> "Leche Evaporada Gloria"
-  const nombreBase = dicho ? dicho.item.nombre.replace(/\s+\d+(?:[.,]\d+)?\s(?:g|kg|ml|L|unidades)$|\s+a Granel$/i, '') : x.nombreDicho;
+  // el nombre sin su presentacion del final: "Leche Evaporada Gloria lata 400 g" -> "Leche Evaporada Gloria"
+  const nombreBase = dicho ? baseDe(dicho.item.nombre, dicho.item) : x.nombreDicho;
   const crearProducto = () => abrirProducto(elegido?.categoria ?? x.categoria ?? 'Alimentos', {
     itemId: x.id,
     nombre: nombreBase,
@@ -788,12 +798,6 @@ export function ModalLoteItem({ modal }) {
           {esIngreso && (
             <>
               <CampoDonador donadores={estado.donadores} actividades={actividades} inicial={donadorInicial(x, actividades)} />
-              {estado.lote.items.some(o => o !== x && !o.donador && !o.donadorDicho) && (
-                <label className="check-campo">
-                  <input type="checkbox" name="donador-todos" />
-                  Usar este donador en los productos de la lista que no tienen
-                </label>
-              )}
             </>
           )}
           {!esIngreso && elegido?.categoria === 'Salud' && <CampoPara ninos={opcionesNinos()} inicial={x.para} />}

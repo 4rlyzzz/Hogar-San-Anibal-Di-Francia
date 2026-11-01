@@ -1,8 +1,8 @@
 import { useEstado } from '../estado.js';
 import { usuario } from '../data/datos.js';
-import { verActividad, cambiarRol, cambiarActivo, roles } from '../acciones.js';
+import { verActividad, cambiarRol, cambiarActivo, sePuedeAdministrar, roles } from '../acciones.js';
 import { iniciales, fechaLarga, textoFecha, tiempoRelativo, mismoId } from '../logica/comunes.js';
-import { actividadDe } from '../logica/actividad.js';
+import { actividadDe, movimientoDe } from '../logica/actividad.js';
 import { Encabezado, SinResultados, TituloOrden } from '../components/Comunes.jsx';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips } from '../components/Filtros.jsx';
 import { Desplegable } from '../components/Desplegable.jsx';
@@ -12,7 +12,7 @@ const ordenes = {
   nombre: { texto: 'Nombre (A-Z)', comparar: (a, b) => a.cuenta.nombre.localeCompare(b.cuenta.nombre) },
   acceso: { texto: 'Último acceso', comparar: (a, b) => (b.cuenta.ultimoAcceso ?? 0) - (a.cuenta.ultimoAcceso ?? 0) },
   movimientos: { texto: 'Más movimientos', comparar: (a, b) => b.registros.length - a.registros.length },
-  agregado: { texto: 'Agregado recientemente', comparar: (a, b) => b.cuenta.creado - a.cuenta.creado },
+  agregado: { texto: 'Agregado recientemente', comparar: (a, b) => (b.cuenta.creado ?? 0) - (a.cuenta.creado ?? 0) },
 };
 
 const filtrosRol = [['Todos', 'Todos los roles'], ['Administrador', 'Administrador'], ['Usuario', 'Usuario']];
@@ -27,8 +27,9 @@ function pasaFiltros(c, filtros, texto) {
 
 // ultima: lo ultimo que hizo
 function FilaUsuario({ c, registros, ultima }) {
-  // no puede cambiarse el rol ni desactivarse a si mismo
+  // no puede cambiarse el rol ni desactivarse a si mismo, y la cuenta principal no la cambia nadie
   const esYo = mismoId(c.id, usuario.id);
+  const editable = sePuedeAdministrar(c);
 
   return (
     <div className={`usuario-fila ${c.activo ? '' : 'inactivo'}`}>
@@ -36,13 +37,13 @@ function FilaUsuario({ c, registros, ultima }) {
         <span className={`avatar ${c.rol === 'Administrador' ? '' : 'avatar-verde'}`}>{iniciales(c.nombre)}</span>
         <span>
           <b>{c.nombre}</b>
-          <small>@{c.usuario}{esYo ? ' · tú' : ''}<span className="solo-movil"> · {c.rol}</span></small>
+          <small>@{c.usuario}{esYo ? ' · tú' : ''}{c.principal ? ' · principal' : ''}<span className="solo-movil"> · {c.rol}</span></small>
         </span>
       </button>
 
       <span className="uf-rol">
-        {esYo
-          ? <span className="pastilla azul">{c.rol}</span>
+        {!editable
+          ? <span className="pastilla azul" title={c.principal ? 'Cuenta principal: no se puede cambiar' : undefined}>{c.rol}</span>
           : (
             <Desplegable variante="rol" className="selector-rol" data-id={c.id} aria-label={`Rol de ${c.nombre}`} valor={c.rol} onChange={r => cambiarRol(c.id, r)} opciones={roles.map(r => [r, r])} />
           )}
@@ -67,12 +68,12 @@ function FilaUsuario({ c, registros, ultima }) {
       <span className="uf-movimientos">{registros.length}</span>
 
       <span className="uf-creado">
-        {fechaLarga(c.creado)}
+        {c.creado ? fechaLarga(c.creado) : '—'}
         <small>{c.creadoPor ? 'por ' + c.creadoPor : 'cuenta inicial'}</small>
       </span>
 
       <span className="uf-acciones">
-        {!esYo && (
+        {editable && (
           <button className={`btn-mini ${c.activo ? 'btn-mini-rojo' : ''}`} data-accion="activar-usuario" data-id={c.id} onClick={() => cambiarActivo(c.id)}>
             {c.activo ? 'Desactivar' : 'Activar'}
           </button>
@@ -89,12 +90,12 @@ export function Usuarios() {
   const texto = estado.busqueda.toLowerCase();
 
   // movimientos de cada cuenta
-  const registros = nombre => estado.historial.filter(f => f.responsable === nombre);
+  const registros = c => estado.historial.filter(f => movimientoDe(f, c));
 
   const comparar = ordenes[filtros.orden].comparar;
   const lista = estado.cuentas
     .filter(c => pasaFiltros(c, filtros, texto))
-    .map(c => ({ cuenta: c, registros: registros(c.nombre), ultima: actividadDe(estado, c)[0] }))
+    .map(c => ({ cuenta: c, registros: registros(c), ultima: actividadDe(estado, c)[0] }))
     .sort((a, b) => (filtros.invertido ? -comparar(a, b) : comparar(a, b)));
 
   const chips = [];

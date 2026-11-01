@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from getpass import getpass
 
 from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 
 from api.couchdb_service import create_document, get_documents_by_type
+from api.views import _clave_invalida
 
 
 class Command(BaseCommand):
@@ -21,8 +23,9 @@ class Command(BaseCommand):
             raise CommandError('El usuario es obligatorio')
 
         clave = getpass('Contraseña: ')
-        if len(clave) < 8:
-            raise CommandError('La contraseña debe tener al menos 8 caracteres')
+        error = _clave_invalida(clave)
+        if error:
+            raise CommandError(error)
         if clave != getpass('Repite la contraseña: '):
             raise CommandError('Las contraseñas no coinciden')
 
@@ -39,6 +42,9 @@ class Command(BaseCommand):
             'rol': opciones['rol'],
             'activo': True,
             'clave': make_password(clave),
+            'creado': datetime.now(timezone.utc).isoformat(),
+            # el primer administrador es la cuenta principal: nadie le puede cambiar el rol ni desactivarla
+            'principal': opciones['rol'] == 'Administrador' and not any(d.get('rol') == 'Administrador' for d in existentes),
         })
         if status not in (200, 201):
             raise CommandError('CouchDB no guardó el usuario')

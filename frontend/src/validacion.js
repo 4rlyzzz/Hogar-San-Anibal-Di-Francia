@@ -104,7 +104,9 @@ export function cantidadDe(unidad, { que = 'la cantidad', puedeSerCero = false }
 export function fechaValida(iso) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
   const [anio, mes, dia] = iso.split('-').map(Number);
-  const fecha = new Date(anio, mes - 1, dia);
+  // con setFullYear: new Date(2, ...) seria 1902 y el año que se esta escribiendo ('0002') no pasaria
+  const fecha = new Date(2000, 0, 1);
+  fecha.setFullYear(anio, mes - 1, dia);
   return fecha.getFullYear() === anio && fecha.getMonth() === mes - 1 && fecha.getDate() === dia;
 }
 

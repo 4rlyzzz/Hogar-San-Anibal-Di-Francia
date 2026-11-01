@@ -119,7 +119,22 @@ cd frontend
 npm install
 ```
 
-## 6. Detener o iniciar CouchDB
+## 6. Pruebas de regresión
+
+Antes de subir cambios (o después de un pull), revisa que todo lo que ya funcionaba siga funcionando. En una terminal en la raíz ejecutar:
+
+```powershell
+.\pruebas.ps1
+```
+
+Ejecuta, en orden: la revisión de Django, las pruebas del backend (login, sesiones, inventario, movimientos de stock, donadores, usuarios y comandos), las pruebas de la lógica del frontend (validaciones, lotes, alertas, filtros, historial y dictado), el lint y el build. Al final muestra un resumen; si algo falla, termina con error y dice qué paso falló.
+
+- No necesita CouchDB encendido ni toca la base real: el backend se prueba con una CouchDB falsa en memoria.
+- `.\pruebas.ps1 -Rapido` corre solo las pruebas (sin lint ni build).
+- Por separado: `python manage.py test api` (en **backend**) o `npm test` (en **frontend**).
+- Las pruebas están en `backend/api/tests/` y `frontend/pruebas/`. Al agregar una funcionalidad nueva, agrega también su prueba.
+
+## 7. Detener o iniciar CouchDB
 
 Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como administrador y ejecutar, según corresponda:
 

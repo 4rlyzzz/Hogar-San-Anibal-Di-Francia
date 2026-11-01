@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { leerAvisoLogin } from '../servicios/api.js';
 import logo from '../assets/logo.png';
 import { IconoOjo } from '../assets/iconos.jsx';
 import { largos } from '../validacion.js';
@@ -10,6 +11,12 @@ export function Login() {
   const f = useFormulario();
   const [verClave, setVerClave] = useState(false);
   const [cargando, setCargando] = useState(false);
+
+  // si se cerro la sesion sola (cuenta desactivada o vencida), se dice por que
+  useEffect(() => {
+    const aviso = leerAvisoLogin();
+    if (aviso) f.setError(aviso);
+  }, []);
 
   async function entrar(e) {
     e.preventDefault();

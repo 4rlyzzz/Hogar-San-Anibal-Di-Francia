@@ -28,7 +28,6 @@ export const estado = {
   historial: [],
   donadores: [],
   cuentas: [],
-  actividad: [],
 };
 
 let version = 0;

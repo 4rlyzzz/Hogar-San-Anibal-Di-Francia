@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useEstado } from '../estado.js';
 import { IconoDescargar } from '../assets/iconos.jsx';
-import { verMovimiento, descargarExcelHistorial } from '../acciones.js';
+import { verMovimiento, descargarExcelHistorial, cambiarFiltro } from '../acciones.js';
 import { nombreCategoria, nombresCategoria, textoCambio, textoStock, textoDetalle } from '../logica/comunes.js';
 import { filtrarHistorial, opcionesDe, chipsHistorial } from '../logica/historial.js';
 import { Encabezado, clasesMovimiento } from '../components/Comunes.jsx';
@@ -28,6 +28,8 @@ export function BotonExcel({ hay, titulo, accion, descargar }) {
   );
 }
 
+const ordenes = [['recientes', 'Más recientes primero'], ['antiguos', 'Más antiguos primero']];
+
 export function Historial() {
   const estado = useEstado();
   const f = estado.historialFiltros;
@@ -40,6 +42,7 @@ export function Historial() {
   // "para quien" solo en Salud
   const ninos = f.categoria === 'Alimentos' ? [] : opcionesDe(estado.historial, 'para');
   const abierto = estado.filtrosAbiertos === 'historialFiltros';
+  const antiguos = f.orden === 'antiguos';
 
   return (
     <>
@@ -50,6 +53,7 @@ export function Historial() {
           <div className="tabla-header barra-tabla">
             <span className="barra-tabla-resumen">
               <b>{filas.length}</b> movimientos<span className="solo-desktop"> · {ingresos} ingresos · {filas.length - ingresos} salidas</span>
+              <span className="barra-tabla-orden"> · {antiguos ? 'Más antiguos primero' : 'Más recientes primero'}</span>
             </span>
             <BotonFiltros grupo="historialFiltros" activos={chips.length} abierto={abierto} />
             <BotonExcel hay={filas.length > 0} titulo="Descargar lo filtrado en Excel" accion="descargar-historial" descargar={descargarExcelHistorial} />
@@ -57,7 +61,11 @@ export function Historial() {
           </div>
 
           <div className="fila fila-titulos">
-            <span>FECHA</span><span>INSUMO</span><span>CATEGORÍA</span><span>MOVIMIENTO</span><span>CANTIDAD</span><span>STOCK</span><span>DETALLE</span><span>RESPONSABLE</span>
+            <span>
+              <button className="titulo-orden activo" data-accion="ordenar-fecha" title="Cambiar el orden" onClick={() => cambiarFiltro('historialFiltros', 'orden', antiguos ? 'recientes' : 'antiguos', ordenes.map(([v]) => v))}>
+                FECHA {antiguos ? '↑' : '↓'}
+              </button>
+            </span><span>INSUMO</span><span>CATEGORÍA</span><span>MOVIMIENTO</span><span>CANTIDAD</span><span>STOCK</span><span>DETALLE</span><span>RESPONSABLE</span>
           </div>
 
           {filas.map(fila => {
@@ -81,6 +89,7 @@ export function Historial() {
 
         {abierto && (
           <PanelFiltros grupo="historialFiltros" resultados={filas.length}>
+            <CampoSelect grupo="historialFiltros" campo="orden" titulo="Ordenar por fecha" opciones={ordenes} actual={f.orden} />
             <CampoSelect grupo="historialFiltros" campo="movimiento" titulo="Movimiento" opciones={[['Todos', 'Todos'], ['Ingreso', 'Solo ingresos'], ['Salida', 'Solo salidas'], ['Ajuste', 'Solo ajustes']]} actual={f.movimiento} />
             <CampoSelect grupo="historialFiltros" campo="categoria" titulo="Categoría" opciones={opcionesCon('Todas', Object.entries(nombresCategoria))} actual={f.categoria} />
             <CampoSelect grupo="historialFiltros" campo="responsable" titulo="Responsable" opciones={opcionesCon('Todos', opcionesDe(estado.historial, 'responsable'))} actual={f.responsable} />

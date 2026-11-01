@@ -28,6 +28,29 @@ button {
   display: none !important;
 }
 
+/* Edge pone su propio ojo en las contraseñas: ya esta el de la app, salian dos */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+/* la x del buscador es de la app (la del navegador borraba al hacer clic cerca) */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="search"]::-ms-clear {
+  display: none;
+}
+
+/* el texto de ayuda no se corta: si no entra, se ve el comienzo con "…" */
+input::placeholder,
+textarea::placeholder {
+  text-overflow: ellipsis;
+}
+
 .mono {
   font-variant-numeric: tabular-nums;
 }
@@ -299,6 +322,25 @@ button {
   background: transparent;
   outline: none;
   font-size: 13px;
+}
+
+/* x para borrar la busqueda: solo ella borra, no el espacio de alrededor */
+.buscador-borrar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px -4px 0;
+  border: 0;
+  border-radius: 50%;
+  background: #eef2f1;
+  color: #54635e;
+  display: grid;
+  place-items: center;
+}
+
+.buscador-borrar:hover {
+  background: #e0e7e4;
+  color: #17211f;
 }
 
 .topbar-derecha {

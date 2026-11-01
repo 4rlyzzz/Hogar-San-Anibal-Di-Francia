@@ -24,7 +24,8 @@ export function Tarjeta({ item, categoria }) {
         <div className={`tarjeta-codigo ${colorVence}`}>{item.codigo}</div>
         <div className="tarjeta-info">
           <span className="tarjeta-nombre">{item.nombre}</span>
-          {textoPresentacion(item) && <span className="tarjeta-descripcion">{textoPresentacion(item)}</span>}
+          {/* siempre se ve en que viene: 'Bolsa x 1 kg' o 'Suelto, en sacos' */}
+          <span className="tarjeta-descripcion">{textoPresentacion(item) || `Suelto, en ${item.unidad}`}</span>
           <button className="tarjeta-ver" data-accion="ver-producto" onClick={() => verProducto(categoria, item.id)}>Ver detalle ›</button>
         </div>
         <span className={`etiqueta ${colorVence}`}>{textoVencimiento(item)}</span>

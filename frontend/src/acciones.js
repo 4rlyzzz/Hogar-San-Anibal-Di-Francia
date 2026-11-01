@@ -5,27 +5,29 @@ import {
   getInventario, 
   guardarProductoAPI, 
   actualizarProductoAPI,
-  eliminarProductoAPI,
   getHistorialAPI,
-  registrarMovimientoAPI,
+  enviarMovimientoAPI,
+  unirProductosAPI,
   getDonadoresAPI,
   guardarDonadorAPI,
   getUsuariosAPI,
   guardarUsuarioAPI,
-  actualizarUsuarioAPI
+  actualizarUsuarioAPI,
+  getMiCuentaAPI,
+  cambiarClaveAPI
 } from './servicios/api.js';
 // los formularios mandan sus valores como objeto { campo: texto }; si algo no pasa la validacion se lanza Invalido
 import { estado, refrescar } from './estado.js';
 import { usuario, actividadesDonacion, ninos } from './data/datos.js';
-import { reglas, cantidadDe, numero as reglaNumero, limpiarTexto, fechaFiltro, largos } from './validacion.js';
+import { reglas, cantidadDe, cantidadMaxima, numero as reglaNumero, limpiarTexto, fechaFiltro, largos } from './validacion.js';
 import {
   iniciales, nombreCategoria, motivoCorreccion, motivosAjuste, movimientosEntre, palabras, coincideNombre, palabrasEnComun,
-  pluralizar, envaseSingular, mismoId, redondear, fechaActual, ninosDe, textoPresentacion, formatoNombre,
+  pluralizar, envaseSingular, mismoId, redondear, ninosDe, textoPresentacion, formatoNombre, momento,
 } from './logica/comunes.js';
-import { planDescuento, descontar, nuevoLote, disponible, cantidadVencida, lotesVencidos } from './logica/lotes.js';
+import { planDescuento, disponible, cantidadVencida } from './logica/lotes.js';
 import { inventarioVacio } from './logica/inventario.js';
 import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js';
-import { listaDonadores, actividadesDe } from './logica/donadores.js';
+import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
 import { interpretarDictado } from './logica/dictado.js';
 
@@ -123,41 +125,137 @@ export function mostrarToast(texto) {
 // ---------- guardar en la base ----------
 // los guardados van de uno en uno para que no choquen los _rev de CouchDB
 let cola = Promise.resolve();
+// guardados que todavia no terminan (las recargas automaticas esperan a que sea 0)
+let pendientes = 0;
 function guardarEnBD(trabajo) {
+  pendientes++;
   cola = cola.then(trabajo).catch(error => {
     console.error('Error al guardar en la base de datos:', error);
-    mostrarToast('No se pudo guardar en la base de datos. Se recargaron los datos guardados.');
+    const motivo = error.response?.data?.error;
+    mostrarToast(motivo ? `No se guardó: ${motivo}. Se recargaron los datos.` : 'No se pudo guardar en la base de datos. Se recargaron los datos guardados.');
     return cargarDatosDesdeDB();
-  });
+  }).finally(() => pendientes--);
   return cola;
 }
 
-// producto como lo guarda el backend
+// datos del producto que se pueden editar (el stock no: solo cambia con un movimiento en el servidor)
 function docProducto(item, categoria) {
   return {
-    _rev: item._rev,
     nombre: item.nombre,
     categoria: categoria.toLowerCase() === 'salud' ? 'salud' : 'alimentos',
-    cantidad: item.cantidad,
     unidad: item.unidad,
     stock_minimo: item.minimo || 0,
     codigo: item.codigo || '',
     codigosBarras: item.codigosBarras || [],
-    lotes: item.lotes || [],
     envase: item.envase ?? null,
     contenido: item.contenido ?? null,
     medida: item.medida ?? null,
+    // nombres de los productos que se le unieron o que tuvo: sin esto, al recargar se pierde su historial
+    unidos: item.unidos || [],
   };
 }
 
-// crea el producto si todavia no esta en la base, si no lo actualiza
-async function guardarProductoBD(item, categoria) {
-  const yaExiste = typeof item.id === 'string' && item._rev;
-  const res = yaExiste
-    ? await actualizarProductoAPI(item.id, docProducto(item, categoria))
-    : await guardarProductoAPI(docProducto(item, categoria));
-  if (!yaExiste) item.id = res.id || res._id;
-  item._rev = res.rev || res._rev;
+// producto como lo usa la pantalla (desde la base)
+function productoDesdeDoc(doc) {
+  return {
+    ...doc,
+    id: doc._id || doc.id,
+    _rev: doc._rev,
+    nombre: doc.nombre || 'Sin nombre',
+    unidad: doc.unidad || 'unidades',
+    cantidad: Number(doc.cantidad) || 0,
+    minimo: Number(doc.stock_minimo ?? doc.minimo ?? 0),
+    codigo: doc.codigo || (doc.nombre ? doc.nombre.slice(0, 2).toUpperCase() : 'PR'),
+    codigosBarras: doc.codigosBarras || [],
+    lotes: (doc.lotes || (doc.fecha_vencimiento ? [{ id: 1, vence: doc.fecha_vencimiento, quedan: doc.cantidad }] : [])).map(lote => ({
+      ...lote,
+      ingreso: lote.ingreso ? new Date(lote.ingreso) : new Date(),
+    })),
+    almacen: doc.almacen || '',
+    categoriaNombre: doc.categoria || '',
+  };
+}
+
+// el producto queda como lo dejo el servidor (sin cambiar el objeto: las ventanas abiertas lo siguen mostrando)
+function actualizarProducto(item, doc) {
+  Object.assign(item, productoDesdeDoc(doc));
+}
+
+// movimiento como lo usa la pantalla (desde la base)
+function movimientoDesdeDoc(doc) {
+  const rawMov = doc.movimiento || doc.tipo_movimiento || 'Ingreso';
+  const rawCat = doc.categoria || 'alimentos';
+  return {
+    ...doc,
+    id: doc._id || doc.id,
+    movimiento: rawMov.charAt(0).toUpperCase() + rawMov.slice(1).toLowerCase(),
+    categoria: rawCat.toLowerCase() === 'salud' ? 'Salud' : 'Alimentos',
+    insumo: doc.insumo || doc.nombre || 'Sin insumo',
+    cantidad: Number(doc.cantidad) || 0,
+    saldo: Number(doc.saldo) || 0,
+    responsable: doc.responsable || doc.usuario_id || 'admin',
+    donador: nombreDonador(doc.donador),
+  };
+}
+
+function donadorDesdeDoc(doc) {
+  return {
+    ...doc,
+    id: doc._id || doc.id,
+    _rev: doc._rev,
+    nombre: nombreDonador(doc.nombre),
+    telefono: doc.telefono || doc.contacto || '',
+    contacto: doc.contacto || doc.telefono || '',
+    creadoPor: doc.creadoPor || '',
+    // sin fecha (donadores viejos) queda null: no hay que inventar que se agrego hoy
+    creado: doc.creado ? new Date(doc.creado) : null,
+  };
+}
+
+// el error que manda el servidor, para mostrarlo en la ventana
+function motivoDelServidor(err) {
+  const motivo = err.response?.data?.error;
+  return motivo ? motivo.replace(/[.:]?$/, '.') : null;
+}
+
+// crea un producto nuevo (nace sin stock: lo que entra va con su ingreso) y lo agrega a su lista
+// si ya existe (otra persona lo acaba de crear), el servidor lo rechaza y no queda repetido
+async function crearProductoBD(nuevo, categoria) {
+  let res;
+  try {
+    res = await guardarProductoAPI(docProducto(nuevo, categoria));
+  } catch (err) {
+    if (motivoDelServidor(err)) throw new Invalido(motivoDelServidor(err));
+    throw err;
+  }
+  const item = { ...nuevo, id: res.id || res._id, _rev: res.rev || res._rev, cantidad: 0, lotes: [] };
+  listaDe(categoria).push(item);
+  return item;
+}
+
+// manda un movimiento al servidor: el cambia el stock con el dato de ese momento y lo anota
+// el producto queda como lo dejo el servidor; si lo rechaza (otra persona saco antes, por ejemplo),
+// el producto se pone al dia y se lanza Invalido con el motivo, para mostrarlo en la ventana
+async function enviarMovimiento(item, peticion) {
+  try {
+    const { producto, movimiento } = await enviarMovimientoAPI({ canal: 'manual', ...peticion, producto_id: item.id });
+    actualizarProducto(item, producto);
+    return movimientoDesdeDoc(movimiento);
+  } catch (err) {
+    const datos = err.response?.data;
+    if (datos?.producto) {
+      actualizarProducto(item, datos.producto);
+      refrescar();
+    }
+    if (motivoDelServidor(err)) throw new Invalido(motivoDelServidor(err));
+    throw err;
+  }
+}
+
+// el movimiento nuevo va arriba del historial
+function agregarAlHistorial(fila) {
+  estado.historial.unshift(fila);
+  refrescar();
 }
 
 // ---------- sesion ----------
@@ -190,7 +288,110 @@ export function iniciar() {
 
   if (token && cuentaGuardada) {
     entrar(cuentaGuardada);
-    cargarDatosDesdeDB();
+    // al recargar la pagina se vuelve a donde estaba (no a Inicio)
+    const vista = leerVista();
+    cargarDatosDesdeDB().then(() => {
+      if (vista?.scroll) window.scrollTo(0, vista.scroll);
+    });
+  }
+
+  // antes de recargar o cerrar la pestaña se anota donde estaba
+  window.addEventListener('pagehide', guardarVista);
+
+  // al volver a la pestaña (o desbloquear el celular) se trae lo que otros hicieron mientras tanto
+  // (y si un admin le cambio el rol o lo desactivo)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recargarSiSePuede();
+  });
+
+  // cada minuto: si le cambiaron el rol se nota sin recargar; en Usuarios, tambien los accesos y la actividad de los demas
+  setInterval(() => {
+    if (!usuario.id || document.visibilityState !== 'visible') return;
+    if (estado.seccion === 'Usuarios') return recargarSiSePuede();
+    refrescarMiCuenta()
+      .then(cambioRol => cambioRol && recargarSiSePuede())
+      .catch(error => console.error('No se pudo revisar la cuenta:', error));
+  }, 60 * 1000);
+}
+
+// ---------- volver a donde estaba al recargar ----------
+// se guarda en la pestaña (sessionStorage): sobrevive a recargar, no a cerrarla, y no lo ve otra pestaña
+// seccion, filtros, busqueda, orden, scroll y la lista de productos que se estaba armando (las ventanas no)
+const claveVista = 'vista';
+
+function guardarVista() {
+  if (!usuario.id) return;
+  try {
+    sessionStorage.setItem(claveVista, JSON.stringify({
+      usuarioId: usuario.id,
+      seccion: estado.seccion,
+      filtro: estado.filtro,
+      busqueda: estado.busqueda,
+      historialFiltros: estado.historialFiltros,
+      donadoresFiltros: estado.donadoresFiltros,
+      inventarioFiltros: estado.inventarioFiltros,
+      usuarios: estado.usuarios,
+      alertasOrden: estado.alertasOrden,
+      grafico: estado.grafico,
+      lote: estado.lote,
+      scroll: window.scrollY,
+    }));
+  } catch {
+    // sin almacenamiento se vuelve a Inicio
+  }
+}
+
+// solo lo que tiene la forma esperada: lo demas queda como al entrar
+function mezclar(actual, guardado) {
+  if (!guardado || typeof guardado !== 'object') return actual;
+  const limpio = {};
+  for (const [campo, valor] of Object.entries(actual)) {
+    if (campo in guardado && typeof guardado[campo] === typeof valor) limpio[campo] = guardado[campo];
+  }
+  return { ...actual, ...limpio };
+}
+
+// pone lo guardado en el estado; devuelve lo guardado (o null)
+function leerVista() {
+  let vista = null;
+  try {
+    vista = JSON.parse(sessionStorage.getItem(claveVista) ?? 'null');
+  } catch {
+    return null;
+  }
+  // de otra cuenta no se usa
+  if (!vista || !mismoId(vista.usuarioId, usuario.id)) return null;
+
+  if (typeof vista.seccion === 'string') estado.seccion = vista.seccion;
+  if (typeof vista.filtro === 'string') estado.filtro = vista.filtro;
+  if (typeof vista.busqueda === 'string') estado.busqueda = limpiarTexto(vista.busqueda).slice(0, largos.busqueda);
+  for (const grupo of ['historialFiltros', 'donadoresFiltros', 'inventarioFiltros', 'usuarios', 'alertasOrden', 'grafico']) {
+    estado[grupo] = mezclar(estado[grupo], vista[grupo]);
+  }
+  if (vista.lote && ['Ingreso', 'Salida'].includes(vista.lote.tipo) && Array.isArray(vista.lote.items)) {
+    estado.lote = vista.lote;
+    // las filas nuevas no repiten id
+    siguienteItem = Math.max(siguienteItem, ...vista.lote.items.map(x => Number(x.id) + 1 || 0));
+  }
+  refrescar();
+  return vista;
+}
+
+// vuelve a traer todo de la base, sin avisos si falla
+// espera a que terminen los guardados pendientes y no lo hace con una ventana abierta
+// (las ventanas guardan el producto que muestran; si se cambia por otro, se guardaria sobre uno viejo)
+// el panel de actividad si se puede: busca la cuenta por id
+let recargando = false;
+export async function recargarSiSePuede() {
+  const puede = () => usuario.id && pendientes === 0 && (!estado.modal || estado.modal.tipo === 'panel-actividad');
+  if (recargando || !puede()) return;
+  recargando = true;
+  try {
+    await cola;
+    // se vuelve a revisar al llegar los datos: pudo abrirse una ventana o guardarse algo mientras tanto
+    if (puede()) await cargarDatosDesdeDB({ silencioso: true, aplicar: puede });
+  } finally {
+    recargando = false;
   }
 }
 
@@ -220,6 +421,14 @@ export async function iniciarSesion(v) {
     return null;
   } catch (err) {
     console.error('Error en login:', err);
+    const estadoHttp = err.response?.status;
+    // sin respuesta: el servidor no esta prendido o no hay red
+    if (!err.response) return { error: 'No se pudo conectar con el servidor. Revisa la conexión e inténtalo otra vez.' };
+    if (estadoHttp === 429) return { error: 'Demasiados intentos. Espera un momento antes de volver a intentar.' };
+    if (estadoHttp === 401 && /desactivada/i.test(err.response.data?.error ?? '')) {
+      return { error: 'Tu cuenta está desactivada. Pide a un administrador que la active.', campo: 'login-usuario' };
+    }
+    if (estadoHttp >= 500) return { error: 'El servidor tuvo un problema. Inténtalo otra vez en un momento.' };
     return { error: 'Usuario o contraseña incorrectos', campo: 'login-clave' };
   }
 }
@@ -237,11 +446,17 @@ function entrar(cuenta) {
 }
 
 export function salir() {
+  // el siguiente que entre empieza en Inicio
+  try {
+    sessionStorage.removeItem(claveVista);
+  } catch {
+    // sin almacenamiento no hay nada que borrar
+  }
   logout(); // Elimina tokens de localStorage
   guardarSesion(null); // Elimina usuario guardado
   Object.assign(usuario, { id: null, nombre: '', iniciales: '', rol: '' });
   // no deja los datos del anterior a la vista del siguiente
-  Object.assign(estado, { alimentos: [], salud: [], historial: [], donadores: [], cuentas: [], actividad: [], lote: null });
+  Object.assign(estado, { alimentos: [], salud: [], historial: [], donadores: [], cuentas: [], lote: null });
   estado.modal = null;
   estado.menuUsuario = false;
   refrescar();
@@ -278,6 +493,8 @@ export function irA(seccion) {
   estado.inventarioFiltros = inventarioVacio();
   window.scrollTo(0, 0);
   refrescar();
+  // ultimo acceso y actividad de cada cuenta al dia
+  if (seccion === 'Usuarios') recargarSiSePuede();
 }
 
 export function cambiar(cambio) {
@@ -337,7 +554,8 @@ export function quitarFiltro(grupo, campo) {
 
 export function limpiarFiltros(grupo) {
   if (grupo === 'historialFiltros') {
-    estado.historialFiltros = filtrosHistorialVacios();
+    // el orden se mantiene
+    estado.historialFiltros = { ...filtrosHistorialVacios(), orden: estado.historialFiltros.orden };
   } else if (grupo === 'donadoresFiltros') {
     estado.donadoresFiltros = { actividad: 'Todos', anio: 'Todos' };
   } else if (grupo === 'inventarioFiltros') {
@@ -425,8 +643,9 @@ function leerVencimiento(v) {
 }
 
 // datos del donador nuevo (sin repetir)
+// el nombre se guarda con la primera letra de cada palabra en mayuscula
 function leerDonadorNuevo(v, campoNombre, campoTelefono) {
-  const nombre = leer(v, campoNombre, reglas.nombreDonador);
+  const nombre = nombreDonador(leer(v, campoNombre, reglas.nombreDonador));
   if (estado.donadores.some(d => d.nombre.toLowerCase() === nombre.toLowerCase())) {
     falla(`"${nombre}" ya está registrado: elígelo de la lista.`, campoNombre);
   }
@@ -449,49 +668,35 @@ function elegirDonador(v) {
   return { nombre: nuevo.nombre, nuevo };
 }
 
-// agrega el donador si era nuevo y devuelve su nombre
-function guardarDonadorElegido(donador) {
-  if (donador.nuevo) estado.donadores.push(nuevoDonador(donador.nuevo.nombre, donador.nuevo.telefono));
+// el donador de un ingreso: si es nuevo, se crea antes; devuelve su nombre
+// si otra persona lo acaba de crear con el mismo nombre, se usa ese (no queda repetido)
+async function donadorDeMovimiento(donador) {
+  if (!donador.nuevo) return donador.nombre;
+  try {
+    await crearDonador(donador.nuevo.nombre, donador.nuevo.telefono);
+  } catch (err) {
+    if (err.response?.status !== 409) throw err;
+    await recargarDonadores();
+  }
   return donador.nombre;
 }
 
-// ---------- actividad ----------
-// acciones que no son movimientos
-function registrarActividad(accion, texto, detalle) {
-  estado.actividad.unshift({ id: Date.now(), fecha: new Date(), quienId: usuario.id, quien: usuario.nombre, accion, texto, detalle });
+// lo crea en la base y recien ahi lo agrega a la lista
+// creadoPorId y creado: con eso sale en la actividad de quien lo agrego (ver logica/actividad.js)
+async function crearDonador(nombre, telefono, observaciones = '') {
+  const creado = new Date();
+  const res = await guardarDonadorAPI({ tipo: 'donador', nombre, telefono, contacto: telefono, observaciones, creado: creado.toISOString() });
+  estado.donadores.push({
+    id: res.id || res._id, _rev: res.rev || res._rev, tipo: 'donador', nombre, telefono, contacto: telefono, observaciones,
+    creadoPor: usuario.nombre, creadoPorId: usuario.id, creado,
+  });
+  refrescar();
 }
 
-// varios en el mismo momento no repiten id
-let siguienteDonador = 0;
-function nuevoDonador(nombre, telefono) {
-  registrarActividad('donador', 'Agregó donador', nombre);
-  const fechaCreado = new Date();
-
-  // Objeto en memoria para React (con fecha como Date)
-  const donadorObjeto = {
-    id: Date.now() + siguienteDonador++,
-    tipo: 'donador',
-    nombre,
-    telefono,
-    contacto: telefono,
-    creadoPor: usuario.nombre,
-    creadoPorId: usuario.id,
-    creado: fechaCreado
-  };
-
-  // Objeto serializado para CouchDB (con fecha como String)
-  const donadorDocBD = {
-    ...donadorObjeto,
-    creado: fechaCreado.toISOString()
-  };
-
-  guardarEnBD(async () => {
-    const res = await guardarDonadorAPI(donadorDocBD);
-    donadorObjeto.id = res.id || res._id;
-    donadorObjeto._rev = res.rev || res._rev;
-  });
-
-  return donadorObjeto;
+async function recargarDonadores() {
+  const docs = await getDonadoresAPI();
+  if (Array.isArray(docs)) estado.donadores = docs.map(donadorDesdeDoc);
+  refrescar();
 }
 
 // ---------- ingreso o salida ----------
@@ -529,58 +734,19 @@ export function revisarMovimiento(modal, v) {
   return { cantidad, vence, plan, donador, actividad, para, observaciones, esSalud: categoria === 'Salud' };
 }
 
-// paso 2: guarda el movimiento
+// paso 2: el servidor lo guarda con el stock de ese momento
+// si otra persona cambio el producto y ya no alcanza, el aviso sale en la misma ventana (y el AHORA se actualiza)
 export async function confirmarMovimiento(modal, datos) {
   if (estado.modal !== modal) return;
-  const { item, categoria, movimiento: tipo } = modal;
-  const donador = guardarDonadorElegido(datos.donador);
-  estado.modal = null;
-  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${item.nombre}`);
-  await registrarMovimiento({ ...datos, item, categoria, tipo, donador });
-}
-
-// cambia el stock y anota el movimiento (ya validado)
-// plan: de que lotes sale; si no viene, se calcula ahora
-// inicial: primer ingreso de un producto nuevo
-async function registrarMovimiento({ item, categoria, tipo, cantidad, vence = null, plan, donador = '', actividad = '', para = [], observaciones = '', inicial = false }) {
-  const usados = tipo === 'Salida' ? descontar(plan ?? planDescuento(item, cantidad)) : null;
-  item.cantidad = redondear(item.cantidad + (tipo === 'Ingreso' ? cantidad : -cantidad));
-  const lote = tipo === 'Ingreso' ? nuevoLote(item, { cantidad, vence }) : null;
-
-  // Formato compatible con React y con la BD
-  const catNormalizada = categoria.toLowerCase() === 'salud' ? 'Salud' : 'Alimentos';
-  const tipoNormalizado = tipo.charAt(0).toUpperCase() + tipo.slice(1).toLowerCase();
-
-  const movimientoDoc = {
-    tipo: 'movimiento',
-    producto_id: item.id || null,
-    tipo_movimiento: tipoNormalizado.toLowerCase(), // 'ingreso' | 'salida'
-    movimiento: tipoNormalizado,                   // 'Ingreso' | 'Salida'
-    insumo: item.nombre,
-    categoria: catNormalizada,
-    cantidad,
-    unidad: item.unidad,
-    fecha: fechaActual(),
-    canal: 'manual',
-    usuario_id: usuario.id || usuario.nombre,
-    responsable: usuario.nombre,
-    donador,
-    actividad,
-    para,
-    observaciones,
-    saldo: item.cantidad,
-    ...(inicial && { inicial: true }),
-    ...(lote ? { loteId: lote.id, vence: lote.vence } : { lotes: usados }),
-  };
-
-  estado.historial.unshift(movimientoDoc);
-  refrescar();
-
-  return guardarEnBD(async () => {
-    await guardarProductoBD(item, catNormalizada);
-    movimientoDoc.producto_id = item.id;
-    await registrarMovimientoAPI(movimientoDoc);
+  const { item, movimiento: tipo } = modal;
+  const donador = await donadorDeMovimiento(datos.donador);
+  const fila = await enviarMovimiento(item, {
+    tipo: tipo === 'Salida' ? 'salida' : 'ingreso', cantidad: datos.cantidad, vence: datos.vence ?? null,
+    donador, actividad: donador ? datos.actividad : '', para: datos.para, observaciones: datos.observaciones,
   });
+  agregarAlHistorial(fila);
+  if (estado.modal === modal) estado.modal = null;
+  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${item.nombre}: quedan ${item.cantidad} ${item.unidad}`);
 }
 
 // ---------- producto nuevo ----------
@@ -642,16 +808,24 @@ function mismaPresentacion(a, b) {
   return igual(a.unidad, b.unidad) && igual(a.contenido, b.contenido) && igual(a.medida, b.medida);
 }
 
-// lo que se agrega al nombre: '400 g', o 'Bolsa 1 L' si hace falta distinguir el envase; suelto: 'a Granel'
-function sufijoTamano(p, conEnvase = false) {
-  if (!p.contenido) return 'a Granel';
-  const envase = p.envase || envaseSingular(p.unidad);
-  return `${conEnvase && envase ? `${envase} ` : ''}${redondear(p.contenido)} ${p.medida === 'l' ? 'L' : p.medida}`;
+// lo que se agrega al nombre para distinguir presentaciones: envase y tamaño ('bolsa 1 kg', 'lata 400 g'),
+// o en que se cuenta si no tiene tamaño fijo ('en sacos', 'en kg')
+function sufijoTamano(p) {
+  if (!p.contenido) return `en ${p.unidad}`;
+  const envase = (p.envase || envaseSingular(p.unidad)).toLowerCase();
+  return `${envase} ${redondear(p.contenido)} ${p.medida === 'l' ? 'L' : p.medida}`;
 }
 
-// el nombre sin su tamaño al final: 'Leche Evaporada Gloria 400 g' -> 'Leche Evaporada Gloria'
-function baseDe(nombre, p) {
-  for (const sufijo of [sufijoTamano(p, true), sufijoTamano(p)]) {
+// como se nombraban antes ('Arroz a Granel', 'Leche 400 g', 'Leche Lata 400 g'): para reconocer los que ya existen
+function sufijosViejos(p) {
+  if (!p.contenido) return ['a Granel'];
+  const tamano = `${redondear(p.contenido)} ${p.medida === 'l' ? 'L' : p.medida}`;
+  return [`${p.envase || envaseSingular(p.unidad)} ${tamano}`, tamano];
+}
+
+// el nombre sin su presentacion al final: 'Leche Evaporada Gloria lata 400 g' -> 'Leche Evaporada Gloria'
+export function baseDe(nombre, p) {
+  for (const sufijo of [sufijoTamano(p), ...sufijosViejos(p)]) {
     if (nombre.toLowerCase().endsWith(` ${sufijo.toLowerCase()}`)) return nombre.slice(0, -sufijo.length - 1);
   }
   return nombre;
@@ -678,28 +852,34 @@ export function nombreDisponible(escrito, presentacion, exceptoItem = null) {
   const repetido = hermanos.find(h => mismaPresentacion(h.item, presentacion));
   if (repetido) return { repetido };
 
-  // el nuevo con su tamaño; si otro ya se llama asi (mismo tamaño, otro envase), se agrega el envase
-  let nombre = `${base} ${sufijoTamano(presentacion)}`;
-  if (hermanos.some(h => mismaBase(h.item.nombre, nombre))) nombre = `${base} ${sufijoTamano(presentacion, true)}`;
+  // el nuevo con su presentacion: 'Arroz bolsa 1 kg'
+  const nombre = `${base} ${sufijoTamano(presentacion)}`;
 
-  // los que todavia no tienen el tamaño en el nombre, lo reciben
+  // los que todavia no la tienen en el nombre (o la tienen a la manera vieja: 'Arroz a Granel'), la reciben
   const renombrar = hermanos
-    .filter(h => mismaBase(h.item.nombre, base))
-    .map(h => {
-      const suyo = `${base} ${sufijoTamano(h.item)}`;
-      return { ...h, nombre: mismaBase(suyo, nombre) ? `${base} ${sufijoTamano(h.item, true)}` : suyo };
-    });
+    .map(h => ({ ...h, nombre: `${base} ${sufijoTamano(h.item)}` }))
+    .filter(h => !mismaBase(h.item.nombre, h.nombre));
   return { nombre, renombrar };
 }
 
 // cambia el nombre de un producto y de sus movimientos (el historial lo reconoce por el nombre)
-function renombrarProducto(item, categoria, nombre) {
+// el nombre viejo queda en 'unidos': los movimientos guardados en la base lo siguen teniendo y asi no se pierden al recargar
+async function renombrarProducto(item, categoria, nombre) {
   const viejo = item.nombre;
   if (viejo === nombre) return;
-  for (const fila of estado.historial) if (fila.categoria === categoria && fila.insumo === viejo) fila.insumo = nombre;
+  const unidos = [...new Set([...(item.unidos || []), viejo])];
+  try {
+    actualizarProducto(item, await actualizarProductoAPI(item.id, { nombre, unidos }));
+  } catch (err) {
+    if (motivoDelServidor(err)) throw new Invalido(motivoDelServidor(err));
+    throw err;
+  }
+  for (const fila of estado.historial) {
+    if (fila.categoria !== categoria || fila.insumo !== viejo) continue;
+    fila.insumoOriginal ??= viejo;
+    fila.insumo = nombre;
+  }
   if (estado.historialFiltros.producto === viejo) estado.historialFiltros.producto = nombre;
-  item.nombre = nombre;
-  guardarEnBD(() => guardarProductoBD(item, categoria));
 }
 
 // el producto queda en su fila hasta confirmar el ingreso; recien ahi se crea
@@ -779,63 +959,51 @@ export function historialProducto(item, categoria) {
 
 // ---------- unir un producto repetido (solo administrador) ----------
 // otro producto con la misma unidad y presentacion
+// los que vienen de la base pueden no tener contenido/medida (undefined) y los nuevos los tienen en null: valen igual
 function sePuedenUnir(item, otro) {
-  return !mismoId(item.id, otro.id) && otro.unidad === item.unidad && otro.contenido === item.contenido && otro.medida === item.medida;
+  const igual = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
+  return !mismoId(item.id, otro.id) && igual(otro.unidad, item.unidad) && igual(otro.contenido, item.contenido) && igual(otro.medida, item.medida);
 }
 
+// todos los que se pueden unir; primero los de nombre parecido
+// (antes solo salian los que compartian una palabra de 4 letras o mas: "Pan" o "Sal" nunca tenian con quien unirse)
 export function abrirUnir(categoria, id) {
   if (!esAdmin()) return;
   const item = productoPorId(categoria, id);
   if (!item) return;
   const opciones = listaDe(categoria)
     .filter(o => sePuedenUnir(item, o))
-    .map(o => ({ o, comunes: palabrasEnComun(item.nombre, o.nombre) }))
-    .filter(x => x.comunes > 0)
-    .sort((a, b) => b.comunes - a.comunes)
+    .map(o => ({ o, comunes: palabrasEnComun(item.nombre, o.nombre) + (coincideNombre(item.nombre, o.nombre) ? 1 : 0) }))
+    .sort((a, b) => b.comunes - a.comunes || a.o.nombre.localeCompare(b.o.nombre))
     .map(x => x.o);
   abrirModal({ tipo: 'unir', item, categoria, opciones });
 }
 
-// el stock del repetido entra como ajuste del que se queda
-export function guardarUnion(modal, v) {
+// el stock del repetido entra como ajuste del que se queda (lo hace el servidor, todo o nada)
+export async function guardarUnion(modal, v) {
   if (!esAdmin()) return;
   const { item, categoria } = modal;
   const lista = listaDe(categoria);
   const destino = lista.find(o => mismoId(o.id, v['unir-con']));
   if (!destino || !sePuedenUnir(item, destino)) falla('Elige con qué producto se une.', 'unir-con');
 
-  destino.cantidad = redondear(destino.cantidad + item.cantidad);
-  destino.lotes = [...(destino.lotes || []), ...(item.lotes || []).filter(l => l.quedan > 0)];
-  let ajuste = null;
-  if (item.cantidad > 0) {
-    ajuste = {
-      fecha: fechaActual(),
-      insumo: destino.nombre,
-      categoria,
-      movimiento: 'Ajuste',
-      cantidad: item.cantidad,
-      diferencia: item.cantidad,
-      unidad: destino.unidad,
-      responsable: usuario.nombre,
-      donador: '',
-      para: [],
-      saldo: destino.cantidad,
-      motivo: 'Unión de productos',
-      nota: `Se unió "${item.nombre}"`,
-    };
-    estado.historial.unshift(ajuste);
+  let res;
+  try {
+    res = await unirProductosAPI(item.id, destino.id);
+  } catch (err) {
+    if (motivoDelServidor(err)) falla(motivoDelServidor(err));
+    throw err;
   }
-  destino.unidos = [...(destino.unidos || []), item.nombre, ...(item.unidos || [])];
-  lista.splice(lista.indexOf(item), 1);
-  registrarActividad('producto', 'Unió productos', `${item.nombre} → ${destino.nombre}`);
-
-  // en la base: se actualiza el que queda, se anota el ajuste y se borra el otro
-  guardarEnBD(async () => {
-    await guardarProductoBD(destino, categoria);
-    if (ajuste) await registrarMovimientoAPI({ ...ajuste, tipo: 'movimiento', producto_id: destino.id });
-    if (typeof item.id === 'string' && item._rev) await eliminarProductoAPI(item.id, item._rev);
-  });
-
+  actualizarProducto(destino, res.destino);
+  const i = lista.indexOf(item);
+  if (i >= 0) lista.splice(i, 1);
+  // sus movimientos pasan a mostrarse con el nombre del que queda
+  for (const fila of estado.historial) {
+    if (fila.categoria !== categoria || fila.insumo !== item.nombre) continue;
+    fila.insumoOriginal ??= item.nombre;
+    fila.insumo = destino.nombre;
+  }
+  if (res.movimiento) agregarAlHistorial(movimientoDesdeDoc(res.movimiento));
   estado.modal = null;
   mostrarToast(`Productos unidos · ${destino.nombre}: ${destino.cantidad} ${destino.unidad}`);
 }
@@ -874,43 +1042,19 @@ export function revisarAjuste(modal, v) {
   return { contado, diferencia, motivo, nota };
 }
 
-// paso 2: guarda el ajuste
+// paso 2: el servidor ajusta con el stock de ese momento
+// si otra persona lo cambio y lo contado ya coincide, se avisa en la ventana
 export async function confirmarAjuste(modal, ajuste) {
   if (estado.modal !== modal) return;
-  const { item, categoria, correccion } = modal;
-  item.cantidad = ajuste.contado;
-
-  const lotes = ajuste.diferencia < 0
-    ? { lotes: descontar(planDescuento(item, -ajuste.diferencia, true)) }
-    : { loteId: nuevoLote(item, { cantidad: ajuste.diferencia, origen: 'Sobrante del conteo' }).id };
-
-  const movimientoAjuste = {
-    fecha: fechaActual(),
-    insumo: item.nombre,
-    categoria,
-    movimiento: 'Ajuste',
-    cantidad: Math.abs(ajuste.diferencia),
-    diferencia: ajuste.diferencia,
-    unidad: item.unidad,
-    responsable: usuario.nombre,
-    donador: '',
-    para: [],
-    saldo: ajuste.contado,
-    motivo: ajuste.motivo,
-    nota: ajuste.nota,
-    corrige: correccion?.fila ?? null,
-    ...lotes,
-  };
-
-  estado.historial.unshift(movimientoAjuste);
-  estado.modal = null;
-  refrescar();
-  mostrarToast(`Stock ajustado · ${item.nombre}: ${ajuste.contado} ${item.unidad}`);
-
-  return guardarEnBD(async () => {
-    await guardarProductoBD(item, categoria);
-    await registrarMovimientoAPI({ ...movimientoAjuste, producto_id: item.id });
+  const { item, correccion } = modal;
+  const fila = await enviarMovimiento(item, {
+    tipo: 'ajuste', contado: ajuste.contado, motivo: ajuste.motivo, nota: ajuste.nota, corrige: correccion?.fila?.id ?? null,
   });
+  // el enlace con el ajuste que corrige (el panel del movimiento lo usa)
+  if (correccion) fila.corrige = correccion.fila;
+  agregarAlHistorial(fila);
+  if (estado.modal === modal) estado.modal = null;
+  mostrarToast(`Stock ajustado · ${item.nombre}: ${item.cantidad} ${item.unidad}`);
 }
 
 // ---------- baja por vencimiento ----------
@@ -923,41 +1067,15 @@ export function abrirBaja(categoria, id) {
   abrirModal({ tipo: 'baja', item, categoria });
 }
 
-// saca los lotes vencidos como una salida
+// saca los lotes vencidos como una salida (el servidor ve que esta vencido hoy)
 export async function confirmarBaja(modal, v) {
   if (estado.modal !== modal) return;
-  const { item, categoria } = modal;
+  const { item } = modal;
   const nota = leer(v, 'nota', reglas.nota);
-  const vencida = cantidadVencida(item);
-  if (vencida <= 0) return;
-  const usados = descontar(lotesVencidos(item).map(lote => ({ lote, cantidad: lote.quedan })));
-  item.cantidad = redondear(item.cantidad - vencida);
-
-  const movimientoBaja = {
-    fecha: fechaActual(),
-    insumo: item.nombre,
-    categoria,
-    movimiento: 'Salida',
-    cantidad: vencida,
-    unidad: item.unidad,
-    responsable: usuario.nombre,
-    donador: '',
-    para: [],
-    saldo: item.cantidad,
-    motivo: 'Baja por vencimiento',
-    nota,
-    lotes: usados,
-  };
-
-  estado.historial.unshift(movimientoBaja);
-  estado.modal = null;
-  refrescar();
-  mostrarToast(`Dado de baja · ${vencida} ${item.unidad} de ${item.nombre}`);
-
-  return guardarEnBD(async () => {
-    await guardarProductoBD(item, categoria);
-    await registrarMovimientoAPI({ ...movimientoBaja, producto_id: item.id });
-  });
+  const fila = await enviarMovimiento(item, { tipo: 'baja', nota });
+  agregarAlHistorial(fila);
+  if (estado.modal === modal) estado.modal = null;
+  mostrarToast(`Dado de baja · ${fila.cantidad} ${item.unidad} de ${item.nombre}`);
 }
 
 // ---------- detalle de un movimiento ----------
@@ -985,9 +1103,18 @@ export function historialDonador(donador) {
   irA('Historial');
 }
 
-export function guardarDonador(v) {
+export async function guardarDonador(v) {
   const { nombre, telefono } = leerDonadorNuevo(v, 'nuevo-nombre', 'nuevo-telefono');
-  estado.donadores.push(nuevoDonador(nombre, telefono));
+  const observaciones = leer(v, 'nuevo-observaciones', reglas.observaciones);
+  try {
+    await crearDonador(nombre, telefono, observaciones);
+  } catch (err) {
+    if (err.response?.status === 409) {
+      await recargarDonadores();
+      falla(`"${nombre}" ya está registrado (otra persona lo acaba de agregar): elígelo de la lista.`, 'nuevo-nombre');
+    }
+    throw err;
+  }
   estado.modal = null;
   mostrarToast('Donador agregado · ' + nombre);
 }
@@ -1023,10 +1150,11 @@ function cuentaPorId(id) {
 }
 
 // el admin ve la de todos; los demas solo la suya
+// quien no es admin no tiene la lista de cuentas: su cuenta se arma con lo de la sesion
 export function verActividad(id) {
-  const cuenta = cuentaPorId(id);
+  const esPropio = mismoId(id, usuario.id);
+  const cuenta = cuentaPorId(id) ?? (esPropio ? { id: usuario.id, nombre: usuario.nombre, usuario: leerSesion()?.usuario ?? '', rol: usuario.rol, activo: true, ultimoAcceso: null } : null);
   if (!cuenta) return;
-  const esPropio = mismoId(cuenta.id, usuario.id);
   if (!esPropio && !esAdmin()) return;
   abrirModal({ tipo: 'panel-actividad', cuenta });
 }
@@ -1036,7 +1164,7 @@ export async function guardarUsuario(v) {
 
   const nombre = leer(v, 'cuenta-nombre', reglas.nombreCuenta);
   const usuarioTexto = leer(v, 'cuenta-usuario', reglas.nombreUsuario);
-  const clave = leer(v, 'cuenta-clave', reglas.claveNueva);
+  const clave = leerClaveNueva(v);
   const rol = v['cuenta-rol'] || 'Usuario';
   if (!permitido(rol, roles)) falla('Elige un rol.', 'cuenta-rol');
   if (estado.cuentas.some(c => c.usuario?.toLowerCase() === usuarioTexto)) falla('Ese usuario ya existe.', 'cuenta-usuario');
@@ -1047,43 +1175,130 @@ export async function guardarUsuario(v) {
     res = await guardarUsuarioAPI({ nombre, usuario: usuarioTexto, clave, rol, activo: true });
   } catch (err) {
     if (err.response?.status === 409) falla('Ese usuario ya existe.', 'cuenta-usuario');
-    throw err;
+    errorDelServidor(err, 'clave-nueva');
   }
 
   // la contraseña no se guarda en la pantalla
   estado.cuentas.push({
     id: res.id || res._id, _rev: res.rev || res._rev,
-    nombre, usuario: usuarioTexto, rol, activo: true, creado, creadoPor: usuario.nombre, ultimoAcceso: null,
+    nombre, usuario: usuarioTexto, rol, activo: true, creado, creadoPor: usuario.nombre, creadoPorId: usuario.id, ultimoAcceso: null, cambios: [],
   });
-  registrarActividad('usuario', 'Agregó usuario', nombre);
   estado.modal = null;
   refrescar();
   mostrarToast(`Usuario creado · ${nombre}`);
 }
 
-// cambia un dato de la cuenta y lo guarda en la base
-function actualizarCuenta(c, cambio) {
-  Object.assign(c, cambio);
+// cambia el rol o el estado de una cuenta y lo guarda en la base
+// solo se manda lo que cambio; el backend lo aplica sobre la version actual (no choca si esa persona entro mientras tanto)
+// accion y valor quedan en sus "cambios" para la actividad de quien lo hizo
+function actualizarCuenta(c, campo, valor, accion) {
+  const antes = c[campo];
+  c[campo] = valor;
+  c.cambios = [...(c.cambios || []), { accion, valor, quienId: usuario.id, quien: usuario.nombre, fecha: new Date().toISOString() }];
   refrescar();
   guardarEnBD(async () => {
-    const res = await actualizarUsuarioAPI(c.id, { _rev: c._rev, nombre: c.nombre, usuario: c.usuario, rol: c.rol, activo: c.activo });
-    c._rev = res.rev || res._rev;
+    try {
+      const res = await actualizarUsuarioAPI(c.id, { [campo]: valor });
+      c._rev = res.rev || res._rev;
+    } catch (err) {
+      // si no se guardo, la pantalla vuelve a lo que habia (guardarEnBD avisa y recarga)
+      c[campo] = antes;
+      throw err;
+    }
   });
 }
 
-// el admin no puede desactivarse ni quitarse el rol a si mismo
+// cuentas que el admin puede cambiar: la suya no (se quedaria sin acceso)
+// y la principal (el primer administrador) tampoco, nadie
+export function sePuedeAdministrar(c) {
+  return Boolean(c) && esAdmin() && !mismoId(c.id, usuario.id) && !c.principal;
+}
+
 export function cambiarActivo(id) {
-  const c = estado.cuentas.find(x => mismoId(x.id, id));
-  if (!c || !esAdmin() || mismoId(c.id, usuario.id)) return;
-  actualizarCuenta(c, { activo: !c.activo });
-  registrarActividad('estado', c.activo ? 'Activó a' : 'Desactivó a', c.nombre);
+  const c = cuentaPorId(id);
+  if (!sePuedeAdministrar(c)) return;
+  actualizarCuenta(c, 'activo', !c.activo, 'estado');
 }
 
 export function cambiarRol(id, nuevoRol) {
-  const c = estado.cuentas.find(x => mismoId(x.id, id));
-  if (!c || !esAdmin() || mismoId(c.id, usuario.id) || !permitido(nuevoRol, roles) || c.rol === nuevoRol) return;
-  actualizarCuenta(c, { rol: nuevoRol });
-  registrarActividad('rol', `Cambió a ${nuevoRol}`, c.nombre);
+  const c = cuentaPorId(id);
+  if (!sePuedeAdministrar(c) || !permitido(nuevoRol, roles) || c.rol === nuevoRol) return;
+  actualizarCuenta(c, 'rol', nuevoRol, 'rol');
+}
+
+// ---------- contraseñas ----------
+// contraseña nueva escrita dos veces igual
+function leerClaveNueva(v) {
+  const clave = leer(v, 'clave-nueva', reglas.claveNueva);
+  if ((v['clave-repetida'] ?? '') !== clave) falla('Las contraseñas no coinciden: escribe la misma en los dos campos.', 'clave-repetida');
+  return clave;
+}
+
+// el error que manda el backend como Invalido, para mostrarlo en el formulario
+function errorDelServidor(err, campo) {
+  const mensaje = err.response?.data?.error;
+  if (err.response?.status === 400 && mensaje) falla(mensaje + '.', campo);
+  throw err;
+}
+
+// vuelve a la ventana de antes (el panel de la cuenta) o cierra
+function volverOCerrar() {
+  if (estado.modal?.volver) estado.modal.volver();
+  else cerrarModal();
+}
+
+// sin cuentaId: la propia
+export function abrirClave(cuentaId = null) {
+  if (cuentaId && !sePuedeAdministrar(cuentaPorId(cuentaId))) return;
+  abrirModal({ tipo: 'clave', cuentaId });
+}
+
+export async function cambiarMiClave(v) {
+  const actual = v['clave-actual'] ?? '';
+  if (!actual) falla('Escribe tu contraseña actual.', 'clave-actual');
+  const nueva = leerClaveNueva(v);
+  if (nueva === actual) falla('La contraseña nueva tiene que ser distinta de la actual.', 'clave-nueva');
+  try {
+    await cambiarClaveAPI(actual, nueva);
+  } catch (err) {
+    if (/actual/i.test(err.response?.data?.error ?? '')) falla('La contraseña actual no es correcta.', 'clave-actual');
+    errorDelServidor(err, 'clave-nueva');
+  }
+  volverOCerrar();
+  mostrarToast('Contraseña cambiada');
+}
+
+// el admin le pone una contraseña nueva a otra cuenta (la olvido)
+export async function restablecerClave(modal, v) {
+  const c = cuentaPorId(modal.cuentaId);
+  if (!sePuedeAdministrar(c)) return;
+  const clave = leerClaveNueva(v);
+  try {
+    await actualizarUsuarioAPI(c.id, { clave });
+  } catch (err) {
+    errorDelServidor(err, 'clave-nueva');
+  }
+  c.cambios = [...(c.cambios || []), { accion: 'clave', valor: true, quienId: usuario.id, quien: usuario.nombre, fecha: new Date().toISOString() }];
+  volverOCerrar();
+  mostrarToast(`Contraseña de ${c.nombre} cambiada`);
+}
+
+// si un admin le cambio el rol (o el nombre) a quien esta usando la app, se actualiza sin volver a entrar
+// devuelve true si cambio el rol
+async function refrescarMiCuenta() {
+  const yo = await getMiCuentaAPI();
+  const cambioRol = yo.rol !== usuario.rol;
+  if (!cambioRol && yo.nombre === usuario.nombre) return false;
+  Object.assign(usuario, { nombre: yo.nombre, rol: yo.rol, iniciales: iniciales(yo.nombre) });
+  guardarSesion({ ...leerSesion(), id: yo.id, nombre: yo.nombre, usuario: yo.usuario, rol: yo.rol });
+  if (cambioRol && !esAdmin()) {
+    // ya no puede ver las cuentas
+    estado.cuentas = [];
+    if (estado.modal?.tipo === 'panel-actividad' || estado.modal?.tipo === 'usuario') estado.modal = null;
+  }
+  if (cambioRol) mostrarToast(`Tu rol cambió: ahora eres ${yo.rol}`);
+  refrescar();
+  return cambioRol;
 }
 
 // ---------- boton "+" segun la pestaña ----------
@@ -1163,7 +1378,12 @@ function filasDelMismo(x) {
 }
 
 // lo que falta corregir en una fila (vacio si esta lista)
+// lo que falta corregir en una fila; primero, si el servidor la rechazo al guardar
 export function problemasItem(x) {
+  return [...(x.errorServidor ? [x.errorServidor] : []), ...problemasDeFila(x)];
+}
+
+function problemasDeFila(x) {
   const { tipo } = estado.lote;
   const producto = productoDeItem(x);
   // avisos cortos: arriba de la lista se explica que se corrigen con el lapiz
@@ -1247,6 +1467,11 @@ export function abrirMetodo(metodo) {
 export function agregarManual(categoria, id) {
   const item = productoPorId(categoria, id);
   if (!item || !estado.lote) return;
+  // en una salida, lo que no tiene stock no se puede elegir
+  if (estado.lote.tipo === 'Salida' && disponible(item) <= 0) {
+    mostrarToast(`"${item.nombre}" no tiene stock para sacar`);
+    return;
+  }
   const x = nuevoItem({ categoria, productoId: item.id });
   estado.lote.items.push(x);
   abrirItem(x.id, { nuevo: true });
@@ -1259,7 +1484,17 @@ export function agregarCodigo(texto) {
   const codigo = leer({ codigo: texto }, 'codigo', reglas.codigoBarras);
   const encontrado = productoPorCodigo(codigo);
   const repetido = estado.lote.items.find(x => x.origen === 'codigo' && x.codigoBarras === codigo);
-  if (repetido) repetido.cantidad = redondear((repetido.cantidad ?? 0) + 1);
+  const nueva = redondear((repetido?.cantidad ?? 0) + 1);
+  if (nueva > cantidadMaxima) falla(`No se puede pasar de ${cantidadMaxima}.`, 'codigo');
+  // en una salida no se escanea lo que no hay (cuenta lo que ya va en otras filas de ese producto)
+  if (encontrado && estado.lote.tipo === 'Salida') {
+    const { item, categoria } = encontrado;
+    const hay = disponible(item);
+    const enLista = redondear(filasDelMismo({ categoria, productoId: item.id }).reduce((s, o) => s + (o.cantidad || 0), 0));
+    if (hay <= 0) falla(`"${item.nombre}" no tiene stock para sacar.`, 'codigo');
+    if (enLista + 1 > hay) falla(`Solo hay ${hay} ${item.unidad} de "${item.nombre}" y ya van ${enLista} en la lista.`, 'codigo');
+  }
+  if (repetido) repetido.cantidad = nueva;
   else {
     estado.lote.items.push(nuevoItem({
       origen: 'codigo',
@@ -1270,6 +1505,13 @@ export function agregarCodigo(texto) {
   }
   refrescar();
   return encontrado ? encontrado.item.nombre : null;
+}
+
+// cantidad entendida de lo que se dijo: un numero mayor que 0 y dentro del tope, o null
+// (los decimales de mas no se quitan aqui: la fila avisa "tiene que ser entero")
+export function cantidadDicha(valor) {
+  const n = typeof valor === 'string' ? Number(valor.replace(',', '.')) : valor;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 && n <= cantidadMaxima ? redondear(n) : null;
 }
 
 // lo que se dijo (o se escribio) se separa en productos, cada uno con su donador
@@ -1286,7 +1528,8 @@ export function agregarDictado(v) {
       origen: 'voz',
       dicho: r.dicho.slice(0, 100),
       nombreDicho: r.nombreDicho.slice(0, largos.nombreProducto),
-      cantidad: r.cantidad,
+      // una cantidad que no sirve (0, negativa, enorme) no se guarda: la fila pide escribirla
+      cantidad: cantidadDicha(r.cantidad),
       dudas: r.dudas.map(d => claveProducto(d.categoria, d.item.id)),
       avisos: r.presentacion ? { presentacion: r.presentacion } : {},
       // la fecha dicha, si es valida (no pasada ni muy lejana)
@@ -1369,16 +1612,9 @@ export function guardarItem(modal, v) {
   const observaciones = leer(v, 'observaciones', reglas.observaciones);
 
   Object.assign(x, {
-    categoria, productoId: elegido.nuevo ? null : item.id, productoNuevo: elegido.nuevo ? x.productoNuevo : null, cantidad, vence, ...donador, donadorDicho: '', para, observaciones, dudas: [], avisos: {},
+    categoria, productoId: elegido.nuevo ? null : item.id, productoNuevo: elegido.nuevo ? x.productoNuevo : null, cantidad, vence, ...donador, donadorDicho: '', para, observaciones, dudas: [], avisos: {}, errorServidor: '',
   });
 
-  // "mismo donador para los que no tienen": ahorra elegirlo fila por fila (no toca a los que dijeron otro)
-  if (esIngreso && v['donador-todos'] && x.donador) {
-    for (const o of lote.items) {
-      // la actividad que ya tenia la fila ("donacion libre") se respeta
-      if (o !== x && !o.donador && !o.donadorDicho) Object.assign(o, { donador: x.donador, donadorNuevo: x.donadorNuevo, actividad: o.actividad || x.actividad, donadorDicho: '' });
-    }
-  }
   abrirLista();
 }
 
@@ -1387,6 +1623,8 @@ export function guardarItem(modal, v) {
 export function revisarLote() {
   const lote = estado.lote;
   if (!lote) return;
+  // lo que rechazo el servidor la vez anterior se vuelve a intentar
+  for (const x of lote.items) x.errorServidor = '';
   if (lote.items.length === 0) falla('La lista está vacía: añade al menos un producto.');
   for (const x of lote.items) {
     const problemas = problemasItem(x);
@@ -1399,55 +1637,99 @@ export function revisarLote() {
   }
 }
 
-// paso 2: guarda un movimiento por fila
-export function confirmarLote(modal) {
+// paso 2: guarda las filas una por una en el servidor
+// las que el servidor rechaza (otra persona saco antes, ya no existe...) quedan en la lista con el motivo;
+// las demas se guardan igual
+export async function confirmarLote(modal) {
   if (estado.modal !== modal || !estado.lote) return;
-  const { tipo, items } = estado.lote;
+  const lote = estado.lote;
+  const { tipo } = lote;
   // donadores y productos nuevos se crean una sola vez aunque esten en varias filas
   const donadoresNuevos = new Map();
   const productosNuevos = new Map();
+  const fallidas = [];
+  const total = lote.items.length;
 
-  for (const x of items) {
-    let { item, categoria, nuevo } = productoDeItem(x);
-    if (nuevo) {
-      if (!productosNuevos.has(x.productoNuevo)) {
-        // los otros tamaños que todavia no lo tienen reciben su tamaño en el nombre
-        const { renombrar = [] } = nombreDisponible(x.productoNuevo.nombre, x.productoNuevo, x.id);
-        for (const r of renombrar) if (!r.nuevo) renombrarProducto(r.item, r.categoria, r.nombre);
-        const creado = { ...x.productoNuevo, id: Date.now() + productosNuevos.size, lotes: [] };
-        listaDe(categoria).push(creado);
-        productosNuevos.set(x.productoNuevo, creado);
+  for (const x of [...lote.items]) {
+    try {
+      let { item, categoria, nuevo } = productoDeItem(x);
+      if (nuevo) {
+        if (!productosNuevos.has(x.productoNuevo)) {
+          // los otros tamaños que todavia no lo tienen reciben su presentacion en el nombre
+          const { renombrar = [] } = nombreDisponible(x.productoNuevo.nombre, x.productoNuevo, x.id);
+          for (const r of renombrar) if (!r.nuevo) await renombrarProducto(r.item, r.categoria, r.nombre);
+          productosNuevos.set(x.productoNuevo, await crearProductoBD(x.productoNuevo, categoria));
+        }
+        item = productosNuevos.get(x.productoNuevo);
       }
-      item = productosNuevos.get(x.productoNuevo);
+
+      let donador = '';
+      if (tipo === 'Ingreso' && x.donador === 'nuevo') {
+        const clave = x.donadorNuevo.nombre.toLowerCase();
+        if (!donadoresNuevos.has(clave)) donadoresNuevos.set(clave, await donadorDeMovimiento({ nombre: x.donadorNuevo.nombre, nuevo: x.donadorNuevo }));
+        donador = donadoresNuevos.get(clave);
+      } else if (tipo === 'Ingreso') donador = donadorDeItem(x);
+
+      const fila = await enviarMovimiento(item, {
+        tipo: tipo === 'Salida' ? 'salida' : 'ingreso', cantidad: x.cantidad, vence: x.vence ?? null,
+        donador, actividad: donador ? x.actividad : '', para: x.para, observaciones: x.observaciones, canal: x.origen, inicial: nuevo,
+        // la proxima vez el codigo ya se reconoce
+        ...(x.codigoBarras && !productoPorCodigo(x.codigoBarras) && { codigo_barras: x.codigoBarras }),
+      });
+      agregarAlHistorial(fila);
+      lote.items = lote.items.filter(o => o !== x);
+    } catch (err) {
+      if (!(err instanceof Invalido)) console.error('No se pudo guardar una fila:', err);
+      x.errorServidor = err instanceof Invalido ? err.message.replace(/\.$/, '') : 'No se pudo guardar: revisa la conexión';
+      fallidas.push(x);
     }
-    // la proxima vez el codigo ya se reconoce
-    if (x.codigoBarras && !productoPorCodigo(x.codigoBarras)) item.codigosBarras = [...(item.codigosBarras ?? []), x.codigoBarras];
-
-    let donador = '';
-    if (tipo === 'Ingreso' && x.donador === 'nuevo') {
-      const clave = x.donadorNuevo.nombre.toLowerCase();
-      if (!donadoresNuevos.has(clave)) {
-        estado.donadores.push(nuevoDonador(x.donadorNuevo.nombre, x.donadorNuevo.telefono));
-        donadoresNuevos.set(clave, x.donadorNuevo.nombre);
-      }
-      donador = donadoresNuevos.get(clave);
-    } else if (tipo === 'Ingreso') donador = donadorDeItem(x);
-
-    registrarMovimiento({
-      item, categoria, tipo, cantidad: x.cantidad, vence: x.vence ?? null, donador, actividad: donador ? x.actividad : '', para: x.para, observaciones: x.observaciones,
-      inicial: nuevo,
-    });
   }
 
-  estado.lote = null;
-  estado.modal = null;
-  estado.filtro = 'Todos';
-  mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`);
+  // lo que ya se creo no se vuelve a crear al reintentar
+  for (const x of fallidas) {
+    const creado = x.productoNuevo && productosNuevos.get(x.productoNuevo);
+    if (creado) Object.assign(x, { productoId: creado.id, productoNuevo: null });
+    const donadorCreado = x.donador === 'nuevo' && estado.donadores.find(d => d.nombre.toLowerCase() === x.donadorNuevo.nombre.toLowerCase());
+    if (donadorCreado) Object.assign(x, { donador: String(donadorCreado.id), donadorNuevo: null });
+  }
+
+  const productos = n => `${n} ${n === 1 ? 'producto' : 'productos'}`;
+  if (!fallidas.length) {
+    estado.lote = null;
+    if (estado.modal === modal) estado.modal = null;
+    estado.filtro = 'Todos';
+    mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${productos(total)}`);
+    return;
+  }
+  lote.items = fallidas;
+  const guardadas = total - fallidas.length;
+  mostrarToast(`${guardadas ? `Se guardaron ${productos(guardadas)}; ` : ''}${fallidas.length === 1 ? '1 no se guardó' : `${fallidas.length} no se guardaron`}: el motivo está en su fila`);
+  abrirLista();
 }
 
-// Carga los documentos de CouchDB en el estado global de React
-export async function cargarDatosDesdeDB() {
+// cada movimiento muestra el nombre que el producto tiene hoy, no con el que se registro
+// (si se renombro, el historial no lo mostraria como otro producto)
+// se busca por producto_id; los de un producto que se unio a otro (ya borrado), por los nombres en 'unidos'
+// el nombre de cuando se registro queda en insumoOriginal (no se cambia nada en la base)
+function conNombreActual(historial) {
+  const productos = todosLosProductos();
+  for (const fila of historial) {
+    const actual = productos.find(({ item }) => mismoId(item.id, fila.producto_id))
+      ?? productos.find(({ item, categoria }) => categoria === fila.categoria && item.unidos?.includes(fila.insumo));
+    if (actual && actual.item.nombre !== fila.insumo) {
+      fila.insumoOriginal = fila.insumo;
+      fila.insumo = actual.item.nombre;
+    }
+  }
+}
+
+// silencioso: sin aviso si no hay conexion (las recargas automaticas)
+// aplicar: se pregunta al llegar los datos; si devuelve false no se cambia nada
+export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => true } = {}) {
   try {
+    // primero el rol actual: de eso depende si se piden las cuentas
+    await refrescarMiCuenta().catch(error => console.error('No se pudo revisar la cuenta:', error));
+
     const resultados = await Promise.allSettled([
       getInventario(),
       getHistorialAPI(),
@@ -1456,30 +1738,15 @@ export async function cargarDatosDesdeDB() {
     ]);
 
     // si algo falla se avisa (lo que no cargo queda como estaba)
-    if (resultados.some(r => r.status === 'rejected')) {
+    if (!silencioso && resultados.some(r => r.status === 'rejected')) {
       mostrarToast('No se pudo conectar con el servidor. Algunos datos no se cargaron.');
     }
+    if (!aplicar()) return;
     const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = resultados.map(r => (r.status === 'fulfilled' ? r.value : null));
 
     if (respuestaInv) {
       const documentos = Array.isArray(respuestaInv) ? respuestaInv : (respuestaInv.docs || []);
-      const formateados = documentos.map(doc => ({
-        ...doc,
-        id: doc._id || doc.id,
-        _rev: doc._rev,
-        nombre: doc.nombre || 'Sin nombre',
-        unidad: doc.unidad || 'unidades',
-        cantidad: Number(doc.cantidad) || 0,
-        minimo: Number(doc.stock_minimo ?? doc.minimo ?? 0),
-        codigo: doc.codigo || (doc.nombre ? doc.nombre.slice(0, 2).toUpperCase() : 'PR'),
-        codigosBarras: doc.codigosBarras || [],
-        lotes: (doc.lotes || (doc.fecha_vencimiento ? [{ id: 1, vence: doc.fecha_vencimiento, quedan: doc.cantidad }] : [])).map(lote => ({
-          ...lote,
-          ingreso: lote.ingreso ? new Date(lote.ingreso) : new Date()
-        })),
-        almacen: doc.almacen || '',
-        categoriaNombre: doc.categoria || ''
-      }));
+      const formateados = documentos.map(productoDesdeDoc);
 
       const saludDB = formateados.filter(doc => 
         (doc.almacen && (doc.almacen.includes('medicinas') || doc.almacen.includes('higiene'))) || 
@@ -1491,37 +1758,22 @@ export async function cargarDatosDesdeDB() {
 
     // historial
     if (Array.isArray(respuestaHist)) {
-      estado.historial = respuestaHist.map(doc => {
-        const rawMov = doc.movimiento || doc.tipo_movimiento || 'Ingreso';
-        const movimiento = rawMov.charAt(0).toUpperCase() + rawMov.slice(1).toLowerCase();
-        const rawCat = doc.categoria || 'alimentos';
-        const categoria = rawCat.toLowerCase() === 'salud' ? 'Salud' : 'Alimentos';
-
-        return {
-          ...doc,
-          id: doc._id || doc.id,
-          movimiento,
-          categoria,
-          insumo: doc.insumo || doc.nombre || 'Sin insumo',
-          cantidad: Number(doc.cantidad) || 0,
-          saldo: Number(doc.saldo) || 0,
-          responsable: doc.responsable || doc.usuario_id || 'admin'
-        };
-      });
+      const historial = respuestaHist.map(movimientoDesdeDoc);
+      // lo mas nuevo primero: CouchDB no los devuelve en orden, y varias partes cuentan con eso
+      // (los ultimos movimientos, "lo que paso entre dos ajustes")
+      estado.historial = historial.sort((a, b) => momento(b) - momento(a));
+      conNombreActual(estado.historial);
+      // el ajuste que corrige a otro guarda su id: se enlaza con ese movimiento (los viejos guardaban el movimiento entero)
+      for (const fila of estado.historial) {
+        if (!fila.corrige) continue;
+        const id = typeof fila.corrige === 'object' ? fila.corrige._id ?? fila.corrige.id : fila.corrige;
+        fila.corrige = estado.historial.find(o => mismoId(o.id, id)) ?? null;
+      }
     }
 
     // donadores
     if (Array.isArray(respuestaDon)) {
-      estado.donadores = respuestaDon.map(doc => ({
-        ...doc,
-        id: doc._id || doc.id,
-        _rev: doc._rev,
-        nombre: doc.nombre || '',
-        telefono: doc.telefono || doc.contacto || '',
-        contacto: doc.contacto || doc.telefono || '',
-        creadoPor: doc.creadoPor || 'admin',
-        creado: doc.creado ? new Date(doc.creado) : new Date()
-      }));
+      estado.donadores = respuestaDon.map(donadorDesdeDoc);
     }
 
     // cuentas de usuario
@@ -1535,8 +1787,10 @@ export async function cargarDatosDesdeDB() {
         rol: doc.rol || 'Usuario',
         activo: doc.activo ?? true,
         ultimoAcceso: doc.ultimoAcceso ? new Date(doc.ultimoAcceso) : null,
-        creado: doc.creado ? new Date(doc.creado) : new Date(),
-        creadoPor: doc.creadoPor || ''
+        creado: doc.creado ? new Date(doc.creado) : null,
+        creadoPor: doc.creadoPor || '',
+        // cambios de rol y estado que se le hicieron (con quien los hizo)
+        cambios: Array.isArray(doc.cambios) ? doc.cambios : []
       }));
     }
 
