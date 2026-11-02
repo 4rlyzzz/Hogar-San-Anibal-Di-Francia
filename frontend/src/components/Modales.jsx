@@ -5,15 +5,15 @@ import { largos, decimalesDe, cantidadDe } from '../validacion.js';
 import { IconoDonadores, IconoUsuarios, IconoIngreso, IconoSalida } from '../assets/iconos.jsx';
 import { estado } from '../estado.js';
 import {
-  cerrarModal, abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
+  abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
-  guardarDonador, guardarUsuario, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
+  guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
 } from '../acciones.js';
 import {
   nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, pluralizar, redondear, fechaActual, textoPara, formatoNombre,
 } from '../logica/comunes.js';
 import { cantidadVencida, disponible, lotesVencidos, fechaLote, fechaVence } from '../logica/lotes.js';
-import { useFormulario, CampoNumero, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
+import { useFormulario, CampoNumero, CampoClave, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
 import { Desplegable } from './Desplegable.jsx';
 import { MovimientosEntre } from './Comunes.jsx';
 import { LotesSalida } from './Lotes.jsx';
@@ -103,21 +103,10 @@ export function ModalMovimiento({ modal }) {
           {esSalud && !esIngreso && <CampoPara ninos={opcionesNinos()} />}
           <CampoObservaciones ejemplo={esIngreso ? 'Ej. llegó en cajas abolladas, falta la boleta' : 'Ej. se usó para la fiesta del sábado'} />
 
-          <div className="dos-columnas">
-            <div className="campo">
-              <label>RESPONSABLE</label>
-              <div className="input-fijo">{usuario.nombre}</div>
-            </div>
-            <div className="campo">
-              <label>FECHA Y HORA</label>
-              <div className="input-fijo">{fechaActual()}</div>
-            </div>
-          </div>
-
           <MensajeError texto={f.error} />
         </div>
 
-        <Botones textoGuardar={esIngreso ? 'Revisar ingreso' : 'Revisar salida'} />
+        <Botones textoGuardar={esIngreso ? 'Revisar ingreso' : 'Revisar salida'} enviando={f.enviando} />
       </form>
 
       {datos && <ConfirmarMovimiento modal={modal} datos={datos} onVolver={() => setDatos(null)} />}
@@ -127,42 +116,51 @@ export function ModalMovimiento({ modal }) {
 
 // paso 2 de un ingreso o salida
 function ConfirmarMovimiento({ modal, datos, onVolver }) {
+  // el servidor puede rechazarlo (otra persona saco antes): el aviso sale aqui y el AHORA se actualiza
+  const f = useFormulario();
   const { item, movimiento: tipo } = modal;
   const esIngreso = tipo === 'Ingreso';
   const despues = redondear(item.cantidad + (esIngreso ? datos.cantidad : -datos.cantidad));
   const quedaBajo = !esIngreso && despues < item.minimo;
+  // otra persona saco mientras se revisaba: lo de abajo ya no vale, hay que volver a poner la cantidad
+  const yaNoAlcanza = !esIngreso && datos.cantidad > disponible(item);
 
   const filas = [
     ['Vence', esIngreso ? (datos.vence ? fechaVence(datos.vence) : 'No tiene fecha') : ''],
     ['Donado por', datos.donador.nombre ? datos.donador.nombre + (datos.donador.nuevo ? ' (nuevo donador)' : '') : (esIngreso ? 'Compra del hogar' : '')],
     ['Actividad', datos.actividad],
     ['Para', datos.para.length ? textoPara(datos) : (!esIngreso && datos.esSalud ? 'Uso general' : '')],
-    ['Observaciones', datos.observaciones],
+    ['Nota', datos.observaciones],
     ['Responsable', usuario.nombre],
     ['Fecha y hora', fechaActual()],
   ].filter(([, valor]) => valor);
 
   return (
-    <form className="modal" id="form-movimiento-confirmar" noValidate onSubmit={e => { e.preventDefault(); confirmarMovimiento(modal, datos); }}>
+    <form className="modal" id="form-movimiento-confirmar" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, () => confirmarMovimiento(modal, datos))}>
       <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item, esIngreso ? 'Revisa el ingreso' : 'Revisa la salida')} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
-        <Cambio antes={item.cantidad} despues={despues} signo={esIngreso ? '+' : '−'} cantidad={datos.cantidad} clase={esIngreso ? 'ingreso' : 'salida'} unidad={item.unidad} />
+        <Cambio antes={item.cantidad} despues={yaNoAlcanza ? '—' : despues} signo={esIngreso ? '+' : '−'} cantidad={datos.cantidad} clase={esIngreso ? 'ingreso' : 'salida'} unidad={item.unidad} />
 
         <p className={`ajuste-diferencia ${esIngreso ? 'sobra' : 'falta'}`}>
           {esIngreso ? 'Entran' : 'Salen'} {datos.cantidad} {item.unidad}
         </p>
 
-        {quedaBajo && <p className="aviso-grande">Quedará bajo el stock mínimo ({item.minimo} {item.unidad}).</p>}
+        {quedaBajo && !yaNoAlcanza && <p className="aviso-grande">Quedará bajo el stock mínimo ({item.minimo} {item.unidad}).</p>}
 
-        {!esIngreso && <LotesSalida plan={datos.plan} unidad={item.unidad} />}
+        {!esIngreso && !yaNoAlcanza && <LotesSalida plan={datos.plan} unidad={item.unidad} />}
 
         <Datos filas={filas} />
+        <MensajeError texto={f.error} />
       </div>
 
-      <div className="modal-footer">
-        <button type="submit" className="btn btn-verde">Confirmar {esIngreso ? 'ingreso' : 'salida'}</button>
-      </div>
+      {yaNoAlcanza ? (
+        <div className="modal-footer">
+          <button type="button" className="btn btn-verde" data-accion="corregir-cantidad" onClick={onVolver}>Volver y cambiar la cantidad</button>
+        </div>
+      ) : (
+        <Botones textoGuardar={`Confirmar ${esIngreso ? 'ingreso' : 'salida'}`} enviando={f.enviando} conCancelar={false} />
+      )}
     </form>
   );
 }
@@ -308,14 +306,14 @@ export function ModalProducto({ modal }) {
             </div>
             <div className="campo">
               <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
-              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="Ej. 7751271010016" />
+              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="7751271010016" />
             </div>
           </div>
 
           <MensajeError texto={f.error} />
         </div>
 
-        <Botones textoGuardar="Crear y seguir" />
+        <Botones textoGuardar="Crear y seguir" enviando={f.enviando} />
       </form>
     </Fondo>
   );
@@ -433,7 +431,7 @@ export function ModalAjuste({ modal }) {
           <MensajeError texto={f.error} />
         </div>
 
-        <Botones textoGuardar="Revisar ajuste" />
+        <Botones textoGuardar="Revisar ajuste" enviando={f.enviando} />
       </form>
 
       {ajuste && <ConfirmarAjuste modal={modal} ajuste={ajuste} onVolver={() => setAjuste(null)} />}
@@ -444,11 +442,12 @@ export function ModalAjuste({ modal }) {
 // paso 2: resumen para confirmar
 // grande: diferencia de mas del 25%
 function ConfirmarAjuste({ modal, ajuste, onVolver }) {
+  const f = useFormulario();
   const { item, correccion } = modal;
   const grande = Math.abs(ajuste.diferencia) > item.cantidad * 0.25;
 
   return (
-    <form className="modal" id="form-ajuste-confirmar" noValidate onSubmit={e => { e.preventDefault(); confirmarAjuste(modal, ajuste); }}>
+    <form className="modal" id="form-ajuste-confirmar" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, () => confirmarAjuste(modal, ajuste))}>
       <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item, 'Revisa el ajuste')} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
@@ -481,11 +480,10 @@ function ConfirmarAjuste({ modal, ajuste, onVolver }) {
           Los ajustes no se borran ni se editan. Si te equivocas, abre este ajuste en el historial
           y usa "Corregir este ajuste".
         </p>
+        <MensajeError texto={f.error} />
       </div>
 
-      <div className="modal-footer">
-        <button type="submit" className="btn btn-verde">Confirmar ajuste</button>
-      </div>
+      <Botones textoGuardar="Confirmar ajuste" enviando={f.enviando} conCancelar={false} />
     </form>
   );
 }
@@ -528,16 +526,13 @@ export function ModalUnir({ modal }) {
               </p>
             </>
           ) : (
-            <p className="ajuste-diferencia">No hay otro producto en {nombreCategoria(categoria)} que se cuente en {item.unidad}.</p>
+            <p className="ajuste-diferencia">No hay otro producto en {nombreCategoria(categoria)} con la misma presentación ({sobreProducto(item)}).</p>
           )}
 
           <MensajeError texto={f.error} />
         </div>
 
-        <div className="modal-footer">
-          <button type="button" className="btn btn-blanco" data-accion="cerrar-modal" onClick={cerrarModal}>Cancelar</button>
-          <button type="submit" className="btn btn-verde" disabled={!opciones.length}>Unir productos</button>
-        </div>
+        <Botones textoGuardar="Unir productos" enviando={f.enviando} conCancelar desactivado={!opciones.length} />
       </form>
     </Fondo>
   );
@@ -574,10 +569,7 @@ export function ModalBaja({ modal }) {
           <p className="ajuste-nota">Confirma solo cuando ya lo hayas sacado del almacén.</p>
         </div>
 
-        <div className="modal-footer">
-          <button type="button" className="btn btn-blanco" data-accion="cerrar-modal" onClick={cerrarModal}>Cancelar</button>
-          <button type="submit" className="btn btn-rojo">Dar de baja {vencida} {item.unidad}</button>
-        </div>
+        <Botones textoGuardar={`Dar de baja ${vencida} ${item.unidad}`} enviando={f.enviando} clase="btn-rojo" conCancelar />
       </form>
     </Fondo>
   );
@@ -647,9 +639,60 @@ export function ModalDonador() {
             <label>NÚMERO DE CONTACTO</label>
             <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" />
           </div>
+          <div className="campo">
+            <label htmlFor="nuevo-observaciones">OBSERVACIONES (OPCIONAL)</label>
+            <textarea id="nuevo-observaciones" name="nuevo-observaciones" rows={2} maxLength={largos.observaciones} placeholder="Ej. dona cada Navidad" />
+            <small>Dirección, persona de contacto, cómo suele ayudar…</small>
+          </div>
           <MensajeError texto={f.error} />
         </div>
-        <Botones textoGuardar="Agregar donador" />
+        <Botones textoGuardar="Agregar donador" enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
+const IconoLlave = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="8" cy="15" r="4" stroke="currentColor" strokeWidth="1.8" /><path d="M11 12l8-8m-3 3 2 2m-4 0 1.5 1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+);
+
+// contraseña nueva y repetirla (al crear una cuenta y al cambiarla)
+// nueva: al cambiar una que ya existe
+function CamposClaveNueva({ nueva = false }) {
+  return (
+    <div className="dos-columnas">
+      <CampoClave id="clave-nueva" etiqueta={nueva ? 'CONTRASEÑA NUEVA' : 'CONTRASEÑA'} ayuda="Mínimo 8 caracteres, con letras y números" />
+      <CampoClave id="clave-repetida" etiqueta="REPETIR CONTRASEÑA" />
+    </div>
+  );
+}
+
+// ---------- contraseña ----------
+// propia: la cambia quien la usa (pide la actual)
+// de otra cuenta: el admin le pone una nueva (para cuando la olvido)
+export function ModalClave({ modal }) {
+  const f = useFormulario();
+  const propia = !modal.cuentaId;
+  const cuenta = propia ? null : estado.cuentas.find(c => String(c.id) === String(modal.cuentaId));
+  if (!propia && !cuenta) return null;
+
+  return (
+    <Fondo>
+      <form className="modal" id="form-clave" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => (propia ? cambiarMiClave(v) : restablecerClave(modal, v)))}>
+        <Cabecera
+          codigo={<IconoLlave />}
+          color="azul"
+          titulo={propia ? 'Cambiar mi contraseña' : 'Restablecer contraseña'}
+          subtitulo={propia ? usuario.nombre : `${cuenta.nombre} · @${cuenta.usuario}`}
+        />
+        <div className="modal-cuerpo">
+          {propia
+            ? <CampoClave id="clave-actual" etiqueta="CONTRASEÑA ACTUAL" autoComplete="current-password" autoFocus />
+            : <p className="ajuste-nota">Úsalo si {cuenta.nombre} olvidó su contraseña. Dile la nueva para que pueda entrar; después la puede cambiar desde su menú.</p>}
+          <CamposClaveNueva nueva />
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar={propia ? 'Cambiar contraseña' : 'Guardar contraseña nueva'} enviando={f.enviando} />
       </form>
     </Fondo>
   );
@@ -670,16 +713,13 @@ export function ModalUsuario() {
             <small>Así aparecerá como responsable en el historial</small>
           </div>
 
-          <div className="dos-columnas">
-            <div className="campo">
-              <label>USUARIO</label>
-              <input id="cuenta-usuario" name="cuenta-usuario" type="text" maxLength={largos.nombreUsuario} autoCapitalize="none" autoComplete="off" placeholder="Ej. cocina" />
-            </div>
-            <div className="campo">
-              <label>CONTRASEÑA</label>
-              <input id="cuenta-clave" name="cuenta-clave" type="password" maxLength={largos.clave} autoComplete="new-password" placeholder="Mínimo 8, con letras y números" />
-            </div>
+          <div className="campo">
+            <label htmlFor="cuenta-usuario">USUARIO</label>
+            <input id="cuenta-usuario" name="cuenta-usuario" type="text" maxLength={largos.nombreUsuario} autoCapitalize="none" autoComplete="off" placeholder="Ej. cocina" />
+            <small>Con este nombre entra a la app: sin espacios ni tildes</small>
           </div>
+
+          <CamposClaveNueva />
 
           <div className="campo">
             <label htmlFor="cuenta-rol">ROL</label>
@@ -689,7 +729,7 @@ export function ModalUsuario() {
           <MensajeError texto={f.error} />
         </div>
 
-        <Botones textoGuardar="Agregar usuario" />
+        <Botones textoGuardar="Agregar usuario" enviando={f.enviando} />
       </form>
     </Fondo>
   );

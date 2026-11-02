@@ -8,8 +8,8 @@ import { abrirFiltros, cerrarFiltros, limpiarFiltros, cambiarFiltro, quitarFiltr
 
 export function BotonFiltros({ grupo, activos, abierto }) {
   return (
-    <button className={`btn-filtros ${activos ? 'con-filtros' : ''} ${abierto ? 'abierto' : ''}`} data-accion="abrir-filtros" onClick={() => abrirFiltros(grupo)}>
-      <IconoFiltro /> Filtros {activos ? <span className="btn-filtros-numero">{activos}</span> : null}
+    <button className={`btn-filtros ${activos ? 'con-filtros' : ''} ${abierto ? 'abierto' : ''}`} data-accion="abrir-filtros" aria-label="Filtros" onClick={() => abrirFiltros(grupo)}>
+      <IconoFiltro /> <span className="btn-filtros-texto">Filtros</span> {activos ? <span className="btn-filtros-numero">{activos}</span> : null}
     </button>
   );
 }

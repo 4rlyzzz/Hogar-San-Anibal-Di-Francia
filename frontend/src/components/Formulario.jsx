@@ -2,13 +2,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { largos } from '../validacion.js';
 import { estado } from '../estado.js';
-import { cerrarModal, intentar } from '../acciones.js';
+import { cerrarModal, intentar, Invalido } from '../acciones.js';
 import { textoPresentacion } from '../logica/comunes.js';
 import { Desplegable } from './Desplegable.jsx';
+import { IconoOjo } from '../assets/iconos.jsx';
 
 // error del formulario: lo muestra, marca el campo y lo enfoca
 export function useFormulario() {
   const [error, setError] = useState('');
+  // mientras espera al servidor: el boton se desactiva y un segundo clic no guarda dos veces
+  const [enviando, setEnviando] = useState(false);
+  const ocupado = useRef(false);
   const formulario = useRef(null);
 
   function mostrar(resultado) {
@@ -25,12 +29,30 @@ export function useFormulario() {
   // corre la accion con los valores del formulario; devuelve true si salio bien
   function enviar(e, accion) {
     e.preventDefault();
-    const resultado = intentar(() => accion(valoresDe(e.currentTarget)));
+    if (ocupado.current) return false;
+    const valores = valoresDe(e.currentTarget);
+    let salida;
+    const resultado = intentar(() => (salida = accion(valores)));
+
+    // si la accion espera al servidor, el error se muestra al terminar
+    if (!resultado && salida instanceof Promise) {
+      ocupado.current = true;
+      setEnviando(true);
+      setError('');
+      salida.then(
+        () => mostrar(null),
+        err => mostrar(err instanceof Invalido ? { error: err.message, campo: err.campo } : { error: 'No se pudo guardar: revisa la conexión y vuelve a intentarlo.' }),
+      ).finally(() => {
+        ocupado.current = false;
+        setEnviando(false);
+      });
+      return true;
+    }
     mostrar(resultado);
     return !resultado;
   }
 
-  return { error, setError, formulario, mostrar, enviar };
+  return { error, setError, formulario, mostrar, enviar, enviando };
 }
 
 // valores del formulario como { name: valor }
@@ -81,6 +103,24 @@ export function CampoNumero({ id, decimales, onAviso, onInput, ...resto }) {
   );
 }
 
+// contraseña con el ojo para verla
+// ayuda: texto debajo (las reglas van aqui y no en el placeholder, que en un campo angosto se corta)
+export function CampoClave({ id, etiqueta, ayuda, autoComplete = 'new-password', ...resto }) {
+  const [ver, setVer] = useState(false);
+  return (
+    <div className="campo">
+      <label htmlFor={id}>{etiqueta}</label>
+      <div className="campo-clave">
+        <input {...resto} id={id} name={id} type={ver ? 'text' : 'password'} maxLength={largos.clave} autoComplete={autoComplete} autoCapitalize="none" spellCheck={false} />
+        <button type="button" className={`ver-clave ${ver ? 'activo' : ''}`} aria-label={ver ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={ver} onClick={() => setVer(!ver)}>
+          <IconoOjo />
+        </button>
+      </div>
+      {ayuda && <small>{ayuda}</small>}
+    </div>
+  );
+}
+
 // fondo oscuro de las ventanas; un clic afuera la cierra
 export function Fondo({ panel = false, children }) {
   return (
@@ -117,11 +157,12 @@ export function Cabecera({ codigo, color, titulo, subtitulo, onVolver }) {
 }
 
 // abajo va solo la accion principal; "Cancelar" solo si arriba no hay flecha para volver
-export function Botones({ textoGuardar }) {
+// enviando: esperando al servidor
+export function Botones({ textoGuardar, enviando = false, clase = 'btn-verde', conCancelar = !estado.modal?.volver, desactivado = false }) {
   return (
     <div className="modal-footer">
-      {!estado.modal?.volver && <button type="button" className="btn btn-blanco" data-accion="cerrar-modal" onClick={cerrarModal}>Cancelar</button>}
-      <button type="submit" className="btn btn-verde">{textoGuardar}</button>
+      {conCancelar && <button type="button" className="btn btn-blanco" data-accion="cerrar-modal" onClick={cerrarModal}>Cancelar</button>}
+      <button type="submit" className={`btn ${clase}`} disabled={enviando || desactivado}>{enviando ? 'Guardando…' : textoGuardar}</button>
     </div>
   );
 }
@@ -265,12 +306,14 @@ export function CampoPara({ ninos = [], inicial = [] }) {
   );
 }
 
-// texto libre opcional de los ingresos y salidas
+// texto libre opcional de los ingresos y salidas: cerrado hasta que se pida (o si ya tiene algo)
 export function CampoObservaciones({ ejemplo, inicial = '' }) {
+  const [abierta, setAbierta] = useState(Boolean(inicial));
+  if (!abierta) return <button type="button" className="link agregar-nota" data-accion="agregar-nota" onClick={() => setAbierta(true)}>+ Agregar nota</button>;
   return (
     <div className="campo">
-      <label htmlFor="observaciones">OBSERVACIONES (OPCIONAL)</label>
-      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} defaultValue={inicial} />
+      <label htmlFor="observaciones">NOTA (OPCIONAL)</label>
+      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} defaultValue={inicial} autoFocus={!inicial} />
     </div>
   );
 }

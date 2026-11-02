@@ -4,7 +4,7 @@ import { usuario } from '../data/datos.js';
 import { IconoAjustar, IconoSalida, IconoIngreso } from '../assets/iconos.jsx';
 import {
   cerrarModal, abrirMovimiento, abrirAjuste, abrirUnir, historialProducto, movimientosDe, verMovimiento, corregirAjuste,
-  filtrarProducto, historialDonador, verProducto, cambiarRol, cambiarActivo, esAdmin, roles,
+  filtrarProducto, historialDonador, verProducto, cambiarRol, cambiarActivo, esAdmin, sePuedeAdministrar, abrirClave, roles,
 } from '../acciones.js';
 import {
   nombreCategoria, colorVencimiento, textoCambio, textoStock, textoPresentacion, textoTotal, disponible, stockAntes,
@@ -49,9 +49,7 @@ export function PastillasProblemas({ problemas }) {
 
 // ---------- detalle del producto ----------
 // nombre visible de cada campo
-const etiquetasProducto = { unidad: 'Se cuenta en', minimo: 'Stock mínimo', consumoDiario: 'Consumo diario', unidos: 'Se le unió' };
-// campos que no se listan
-const internosProducto = ['id', 'codigo', 'nombre', 'cantidad', 'lotes', 'vencimiento', 'lote', 'contenido', 'medida', '_id', '_rev', 'tipo', 'categoria', 'envase'];
+const etiquetasProducto = { unidad: 'Se cuenta en', minimo: 'Stock mínimo', consumoDiario: 'Consumo diario', unidos: 'Se le unió', codigosBarras: 'Códigos de barras' };
 // movimientos recientes que se muestran
 const ultimos = 8;
 
@@ -64,8 +62,10 @@ function estadoStock(item) {
 }
 
 function DatosProducto({ item }) {
-  const filas = Object.entries(item)
-    .filter(([campo, valor]) => !internosProducto.includes(campo) && valor !== '' && valor != null)
+  // solo los campos para leer, en este orden
+  const filas = Object.keys(etiquetasProducto)
+    .map(campo => [campo, item[campo]])
+    .filter(([, valor]) => valor !== '' && valor != null && !(Array.isArray(valor) && !valor.length))
     .map(([campo, valor]) => {
       const conUnidad = campo === 'minimo' || campo === 'consumoDiario' ? ` ${item.unidad}` : '';
       return [campo, `${Array.isArray(valor) ? valor.join(', ') : valor}${conUnidad}`];
@@ -74,7 +74,7 @@ function DatosProducto({ item }) {
   return (
     <dl className="mov-datos">
       <div><dt>Presentación</dt><dd>{textoPresentacion(item) || 'Suelto, en ' + item.unidad}</dd></div>
-      {filas.map(([campo, valor]) => <div key={campo}><dt>{etiquetasProducto[campo] || campo}</dt><dd>{valor}</dd></div>)}
+      {filas.map(([campo, valor]) => <div key={campo}><dt>{etiquetasProducto[campo]}</dt><dd>{valor}</dd></div>)}
     </dl>
   );
 }
@@ -131,7 +131,7 @@ export function PanelProducto({ modal }) {
               <li key={p.indice}>
                 <button className={`mov-paso ${clasesMovimiento[p.fila.movimiento]}`} data-accion="ver-movimiento" onClick={() => verMovimiento(p.indice)}>
                   <span className="mov-paso-fecha">{p.fila.fecha}</span>
-                  <span className="mov-paso-tipo">● {p.fila.inicial ? 'Registro inicial' : p.fila.movimiento}{p.fila.insumo !== item.nombre && <> <small>de "{p.fila.insumo}"</small></>}</span>
+                  <span className="mov-paso-tipo">● {p.fila.inicial ? 'Registro inicial' : p.fila.movimiento}{p.fila.insumoOriginal && <> <small>como "{p.fila.insumoOriginal}"</small></>}</span>
                   <span className="mov-paso-cambio">{textoCambio(p.fila)}</span>
                   <span className="mov-paso-stock">{textoStock(p.fila)}</span>
                 </button>
@@ -152,10 +152,11 @@ export function PanelProducto({ modal }) {
 }
 
 // ---------- detalle de un movimiento ----------
-// campos que no se listan
-const yaMostrados = ['fecha', 'insumo', 'categoria', 'movimiento', 'cantidad', 'diferencia', 'unidad', 'saldo', 'inicial', 'corrige', 'loteId', '_id', '_rev', 'tipo', 'fechaOrden'];
 // nombre visible de cada campo
-const etiquetasMovimiento = { responsable: 'Responsable', donador: 'Donado por', actividad: 'Actividad', para: 'Para (niño/a)', motivo: 'Motivo', nota: 'Detalle', observaciones: 'Observaciones', lote: 'Lote', vence: 'Vence', lotes: 'Salió de' };
+const etiquetasMovimiento = {
+  responsable: 'Responsable', donador: 'Donado por', actividad: 'Actividad', para: 'Para (niño/a)', motivo: 'Motivo', nota: 'Detalle',
+  observaciones: 'Observaciones', lote: 'Lote', vence: 'Vence', lotes: 'Salió de', insumoOriginal: 'Se registró como',
+};
 
 // campos que necesitan formato
 function textoCampo(campo, valor, fila) {
@@ -165,14 +166,16 @@ function textoCampo(campo, valor, fila) {
   return String(valor);
 }
 
+// solo los campos para leer, en este orden (los internos como producto_id o canal no se muestran)
 function DatosMovimiento({ fila }) {
   // no muestra listas vacias
-  const filas = Object.entries(fila)
-    .filter(([campo, valor]) => !yaMostrados.includes(campo) && valor !== '' && valor != null && !(Array.isArray(valor) && !valor.length));
+  const filas = Object.keys(etiquetasMovimiento)
+    .map(campo => [campo, fila[campo]])
+    .filter(([, valor]) => valor !== '' && valor != null && !(Array.isArray(valor) && !valor.length));
   if (filas.length === 0) return null;
   return (
     <dl className="mov-datos">
-      {filas.map(([campo, valor]) => <div key={campo}><dt>{etiquetasMovimiento[campo] || campo}</dt><dd>{textoCampo(campo, valor, fila)}</dd></div>)}
+      {filas.map(([campo, valor]) => <div key={campo}><dt>{etiquetasMovimiento[campo]}</dt><dd>{textoCampo(campo, valor, fila)}</dd></div>)}
     </dl>
   );
 }
@@ -309,6 +312,13 @@ export function PanelDonador({ modal }) {
           <div><b>{ultima ? fechaLarga(fechaDe(ultima.fecha)) : '—'}</b><span>última donación</span></div>
         </div>
 
+        {d.observaciones && (
+          <div className="donador-apoyo">
+            <span>OBSERVACIONES</span>
+            <p className="donador-observaciones">{d.observaciones}</p>
+          </div>
+        )}
+
         {actividades.length > 0 && (
           <div className="donador-apoyo">
             <span>APOYÓ EN</span>
@@ -351,10 +361,11 @@ const limite = 60;
 
 export function PanelActividad({ modal }) {
   const estado = useEstado();
-  const { cuenta } = modal;
+  // la cuenta de la lista (si se recargaron los datos, la del modal quedaria con el rol viejo)
+  const cuenta = estado.cuentas.find(c => mismoId(c.id, modal.cuenta.id)) ?? modal.cuenta;
   const esPropio = mismoId(cuenta.id, usuario.id);
-  // el admin viendo otra cuenta puede cambiar su rol y activarla
-  const administrar = !esPropio && esAdmin();
+  // el admin viendo otra cuenta puede cambiar su rol, activarla y ponerle otra contraseña (no a la principal)
+  const administrar = sePuedeAdministrar(cuenta);
   const items = actividadDe(estado, cuenta);
   const ingresos = items.filter(i => i.accion === 'ingreso').length;
   const salidas = items.filter(i => i.accion === 'salida').length;
@@ -368,7 +379,7 @@ export function PanelActividad({ modal }) {
           <span className={`avatar ${cuenta.rol === 'Administrador' ? '' : 'avatar-verde'}`}>{iniciales(cuenta.nombre)}</span>
           <div>
             <div className="modal-titulo">{esPropio ? 'Mi actividad' : cuenta.nombre}</div>
-            <div className="modal-sub">@{cuenta.usuario} · {cuenta.rol}{cuenta.activo ? '' : ' · desactivado'}</div>
+            <div className="modal-sub">{cuenta.usuario ? `@${cuenta.usuario} · ` : ''}{cuenta.rol}{cuenta.principal ? ' · cuenta principal' : ''}{cuenta.activo ? '' : ' · desactivado'}</div>
           </div>
           <Cerrar />
         </div>
@@ -379,9 +390,18 @@ export function PanelActividad({ modal }) {
               <span id="rol-panel">Rol</span>
               <Desplegable variante="rol" className="selector-rol" data-id={cuenta.id} aria-labelledby="rol-panel" valor={cuenta.rol} onChange={r => cambiarRol(cuenta.id, r)} opciones={roles.map(r => [r, r])} />
             </div>
+            <button className="btn-mini" data-accion="restablecer-clave" onClick={() => abrirClave(cuenta.id)}>Restablecer contraseña</button>
             <button className={`btn-mini ${cuenta.activo ? 'btn-mini-rojo' : ''}`} data-accion="activar-usuario" data-id={cuenta.id} onClick={() => cambiarActivo(cuenta.id)}>
               {cuenta.activo ? 'Desactivar cuenta' : 'Activar cuenta'}
             </button>
+          </div>
+        )}
+        {cuenta.principal && !esPropio && esAdmin() && (
+          <p className="panel-actividad-aviso">Es la cuenta principal del sistema: nadie le puede cambiar el rol, desactivarla ni cambiar su contraseña.</p>
+        )}
+        {esPropio && (
+          <div className="panel-actividad-controles">
+            <button className="btn-mini" data-accion="cambiar-mi-clave" onClick={() => abrirClave()}>Cambiar mi contraseña</button>
           </div>
         )}
 

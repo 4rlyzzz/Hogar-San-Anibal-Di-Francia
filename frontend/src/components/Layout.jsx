@@ -1,12 +1,12 @@
 // desktop: menu lateral fijo; celular: barra de iconos abajo
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useEstado } from '../estado.js';
 import { usuario } from '../data/datos.js';
 import { largos } from '../validacion.js';
 import {
-  IconoBuscar, IconoCampana, IconoInicio, IconoAlimentos, IconoSalud, IconoHistorial, IconoDonadores, IconoFijar, IconoSalir, IconoUsuarios,
+  IconoBuscar, IconoCampana, IconoInicio, IconoAlimentos, IconoSalud, IconoHistorial, IconoDonadores, IconoFijar, IconoSalir, IconoUsuarios, IconoMicrofono,
 } from '../assets/iconos.jsx';
-import { irA, buscar, fijarMenu, agregar, abrirModal, verActividad, salir, cambiar } from '../acciones.js';
+import { irA, buscar, fijarMenu, agregar, empezarDictado, abrirModal, verActividad, abrirClave, salir, cambiar } from '../acciones.js';
 import { calcularAlertas } from '../logica/alertas.js';
 import logo from '../assets/logo.png';
 import { Ventana } from './Ventana.jsx';
@@ -41,6 +41,37 @@ const paginas = {
 function seccionesVisibles() {
   return secciones.filter(s => !s.soloAdmin || usuario.rol === 'Administrador');
 }
+
+// texto: lo que se esta buscando (para mostrar la x)
+// el input no lo maneja React: buscar() limpia el texto y se comeria el espacio que se esta escribiendo
+function Buscador({ texto }) {
+  const campo = useRef(null);
+  return (
+    <div className="buscador">
+      <IconoBuscar />
+      <input id="buscador" ref={campo} type="search" maxLength={largos.busqueda} autoComplete="off" placeholder="Buscar insumo o categoría" defaultValue={texto} onInput={e => buscar(e.target.value)} />
+      {texto && (
+        <button
+          type="button"
+          className="buscador-borrar"
+          data-accion="borrar-busqueda"
+          aria-label="Borrar búsqueda"
+          onClick={() => {
+            campo.current.value = '';
+            buscar('');
+            campo.current.focus();
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+const IconoLlave = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="8" cy="15" r="4" stroke="currentColor" strokeWidth="1.7" /><path d="M11 12l8-8m-3 3 2 2m-4 0 1.5 1.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>
+);
 
 function Marca() {
   return (
@@ -101,6 +132,7 @@ function MenuUsuario({ abierto }) {
           <span>{usuario.rol}</span>
         </div>
         <button className="usuario-menu-opcion" data-accion="mi-actividad" onClick={() => verActividad(usuario.id)}><IconoHistorial /> Mi actividad</button>
+        <button className="usuario-menu-opcion" data-accion="cambiar-mi-clave" onClick={() => abrirClave()}><IconoLlave /> Cambiar mi contraseña</button>
         <button data-accion="salir" onClick={salir}><IconoSalir /> Cerrar sesión</button>
       </div>
     </div>
@@ -147,10 +179,8 @@ export function Layout() {
         <header className="topbar">
           <Marca />
 
-          <div className="buscador">
-            <IconoBuscar />
-            <input id="buscador" type="search" maxLength={largos.busqueda} autoComplete="off" placeholder="Buscar insumo o categoría" defaultValue={estado.busqueda} onInput={e => buscar(e.target.value)} />
-          </div>
+          {/* en Inicio no se busca: no hay lista que filtrar */}
+          {seccion !== 'Inicio' && <Buscador texto={estado.busqueda} />}
 
           <div className="topbar-derecha">
             <button className="campana" data-accion="ver-alertas" aria-label="Alertas" onClick={() => abrirModal({ tipo: 'alertas' })}>
@@ -165,6 +195,12 @@ export function Layout() {
       </div>
 
       <nav className="menu-movil" id="menu-movil"><MenuMovil seccion={seccion} /></nav>
+      {/* en Donadores y Usuarios el "+" no registra movimientos */}
+      {seccion !== 'Donadores' && seccion !== 'Usuarios' && (
+        <button className="btn-flotante btn-flotante-voz" data-accion="dictar" aria-label="Registrar por voz" title="Registrar por voz" onClick={empezarDictado}>
+          <IconoMicrofono />
+        </button>
+      )}
       <button className="btn-flotante" data-accion="agregar" aria-label="Agregar" onClick={agregar}>
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
       </button>
