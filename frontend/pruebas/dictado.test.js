@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { interpretarDictado, separarDictado, buscarFecha, corregirNombres } from '../src/logica/dictado.js';
+import { interpretarDictado, separarDictado, buscarFecha, corregirNombres, tipoDictado } from '../src/logica/dictado.js';
 
 const productos = [
   { item: { nombre: 'Arroz', unidad: 'kg' }, categoria: 'Alimentos' },
@@ -13,6 +13,34 @@ const donadores = [{ nombre: 'Parroquia San José' }];
 
 const resumen = texto => interpretarDictado(texto, productos, { donadores, actividades: ['Navidad'] })
   .map(r => [r.producto?.item.nombre ?? null, r.cantidad]);
+
+test('reconoce si es ingreso o salida y lo quita del texto', () => {
+  assert.deepEqual(tipoDictado('ingreso de dos kilos de arroz'), { tipo: 'Ingreso', ambos: false, resto: 'dos kilos de arroz' });
+  assert.deepEqual(tipoDictado('Salida: tres latas de leche'), { tipo: 'Salida', ambos: false, resto: 'tres latas de leche' });
+  // ese "un" no es una cantidad
+  assert.deepEqual(tipoDictado('registrar un ingreso de 2 kilos de arroz'), { tipo: 'Ingreso', ambos: false, resto: '2 kilos de arroz' });
+  assert.deepEqual(tipoDictado('Salieron 3 latas de leche'), { tipo: 'Salida', ambos: false, resto: '3 latas de leche' });
+  assert.equal(tipoDictado('llegó un kilo de arroz').tipo, 'Ingreso');
+});
+
+test('sin decirlo no se adivina, y decir los dos se avisa', () => {
+  assert.equal(tipoDictado('dos kilos de arroz').tipo, null);
+  const dos = tipoDictado('ingreso de arroz y salida de leche');
+  assert.equal(dos.tipo, null);
+  assert.equal(dos.ambos, true);
+});
+
+test('palabras parecidas no cambian el tipo', () => {
+  // saco es un envase; sal y salsa son productos
+  assert.equal(tipoDictado('un saco de arroz').tipo, null);
+  assert.equal(tipoDictado('dos kilos de sal y una salsa').tipo, null);
+  assert.equal(tipoDictado('ingreso de un saco de arroz').resto, 'un saco de arroz');
+});
+
+test('quitado el tipo, el dictado entiende los productos igual', () => {
+  const { resto } = tipoDictado('registrar una salida de dos kilos de arroz y tres latas de leche');
+  assert.deepEqual(resumen(resto), [['Arroz', 2], ['Leche Evaporada Gloria', 3]]);
+});
 
 test('varios productos con sus cantidades', () => {
   assert.deepEqual(resumen('dos kilos de arroz y tres latas de leche'), [['Arroz', 2], ['Leche Evaporada Gloria', 3]]);

@@ -83,6 +83,16 @@
   transform: scale(0.96);
 }
 
+/* microfono: encima del "+" y del mismo tamaño */
+.btn-flotante-voz {
+  bottom: 102px;
+}
+
+.btn-flotante-voz svg {
+  width: 26px;
+  height: 26px;
+}
+
 .etiqueta {
   margin-left: auto;
   flex-shrink: 0;
@@ -1906,10 +1916,10 @@ button.uf-usuario:hover b {
   flex-shrink: 0;
 }
 
-.btn-salida,
-.btn-ingreso { border: 1px solid #e2e8e6; background: #f7faf9; color: #3d4b46; }
-.btn-salida:hover { border-color: #cfe0ee; background: #eef5fb; color: #1f6699; }
-.btn-ingreso:hover { border-color: #cfe9dd; background: #effaf5; color: #22745a; }
+.btn-salida { border: 1px solid #f3d3d0; background: #fbeceb; color: #b3362f; }
+.btn-ingreso { border: 1px solid #cfe9dd; background: #e6f5ee; color: #22745a; }
+.btn-salida:hover { border-color: #ebbcb8; background: #f8dfdd; color: #a02f29; }
+.btn-ingreso:hover { border-color: #b4dfcb; background: #d6efe3; color: #1d6650; }
 
 /* en el detalle: contar y corregir (ajuste), debajo de sacar e ingresar */
 .btn-contar {
@@ -2916,7 +2926,31 @@ button.uf-usuario:hover b {
   color: #7c8b86;
 }
 
-/* a mano: buscador y productos */
+/* a mano: buscador, boton de la camara y productos */
+.lote-buscar-fila {
+  display: flex;
+  gap: 8px;
+}
+
+/* en el celular .buscador se reordena para la barra de arriba: aqui no */
+.lote-buscar-fila .buscador {
+  order: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.lote-camara {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agregar-nota {
+  align-self: flex-start;
+  margin-left: 0;
+}
+
 .lote-buscador {
   max-width: none;
   background: #f9fbfa;

@@ -4,9 +4,9 @@ import { useEstado } from '../estado.js';
 import { usuario } from '../data/datos.js';
 import { largos } from '../validacion.js';
 import {
-  IconoBuscar, IconoCampana, IconoInicio, IconoAlimentos, IconoSalud, IconoHistorial, IconoDonadores, IconoFijar, IconoSalir, IconoUsuarios,
+  IconoBuscar, IconoCampana, IconoInicio, IconoAlimentos, IconoSalud, IconoHistorial, IconoDonadores, IconoFijar, IconoSalir, IconoUsuarios, IconoMicrofono,
 } from '../assets/iconos.jsx';
-import { irA, buscar, fijarMenu, agregar, abrirModal, verActividad, abrirClave, salir, cambiar } from '../acciones.js';
+import { irA, buscar, fijarMenu, agregar, empezarDictado, abrirModal, verActividad, abrirClave, salir, cambiar } from '../acciones.js';
 import { calcularAlertas } from '../logica/alertas.js';
 import logo from '../assets/logo.png';
 import { Ventana } from './Ventana.jsx';
@@ -195,6 +195,12 @@ export function Layout() {
       </div>
 
       <nav className="menu-movil" id="menu-movil"><MenuMovil seccion={seccion} /></nav>
+      {/* en Donadores y Usuarios el "+" no registra movimientos */}
+      {seccion !== 'Donadores' && seccion !== 'Usuarios' && (
+        <button className="btn-flotante btn-flotante-voz" data-accion="dictar" aria-label="Registrar por voz" title="Registrar por voz" onClick={empezarDictado}>
+          <IconoMicrofono />
+        </button>
+      )}
       <button className="btn-flotante" data-accion="agregar" aria-label="Agregar" onClick={agregar}>
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
       </button>

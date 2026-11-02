@@ -134,6 +134,7 @@ Ejecuta, en orden: la revisión de Django, las pruebas del backend (login, sesio
 - Por separado: `python manage.py test api` (en **backend**) o `npm test` (en **frontend**).
 - Las pruebas están en `backend/api/tests/` y `frontend/pruebas/`. Al agregar una funcionalidad nueva, agrega también su prueba.
 
+
 ## 7. Detener o iniciar CouchDB
 
 Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como administrador y ejecutar, según corresponda:

@@ -235,6 +235,35 @@ export function dividirPorCantidades(parte, productos = []) {
   return partes.map(p => p.trim().replace(/\s+(?:de|y|e)$/i, '')).filter(Boolean);
 }
 
+// ---------- ingreso o salida, dicho en voz alta ----------
+// 'saco' no va: tambien es un envase ("un saco de arroz")
+const palabrasTipo = {
+  Ingreso: ['ingreso', 'ingresos', 'ingresa', 'ingresan', 'ingresar', 'ingresamos', 'ingresaron', 'entrada', 'entradas', 'entra', 'entran', 'entro', 'entraron', 'llego', 'llegaron', 'recibimos'],
+  Salida: ['salida', 'salidas', 'sale', 'salen', 'salio', 'salieron', 'saca', 'sacan', 'sacar', 'sacamos', 'sacaron'],
+};
+const tipoDePalabra = new Map(Object.entries(palabrasTipo).flatMap(([tipo, lista]) => lista.map(p => [p, tipo])));
+// tambien lo que la acompaña: "registrar un ingreso de ..." (ese "un" no es una cantidad)
+const avisoTipo = new RegExp(`\\b(?:(?:registrar|registra|registro|anotar|anota|hacer|haz|es|una?)\\s+)*(${[...tipoDePalabra.keys()].join('|')})\\b(?:\\s*[:,.])?(?:\\s+(?:de|del)\\b)?`, 'g');
+
+// { tipo: 'Ingreso' | 'Salida' | null, ambos: si dijo los dos, resto: el texto sin esas palabras }
+export function tipoDictado(texto) {
+  const original = String(texto ?? '');
+  const dichos = new Set();
+  let resto = '';
+  let desde = 0;
+  for (const m of plano(original).matchAll(avisoTipo)) {
+    dichos.add(tipoDePalabra.get(m[1]));
+    resto += `${original.slice(desde, m.index)} `;
+    desde = m.index + m[0].length;
+  }
+  resto += original.slice(desde);
+  return {
+    tipo: dichos.size === 1 ? [...dichos][0] : null,
+    ambos: dichos.size > 1,
+    resto: resto.replace(/\s+/g, ' ').replace(/^[\s,.;:]+/, '').trim(),
+  };
+}
+
 // partes del texto original, una por producto
 export function separarDictado(texto) {
   const original = String(texto ?? '').replace(/\s+/g, ' ').trim();
