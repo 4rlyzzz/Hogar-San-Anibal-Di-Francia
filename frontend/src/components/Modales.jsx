@@ -103,17 +103,6 @@ export function ModalMovimiento({ modal }) {
           {esSalud && !esIngreso && <CampoPara ninos={opcionesNinos()} />}
           <CampoObservaciones ejemplo={esIngreso ? 'Ej. llegó en cajas abolladas, falta la boleta' : 'Ej. se usó para la fiesta del sábado'} />
 
-          <div className="dos-columnas">
-            <div className="campo">
-              <label>RESPONSABLE</label>
-              <div className="input-fijo">{usuario.nombre}</div>
-            </div>
-            <div className="campo">
-              <label>FECHA Y HORA</label>
-              <div className="input-fijo">{fechaActual()}</div>
-            </div>
-          </div>
-
           <MensajeError texto={f.error} />
         </div>
 
@@ -141,7 +130,7 @@ function ConfirmarMovimiento({ modal, datos, onVolver }) {
     ['Donado por', datos.donador.nombre ? datos.donador.nombre + (datos.donador.nuevo ? ' (nuevo donador)' : '') : (esIngreso ? 'Compra del hogar' : '')],
     ['Actividad', datos.actividad],
     ['Para', datos.para.length ? textoPara(datos) : (!esIngreso && datos.esSalud ? 'Uso general' : '')],
-    ['Observaciones', datos.observaciones],
+    ['Nota', datos.observaciones],
     ['Responsable', usuario.nombre],
     ['Fecha y hora', fechaActual()],
   ].filter(([, valor]) => valor);

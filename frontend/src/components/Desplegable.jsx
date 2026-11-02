@@ -93,20 +93,26 @@ export function Desplegable({ id, name, opciones, valor, valorInicial, onChange,
       const abajo = window.innerHeight - r.bottom - 12;
       const arriba = r.top - 12;
       const haciaArriba = abajo < 220 && arriba > abajo;
+      // en la mitad derecha crece hacia la izquierda: pegada al borde no tendria espacio y cortaria las palabras
+      const desdeDerecha = r.left > window.innerWidth / 2;
       setLugar({
-        left: r.left,
+        ...(desdeDerecha ? { right: window.innerWidth - r.right } : { left: r.left }),
         minWidth: r.width,
-        maxWidth: Math.max(r.width, window.innerWidth - r.left - 12),
+        maxWidth: Math.max(r.width, desdeDerecha ? r.right - 12 : window.innerWidth - r.left - 12),
         maxHeight: Math.min(300, haciaArriba ? arriba : abajo),
         ...(haciaArriba ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
       });
     }
+    // el scroll de la propia lista no la mueve: si se reubicara, volveria a la opcion activa y no se podria bajar
+    const alDesplazar = e => {
+      if (!lista.current?.contains(e.target)) ubicar();
+    };
     ubicar();
     window.addEventListener('resize', ubicar);
-    window.addEventListener('scroll', ubicar, true);
+    window.addEventListener('scroll', alDesplazar, true);
     return () => {
       window.removeEventListener('resize', ubicar);
-      window.removeEventListener('scroll', ubicar, true);
+      window.removeEventListener('scroll', alDesplazar, true);
       setLugar(null);
     };
   }, [abierto]);

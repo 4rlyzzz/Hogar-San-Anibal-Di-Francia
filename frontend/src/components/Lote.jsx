@@ -1,18 +1,18 @@
-// registrar varios productos a la vez: elegir como (a mano, codigo o voz), la lista, editar una fila y confirmar
+// registrar varios productos a la vez: buscar (o escanear o dictar), la lista, editar una fila y confirmar
 import { procesarTextoConOmniroute } from '../servicios/Omniroute';
 import { useEffect, useRef, useState } from 'react';
 import { estado } from '../estado.js';
 import { usuario } from '../data/datos.js';
 import { largos, decimalesDe } from '../validacion.js';
-import { IconoMano, IconoCodigo, IconoMicrofono, IconoEditar, IconoBorrar, IconoIngreso, IconoSalida, IconoBuscar } from '../assets/iconos.jsx';
+import { IconoCodigo, IconoMicrofono, IconoEditar, IconoBorrar, IconoIngreso, IconoSalida, IconoBuscar } from '../assets/iconos.jsx';
 import {
-  abrirMetodo, abrirMetodos, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
+  abrirBusqueda, abrirCodigo, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
   opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe,
 } from '../acciones.js';
 import { nombreCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado } from '../logica/dictado.js';
+import { interpretarDictado, tipoDictado } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -36,36 +36,7 @@ const colorCategoria = categoria => (categoria === 'Salud' ? 'azul' : 'verde');
 // 'Lata x 400 g' o 'Suelto, en kg': para no confundir tamaños del mismo producto
 const presentacion = item => textoPresentacion(item) || `Suelto, en ${item.unidad}`;
 
-// ---------- 1. como agregar ----------
-const metodos = [
-  { metodo: 'manual', Icono: IconoMano, titulo: 'Manual', detalle: 'Busca el producto y escribe la cantidad' },
-  { metodo: 'codigo', Icono: IconoCodigo, titulo: 'Código de barras', detalle: 'Escanea los productos con la cámara' },
-  { metodo: 'voz', Icono: IconoMicrofono, titulo: 'Micrófono', detalle: 'Di varios productos de una vez' },
-];
-
-export function ModalLoteMetodo() {
-  return (
-    <Fondo>
-      <div className="modal" id="lote-metodo">
-        <CabeceraLote subtitulo="¿Cómo quieres agregar los productos?" />
-        <div className="modal-cuerpo">
-          {metodos.map(m => (
-            <button key={m.metodo} type="button" className="opcion-agregar" data-metodo={m.metodo} onClick={() => abrirMetodo(m.metodo)}>
-              <span className="tarjeta-codigo gris"><m.Icono /></span>
-              <span>
-                <b>{m.titulo}</b>
-                <small>{m.detalle}</small>
-              </span>
-              <span className="opcion-flecha">›</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </Fondo>
-  );
-}
-
-// ---------- 2a. a mano ----------
+// ---------- 1a. buscar el producto ----------
 export function ModalLoteManual() {
   const [busqueda, setBusqueda] = useState('');
   const productos = todosLosProductos().filter(({ item }) => !busqueda.trim() || coincideNombre(busqueda, item.nombre));
@@ -76,9 +47,14 @@ export function ModalLoteManual() {
       <div className="modal" id="lote-manual">
         <CabeceraLote subtitulo="Elige el producto" />
         <div className="modal-cuerpo">
-          <div className="buscador lote-buscador">
-            <IconoBuscar />
-            <input id="lote-buscar" type="search" maxLength={largos.busqueda} autoComplete="off" autoFocus placeholder="Buscar producto" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+          <div className="lote-buscar-fila">
+            <div className="buscador lote-buscador">
+              <IconoBuscar />
+              <input id="lote-buscar" type="search" maxLength={largos.busqueda} autoComplete="off" autoFocus placeholder="Buscar producto" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+            </div>
+            <button type="button" className="btn btn-blanco lote-camara" data-accion="escanear" title="Escanear el código de barras con la cámara" onClick={abrirCodigo}>
+              <IconoCodigo /> Cámara
+            </button>
           </div>
           <div className="lote-productos">
             {productos.length === 0 && <p className="lote-vacio">No hay productos con ese nombre.</p>}
@@ -107,7 +83,7 @@ export function ModalLoteManual() {
   );
 }
 
-// ---------- 2b. codigo de barras ----------
+// ---------- 1b. codigo de barras ----------
 // lo que se le pasa al lector, alternando (probado con codigos chicos, borrosos y con poca luz):
 // 0 = el cuadro entero; 1 = la zona del recuadro ampliada y con los niveles ajustados (poca luz);
 // 2 = lo mismo y ademas enfocada (codigos chicos o un poco borrosos)
@@ -355,7 +331,7 @@ export function ModalLoteCodigo() {
   );
 }
 
-// ---------- 2c. voz ----------
+// ---------- 1c. voz (se abre con el microfono junto al "+") ----------
 // una linea de "Entendí": arriba cuanto y que; abajo, en pequeño, lo que hay que saber
 function LineaEntendida({ r }) {
   const item = r.producto?.item;
@@ -395,8 +371,10 @@ export function ModalLoteVoz() {
   const consulta = useRef(0);
 
   // Procesa con OmniRoute y obtiene la lista visual para el bloque "ENTENDÍ"
-  const procesarConOmni = async (textoDictado) => {
+  const procesarConOmni = async (textoCompleto) => {
     const numero = ++consulta.current;
+    // "ingreso" o "salida" no son productos
+    const textoDictado = tipoDictado(textoCompleto).resto;
     if (!textoDictado.trim()) return setItemsEntendidos([]);
     setCargandoIA(true);
     setAviso('');
@@ -492,6 +470,13 @@ export function ModalLoteVoz() {
     }
   }
 
+  // ingreso o salida: lo que se dijo o, si no se dijo, el de la lista que ya esta abierta
+  const dicho = tipoDictado(texto);
+  const tipo = tipos[dicho.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null)];
+  let falta = '';
+  if (dicho.ambos) falta = 'Dijiste ingreso y salida: registra uno a la vez.';
+  else if (texto.trim() && !tipo) falta = 'Falta decir si es ingreso o salida.';
+
   return (
     <Fondo>
       <form
@@ -506,9 +491,13 @@ export function ModalLoteVoz() {
         */
         onSubmit={e => f.enviar(e, agregarDictado)}
       >
-        <CabeceraLote subtitulo='Ej. "dos kilos de arroz y tres latas de leche"' />
+        <Cabecera
+          codigo={tipo ? <tipo.Icono /> : <IconoMicrofono />}
+          color={tipo?.color ?? 'gris'}
+          titulo={tipo?.titulo ?? 'Registrar por voz'}
+          subtitulo='Di "ingreso" o "salida" y los productos'
+        />
         <div className="modal-cuerpo">
-          
           <div className="voz">
             <button
               type="button"
@@ -535,8 +524,9 @@ export function ModalLoteVoz() {
                 setTexto(e.target.value);
                 procesarConOmni(e.target.value);
               }}
-              placeholder="Aparecerá lo que digas..."
+              placeholder='Ej. "ingreso de dos kilos de arroz" o "salida de tres latas de leche"'
             />
+            {falta && <small id="voz-falta">{falta}</small>}
           </div>
 
           {cargandoIA && <p style={{ textAlign: 'center', color: '#007acc' }}>🤖 Procesando lista con OmniRoute...</p>}
@@ -561,7 +551,7 @@ export function ModalLoteVoz() {
   );
 }
 
-// ---------- 3. la lista ----------
+// ---------- 2. la lista ----------
 // "Donó Parroquia San José · Navidad" o "Compra del hogar"
 function textoDonador(x) {
   const nombre = donadorDeItem(x);
@@ -633,7 +623,7 @@ export function ModalLoteLista({ modal }) {
             </p>
           )}
           {items.length > 0 && <ul className="lote-lista">{items.map(x => <FilaLote key={x.id} x={x} tipo={tipo} />)}</ul>}
-          <button type="button" className="btn-anadir" data-accion="anadir" onClick={abrirMetodos}>+ Añadir productos</button>
+          <button type="button" className="btn-anadir" data-accion="anadir" onClick={abrirBusqueda}>+ Añadir productos</button>
           <MensajeError texto={f.error} />
         </div>
 
@@ -650,7 +640,7 @@ export function ModalLoteLista({ modal }) {
   );
 }
 
-// ---------- 4. confirmar ----------
+// ---------- 3. confirmar ----------
 function ConfirmarLote({ modal, onVolver }) {
   // se guarda fila por fila en el servidor: mientras tanto el boton queda en "Guardando…"
   const f = useFormulario();

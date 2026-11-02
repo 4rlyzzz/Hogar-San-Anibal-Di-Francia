@@ -29,7 +29,7 @@ import { inventarioVacio } from './logica/inventario.js';
 import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js';
 import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
-import { interpretarDictado } from './logica/dictado.js';
+import { interpretarDictado, tipoDictado } from './logica/dictado.js';
 
 // envases (en plural)
 export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes', 'botellas', 'frascos', 'sobres'];
@@ -1424,7 +1424,12 @@ export function empezarLote(tipo) {
   if (!permitido(tipo, ['Ingreso', 'Salida'])) return;
   if (estado.lote?.tipo !== tipo) estado.lote = { tipo, items: [] };
   if (estado.lote.items.length) abrirLista();
-  else abrirMetodos();
+  else abrirBusqueda();
+}
+
+// el microfono junto al "+": ingreso o salida se sabe por lo que se diga (agregarDictado)
+export function empezarDictado() {
+  abrirModal({ tipo: 'lote-voz', volver: estado.lote?.items.length ? abrirLista : null, alCerrar: cerrarLote });
 }
 
 export function descartarLote() {
@@ -1447,19 +1452,19 @@ export function abrirLista() {
   if (estado.lote) abrirModal({ tipo: 'lote-lista', volver: null, alCerrar: cerrarLote });
 }
 
-// volver desde elegir metodo: a la lista, o al menu "+" si todavia no hay nada
-export function abrirMetodos() {
+// volver desde la busqueda: a la lista, o al menu "+" si todavia no hay nada
+export function abrirBusqueda() {
   if (!estado.lote) return;
   const volver = () => {
     if (estado.lote?.items.length) return abrirLista();
     estado.lote = null;
     abrirModal({ tipo: 'elegir', volver: null });
   };
-  abrirModal({ tipo: 'lote-metodo', volver, alCerrar: cerrarLote });
+  abrirModal({ tipo: 'lote-manual', volver, alCerrar: cerrarLote });
 }
 
-export function abrirMetodo(metodo) {
-  if (estado.lote && permitido(metodo, ['manual', 'codigo', 'voz'])) abrirModal({ tipo: `lote-${metodo}`, volver: abrirMetodos, alCerrar: cerrarLote });
+export function abrirCodigo() {
+  if (estado.lote) abrirModal({ tipo: 'lote-codigo', volver: abrirBusqueda, alCerrar: cerrarLote });
 }
 
 // ---------- agregar a la lista ----------
@@ -1515,14 +1520,21 @@ export function cantidadDicha(valor) {
 }
 
 // lo que se dijo (o se escribio) se separa en productos, cada uno con su donador
+// si ya hay una lista, sigue con su tipo; si no, hay que decir si es ingreso o salida (no se adivina)
 export function agregarDictado(v) {
-  const lote = estado.lote;
-  if (!lote) return;
-  const texto = leer(v, 'dictado', reglas.dictado);
-  const entendido = interpretarDictado(texto, todosLosProductos(), { donadores: estado.donadores, actividades: opcionesActividad() });
-  if (entendido.length === 0) falla('No reconocí ningún producto. Prueba con algo como "dos kilos de arroz y tres latas de leche".', 'dictado');
+  const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
+  const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
+  if (dicho.ambos) falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
+  const tipo = dicho.tipo ?? abierta;
+  if (!tipo) falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
+  if (tipo !== (abierta ?? tipo)) falla(`Tienes una lista de ${abierta.toLowerCase()} sin guardar: confírmala o descártala primero.`, 'dictado');
 
-  const esIngreso = lote.tipo === 'Ingreso';
+  const entendido = interpretarDictado(dicho.resto, todosLosProductos(), { donadores: estado.donadores, actividades: opcionesActividad() });
+  if (entendido.length === 0) falla(`No reconocí ningún producto. Prueba con algo como "${tipo.toLowerCase()} de dos kilos de arroz y tres latas de leche".`, 'dictado');
+
+  if (!abierta) estado.lote = { tipo, items: [] };
+  const lote = estado.lote;
+  const esIngreso = tipo === 'Ingreso';
   for (const r of entendido) {
     lote.items.push(nuevoItem({
       origen: 'voz',
@@ -1557,7 +1569,7 @@ export function abrirItem(id, { nuevo = false } = {}) {
       if (anterior) return abrirModal({ ...anterior, volver: anterior.volver ?? null });
     }
     if (estado.lote.items.length) abrirLista();
-    else abrirMetodos();
+    else abrirBusqueda();
   };
   abrirModal({ tipo: 'lote-item', itemId: id, volver, alCerrar: volver });
 }

@@ -306,12 +306,14 @@ export function CampoPara({ ninos = [], inicial = [] }) {
   );
 }
 
-// texto libre opcional de los ingresos y salidas
+// texto libre opcional de los ingresos y salidas: cerrado hasta que se pida (o si ya tiene algo)
 export function CampoObservaciones({ ejemplo, inicial = '' }) {
+  const [abierta, setAbierta] = useState(Boolean(inicial));
+  if (!abierta) return <button type="button" className="link agregar-nota" data-accion="agregar-nota" onClick={() => setAbierta(true)}>+ Agregar nota</button>;
   return (
     <div className="campo">
-      <label htmlFor="observaciones">OBSERVACIONES (OPCIONAL)</label>
-      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} defaultValue={inicial} />
+      <label htmlFor="observaciones">NOTA (OPCIONAL)</label>
+      <textarea id="observaciones" name="observaciones" rows={2} maxLength={largos.observaciones} placeholder={ejemplo} defaultValue={inicial} autoFocus={!inicial} />
     </div>
   );
 }
