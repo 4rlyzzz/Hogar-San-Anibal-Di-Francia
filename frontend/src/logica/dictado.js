@@ -246,20 +246,26 @@ const tipoDePalabra = new Map(Object.entries(palabrasTipo).flatMap(([tipo, lista
 const avisoTipo = new RegExp(`\\b(?:(?:registrar|registra|registro|anotar|anota|hacer|haz|es|una?)\\s+)*(${[...tipoDePalabra.keys()].join('|')})\\b(?:\\s*[:,.])?(?:\\s+(?:de|del)\\b)?`, 'g');
 
 // { tipo: 'Ingreso' | 'Salida' | null, ambos: si dijo los dos, resto: el texto sin esas palabras }
+// { tipo: 'Ingreso' | 'Salida' | null, resto: el texto sin esas palabras }
 export function tipoDictado(texto) {
   const original = String(texto ?? '');
-  const dichos = new Set();
+  const dichos = [];
   let resto = '';
   let desde = 0;
+  
   for (const m of plano(original).matchAll(avisoTipo)) {
-    dichos.add(tipoDePalabra.get(m[1]));
+    const tipoEncontrado = tipoDePalabra.get(m[1]);
+    if (tipoEncontrado && !dichos.includes(tipoEncontrado)) {
+      dichos.push(tipoEncontrado);
+    }
     resto += `${original.slice(desde, m.index)} `;
     desde = m.index + m[0].length;
   }
   resto += original.slice(desde);
+
   return {
-    tipo: dichos.size === 1 ? [...dichos][0] : null,
-    ambos: dichos.size > 1,
+    // Si se dijeron ambos, tomamos la PRIMERA intención mencionada como la principal
+    tipo: dichos.length > 0 ? dichos[0] : null,
     resto: resto.replace(/\s+/g, ' ').replace(/^[\s,.;:]+/, '').trim(),
   };
 }
@@ -609,4 +615,19 @@ export function interpretarDictado(texto, productos, extra = {}) {
     }
   }
   return resultado;
+}
+
+export function preprocesarTextoVoz(texto) {
+  if (!texto) return '';
+
+  let limpio = String(texto)
+    // 1. Reemplazar puntos, comas y signos causados por silencios del micro por espacios
+    .replace(/[.;:!?]+/g, ' ')
+    // 2. Normalizar autocorrecciones humanas inmediatas ("X nooo de Y" -> "de Y")
+    .replace(/\b(\w+)\s+(?:no+|o\s+sea|perdón|digo|mejor)\s+(?:de\s+)?(\w+)\b/gi, '$2')
+    // 3. Quitar espacios múltiples
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return limpio;
 }
