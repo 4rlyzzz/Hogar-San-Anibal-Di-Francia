@@ -10,9 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
+import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 
 # Load .env
 load_dotenv()
@@ -20,16 +22,21 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+def _lista(nombre, defecto=''):
+    """'a, b,,c' -> ['a', 'b', 'c'] (variables de entorno con varios valores)."""
+    return [v.strip() for v in os.getenv(nombre, defecto).split(',') if v.strip()]
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+# Todas las credenciales salen de variables de entorno:
+# en tu PC de backend/.env, en Railway de la pestaña Variables (ver DESPLIEGUE.md)
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise ImproperlyConfigured('Falta la variable de entorno SECRET_KEY (ver backend/.env.example)')
 
-ALLOWED_HOSTS = ['*']
+# En tu PC: DEBUG=True. En Railway no se pone (queda en False = modo produccion).
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+ALLOWED_HOSTS = _lista('ALLOWED_HOSTS', '127.0.0.1,localhost')
 
 # Application definition
 
@@ -62,11 +69,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 
-# Configuración de CORS para permitir la conexión desde React
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# Origenes del frontend que pueden llamar a la API (en Railway: https://<frontend>.up.railway.app)
+CORS_ALLOWED_ORIGINS = _lista('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+CSRF_TRUSTED_ORIGINS = _lista('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_ORIGINS))
 
 # Configuración de Django REST Framework con JWT
 REST_FRAMEWORK = {
@@ -76,7 +81,66 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_THROTTLE_RATES': {'login': '5/min'},
+    # Las claves de DRF son DEFAULT_THROTTLE_* (no DEFAULT_THROTTLING_*):
+    # con otro nombre se ignoran y el login falla por no tener la tasa 'login'.
+    # ScopedRateThrottle no va aqui: lo ponen las vistas que lo usan (login, cambiar clave).
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        # anon cubre auth/refresh/: varias pestañas renuevan a la vez
+        'anon': '30/minute',
+        'user': '300/minute',
+        'login': '5/min',
+        'dictado': '30/min',
+    },
+    # Cuantos proxies hay delante de Django. En Railway hay 1 (su balanceador): sin esto
+    # todos los usuarios tendrian la IP del proxy y compartirian el limite de 5 logins/min.
+    'NUM_PROXIES': int(os.getenv('NUM_PROXIES', '0' if DEBUG else '1')),
+    # solo JSON: la pagina "navegable" de DRF necesita archivos estaticos que no se sirven
+    'DEFAULT_RENDERER_CLASSES': (
+        ('rest_framework.renderers.JSONRenderer', 'rest_framework.renderers.BrowsableAPIRenderer')
+        if DEBUG else ('rest_framework.renderers.JSONRenderer',)
+    ),
+}
+
+# Cache compartida entre los procesos de gunicorn (en memoria, cada proceso llevaria su cuenta):
+# guarda los intentos de login (limite de 5/min) y los datos de usuario que se revisan cada 30 s.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': os.getenv('CACHE_DIR', os.path.join(tempfile.gettempdir(), 'hogar-cache')),
+    }
+}
+
+# ---------- OmniRoute (dictado con IA) ----------
+# Opcional: si OMNIROUTE_URL esta vacio, el dictado usa solo el reconocimiento local.
+# El navegador nunca habla con OmniRoute: pasa por /api/dictado/ (la clave queda en el servidor).
+OMNIROUTE_URL = os.getenv('OMNIROUTE_URL', '').rstrip('/')
+OMNIROUTE_API_KEY = os.getenv('OMNIROUTE_API_KEY', '')
+OMNIROUTE_MODEL = os.getenv('OMNIROUTE_MODEL', 'inventario-fallback')
+
+# ---------- Produccion (DEBUG=False) ----------
+if not DEBUG:
+    # Railway termina HTTPS en su proxy y avisa con X-Forwarded-Proto
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True') == 'True'
+    # el chequeo de salud de Railway entra por HTTP interno
+    SECURE_REDIRECT_EXEMPT = [r'^api/salud/$']
+    # sin includeSubdomains: *.up.railway.app es compartido con otros proyectos
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '2592000'))
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_REFERRER_POLICY = 'same-origin'
+    X_FRAME_OPTIONS = 'DENY'
+
+# Errores al log de Railway (con DEBUG=False Django no los muestra en pantalla)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'consola': {'class': 'logging.StreamHandler'}},
+    'root': {'handlers': ['consola'], 'level': os.getenv('LOG_LEVEL', 'INFO')},
 }
 
 # Configuración de tiempos de vida para Tokens JWT

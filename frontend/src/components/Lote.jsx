@@ -395,6 +395,8 @@ export function ModalLoteVoz() {
           producto: null,
           dudas: []
         }));
+      // sin respuesta de la IA (no configurada o caida): se usa la interpretacion local
+      if (!mapeados.length) throw new Error('sin IA');
       setItemsEntendidos(mapeados);
     } catch {
       if (numero !== consulta.current) return;

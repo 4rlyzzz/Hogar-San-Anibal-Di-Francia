@@ -30,6 +30,7 @@ import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js'
 import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
 import { interpretarDictado, tipoDictado } from './logica/dictado.js';
+import { procesarTextoConOmniroute } from './servicios/Omniroute.js';
 
 // envases (en plural)
 export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes', 'botellas', 'frascos', 'sobres'];
@@ -1519,45 +1520,93 @@ export function cantidadDicha(valor) {
   return typeof n === 'number' && Number.isFinite(n) && n > 0 && n <= cantidadMaxima ? redondear(n) : null;
 }
 
-// lo que se dijo (o se escribio) se separa en productos, cada uno con su donador
-// si ya hay una lista, sigue con su tipo; si no, hay que decir si es ingreso o salida (no se adivina)
-export function agregarDictado(v) {
+
+export async function agregarDictado(v) {
+  // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
   const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
   const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
-  if (dicho.ambos) falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
-  const tipo = dicho.tipo ?? abierta;
-  if (!tipo) falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
-  if (tipo !== (abierta ?? tipo)) falla(`Tienes una lista de ${abierta.toLowerCase()} sin guardar: confírmala o descártala primero.`, 'dictado');
 
-  const entendido = interpretarDictado(dicho.resto, todosLosProductos(), { donadores: estado.donadores, actividades: opcionesActividad() });
-  if (entendido.length === 0) falla(`No reconocí ningún producto. Prueba con algo como "${tipo.toLowerCase()} de dos kilos de arroz y tres latas de leche".`, 'dictado');
+  // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
+  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), { 
+    donadores: estado.donadores, 
+    actividades: opcionesActividad() 
+  });
+
+  // 3. OmniRoute (LLM): Parsing de alta precisión para productos, cantidades y fechas ISO
+  const itemsProcesados = await procesarTextoConOmniroute(v.dictado);
+
+  // --- FILTRO POST-PROCESADO: Anti-alucinaciones y limpieza de ruido ---
+  const ruídosComunes = new Set(['eh', 'um', 'ah', 'pantalla', 'ruido', 'undefined', 'null', 'algo', 'cosa']);
+  const itemsValidos = itemsProcesados.filter(item => {
+    if (!item.producto || typeof item.producto !== 'string') return false;
+    const nombreLimpio = item.producto.trim().toLowerCase();
+    
+    // Descarte de palabras vacías/incoherentes de 1 sola letra o de la lista de ruido
+    if (nombreLimpio.length < 2) return false;
+    if (ruídosComunes.has(nombreLimpio)) return false;
+
+    return true;
+  });
+
+  // Determinar la operación dominante (Ingreso vs Salida)
+  if (dicho.ambos) {
+    falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
+  }
+  // 1. lo dicho, 2. lo que entendio la IA, 3. la lista que ya esta abierta
+  const tipoIA = { salida: 'Salida', ingreso: 'Ingreso' }[itemsValidos[0]?.tipo] ?? null;
+  const tipo = dicho.tipo ?? abierta ?? tipoIA;
+  if (!tipo) {
+    falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
+  }
+  if (abierta && tipo !== abierta) {
+    falla(`Tienes una lista de ${abierta.toLowerCase()} sin guardar: confírmala o descártala primero.`, 'dictado');
+  }
 
   if (!abierta) estado.lote = { tipo, items: [] };
   const lote = estado.lote;
   const esIngreso = tipo === 'Ingreso';
-  for (const r of entendido) {
+
+  // Usar la lista filtrada de la IA como base principal; si falló por completo, usar el parser local
+  const listaBase = itemsValidos.length > 0 ? itemsValidos : interpretadoLocal;
+
+  if (listaBase.length === 0) {
+    falla('No se pudo reconocer ningún producto claro en el dictado. Intenta nuevamente.', 'dictado');
+  }
+
+  // 4. Mapeo final y fusión de metadatos (Híbrido IA + Local)
+  for (let i = 0; i < listaBase.length; i++) {
+    const itemIA = itemsValidos[i] || {};
+    const r = interpretadoLocal[i] || interpretadoLocal[0] || {};
+
+    // 💡 Prioridad de Fecha: 1. Fecha ISO de OmniRoute, 2. Regex del Parser Local
+    const fechaFinal = itemIA.vence || (r.vence && reglas.vencimiento(r.vence).ok ? r.vence : null);
+
+    // 💡 Mapeo de Donador: 1. Donador ID desde la BD local, 2. Texto del donador dicho
+    const donadorId = r.donador ? String(r.donador.id) : '';
+    const donadorTexto = r.donadorDicho || itemIA.donador || '';
+    const actividadTexto = r.actividad || itemIA.actividad || '';
+
     lote.items.push(nuevoItem({
       origen: 'voz',
-      dicho: r.dicho.slice(0, 100),
-      nombreDicho: r.nombreDicho.slice(0, largos.nombreProducto),
-      // una cantidad que no sirve (0, negativa, enorme) no se guarda: la fila pide escribirla
-      cantidad: cantidadDicha(r.cantidad),
-      dudas: r.dudas.map(d => claveProducto(d.categoria, d.item.id)),
+      dicho: (itemIA.producto || r.dicho || '').slice(0, 100),
+      nombreDicho: (itemIA.producto || r.nombreDicho || '').slice(0, largos.nombreProducto),
+      cantidad: cantidadDicha(itemIA.cantidad ?? r.cantidad),
+      dudas: r.dudas ? r.dudas.map(d => claveProducto(d.categoria, d.item.id)) : [],
       avisos: r.presentacion ? { presentacion: r.presentacion } : {},
-      // la fecha dicha, si es valida (no pasada ni muy lejana)
-      ...(esIngreso && r.vence && reglas.vencimiento(r.vence).ok && { vence: r.vence }),
+      
+      // Metadatos adjuntos para rendering visual (previsualización y lista final)
+      ...(esIngreso && fechaFinal && { vence: fechaFinal }),
       ...(r.producto && { categoria: r.producto.categoria, productoId: r.producto.item.id }),
-      // quien dono solo cuenta en los ingresos
       ...(esIngreso && {
-        donador: r.donador ? String(r.donador.id) : '',
-        donadorDicho: r.donadorDicho.slice(0, largos.nombreDonador),
-        actividad: r.actividad ?? '',
+        donador: donadorId,
+        donadorDicho: donadorTexto.slice(0, largos.nombreDonador),
+        actividad: actividadTexto,
       }),
     }));
   }
+
   abrirLista();
 }
-
 // ---------- editar o quitar una fila ----------
 // nuevo: si se vuelve sin guardar, la fila se quita y se regresa a donde se eligio (la busqueda)
 export function abrirItem(id, { nuevo = false } = {}) {

@@ -1,0 +1,29 @@
+{
+	# Railway pone HTTPS delante: aqui solo HTTP en el puerto que da Railway
+	auto_https off
+	admin off
+}
+
+:{$PORT:8080} {
+	root * /srv
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		# la CSP va en index.html; esto impide meter la app dentro de otra pagina
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=()"
+		-Server
+	}
+
+	# los archivos con hash en el nombre no cambian nunca; index.html siempre se pide de nuevo
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@index path / /index.html
+	header @index Cache-Control "no-cache"
+
+	try_files {path} /index.html
+	file_server
+}

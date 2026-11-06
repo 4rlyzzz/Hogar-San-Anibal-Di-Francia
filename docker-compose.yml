@@ -1,0 +1,56 @@
+# Prueba local de lo mismo que corre en Railway (cada servicio = un servicio de Railway).
+# Railway NO usa este archivo; para desarrollar sigue usando runserver y npm run dev.
+#
+#   1. Copiar .env.compose.example como .env.compose y llenar las contraseñas
+#   2. docker compose --env-file .env.compose up --build
+#   3. Abrir http://localhost:8080
+#   4. Primer administrador de la app:
+#        docker compose --env-file .env.compose exec backend python manage.py crear_usuario
+
+services:
+  couchdb:
+    build: ./couchDB
+    environment:
+      COUCHDB_USER: ${COUCHDB_ADMIN_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD:?Falta COUCHDB_ADMIN_PASSWORD en .env.compose}
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+    # sin "ports": igual que en Railway, CouchDB solo se ve desde el backend
+
+  backend:
+    build: ./backend
+    environment:
+      PORT: 8000
+      SECRET_KEY: ${SECRET_KEY:?Falta SECRET_KEY en .env.compose}
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      CORS_ALLOWED_ORIGINS: http://localhost:8080
+      # en local no hay HTTPS
+      SECURE_SSL_REDIRECT: "False"
+      SECURE_HSTS_SECONDS: "0"
+      NUM_PROXIES: "0"
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: casa_app
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:?Falta COUCHDB_PASSWORD en .env.compose}
+      COUCHDB_ADMIN_USER: ${COUCHDB_ADMIN_USER:-admin}
+      COUCHDB_ADMIN_PASSWORD: ${COUCHDB_ADMIN_PASSWORD}
+      OMNIROUTE_URL: ${OMNIROUTE_URL:-}
+      OMNIROUTE_API_KEY: ${OMNIROUTE_API_KEY:-}
+      OMNIROUTE_MODEL: ${OMNIROUTE_MODEL:-inventario-fallback}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - couchdb
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000/api/
+    environment:
+      PORT: 8080
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  couchdb_data:

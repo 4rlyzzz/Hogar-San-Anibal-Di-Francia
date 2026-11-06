@@ -53,17 +53,13 @@ cd backend
 python manage.py migrate
 ```
 
-Dentro de backend crear un archivo `.env` con el siguiente contenido (llenar con los datos usados para administrar CouchDB):
+Dentro de backend copiar `.env.example` como `.env` y llenarlo (la contraseña de `casa_app` es la que pusiste en `setup.ps1`). Igual en frontend: copiar `frontend/.env.example` como `frontend/.env`.
 
-```powershell
-COUCHDB_URL=http://127.0.0.1:5984
-COUCHDB_USER=<user>
-COUCHDB_PASSWORD=<password>
-COUCHDB_DB=<database name>
-SECRET_KEY=django-insecure-default-key
-DEBUG=True
-```
 > **Nota:**  No compartas ni subas el archivo `.env` al repositorio, son credenciales reales y datos críticos.
+
+> **Dictado con IA (opcional):** si corres OmniRoute en tu PC, pon `OMNIROUTE_URL=http://localhost:20128` (y su API key) en `backend/.env`. Sin eso el dictado usa el reconocimiento local.
+
+> **Publicar en internet:** ver [DESPLIEGUE.md](DESPLIEGUE.md) (Railway).
 
 Crear el primer administrador (pide usuario, nombre y contraseña; solo se hace una vez):
 
