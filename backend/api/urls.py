@@ -1,4 +1,5 @@
 from django.urls import path
+from .dictado import DictadoView, SaludView
 from .movimientos import RegistrarMovimientoView, UnirProductosView
 from .views import (
     CustomLoginView,
@@ -14,6 +15,8 @@ from .views import (
 )
 
 urlpatterns = [
+    path('salud/', SaludView.as_view(), name='salud'),
+    path('dictado/', DictadoView.as_view(), name='dictado'),
     path('auth/login/', CustomLoginView.as_view(), name='login'),
     path('auth/refresh/', RenovarTokenView.as_view(), name='token_refresh'),
     path('auth/yo/', MiCuentaView.as_view(), name='mi-cuenta'),

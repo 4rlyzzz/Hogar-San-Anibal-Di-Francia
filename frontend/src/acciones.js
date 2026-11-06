@@ -1549,7 +1549,12 @@ export async function agregarDictado(v) {
   });
 
   // Determinar la operación dominante (Ingreso vs Salida)
-  const tipo = dicho.tipo ?? (itemsValidos[0]?.tipo === 'salida' ? 'Salida' : 'Ingreso') ?? abierta;
+  if (dicho.ambos) {
+    falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
+  }
+  // 1. lo dicho, 2. lo que entendio la IA, 3. la lista que ya esta abierta
+  const tipoIA = { salida: 'Salida', ingreso: 'Ingreso' }[itemsValidos[0]?.tipo] ?? null;
+  const tipo = dicho.tipo ?? abierta ?? tipoIA;
   if (!tipo) {
     falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
   }
