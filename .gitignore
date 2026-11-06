@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example
-!.env.local
+!.env.compose.example
 
 # Base de datos local de Django
 *.sqlite3

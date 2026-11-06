@@ -264,8 +264,9 @@ export function tipoDictado(texto) {
   resto += original.slice(desde);
 
   return {
-    // Si se dijeron ambos, tomamos la PRIMERA intención mencionada como la principal
-    tipo: dichos.length > 0 ? dichos[0] : null,
+    // si se dijeron ambos no se adivina: la pantalla avisa que se registre uno a la vez
+    tipo: dichos.length === 1 ? dichos[0] : null,
+    ambos: dichos.length > 1,
     resto: resto.replace(/\s+/g, ' ').replace(/^[\s,.;:]+/, '').trim(),
   };
 }

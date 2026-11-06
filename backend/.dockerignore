@@ -1,0 +1,10 @@
+# nunca dentro de la imagen: credenciales y datos locales
+.env
+.env.*
+db.sqlite3
+*.sqlite3
+__pycache__/
+**/__pycache__/
+*.pyc
+venv/
+.venv/
