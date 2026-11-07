@@ -359,6 +359,20 @@ function LineaEntendida({ r }) {
   );
 }
 
+const erroresMicrofono = {
+  'not-allowed': 'Permiso de micrófono denegado. Actívalo en el candado junto a la dirección.',
+  'service-not-allowed': 'Permiso de micrófono denegado. Actívalo en el candado junto a la dirección.',
+  'audio-capture': 'No se encontró el micrófono o lo está usando otro programa.',
+  'network': 'Sin conexión con el servicio de voz. Revisa internet o usa Chrome o Edge.',
+};
+
+function detenerReconocedor(ref) {
+  const r = ref.current;
+  if (!r) return;
+  r.debeSeguir = false;
+  try { r.abort(); } catch { /* ya estaba detenido */ }
+}
+
 export function ModalLoteVoz() {
   const f = useFormulario();
   const [texto, setTexto] = useState('');
@@ -440,25 +454,39 @@ export function ModalLoteVoz() {
     };
 
     r.onerror = (e) => {
-      if (e.error !== 'no-speech') {
-        setAviso('Error o corte en el micrófono.');
-        setGrabando(false);
-      }
+      // 'no-speech' es solo silencio: se sigue escuchando
+      if (e.error === 'no-speech') return;
+      // cualquier otro error detiene de verdad (si no, onend lo reinicia y falla en bucle)
+      r.debeSeguir = false;
+      if (e.error !== 'aborted') setAviso(erroresMicrofono[e.error] ?? 'Error o corte en el micrófono.');
+      if (reconocedor.current === r) setGrabando(false);
     };
 
     r.onend = () => {
-      if (reconocedor.current?.debeSeguir) {
-        try { r.start(); } catch { setGrabando(false); }
-      } else {
+      // solo se reinicia el reconocedor activo y si no se pidio parar
+      if (r.debeSeguir && reconocedor.current === r) {
+        try { r.start(); } catch { r.debeSeguir = false; setGrabando(false); }
+      } else if (reconocedor.current === r) {
         setGrabando(false);
       }
     };
 
+    // nunca dos reconocedores a la vez
+    detenerReconocedor(reconocedor);
     r.debeSeguir = true;
     reconocedor.current = r;
-    r.start();
-    setGrabando(true);
+    setAviso('');
+    try {
+      r.start();
+      setGrabando(true);
+    } catch {
+      r.debeSeguir = false;
+      setAviso('No se pudo iniciar el micrófono.');
+    }
   }
+
+  // al cerrar la ventana de voz se apaga el microfono
+  useEffect(() => () => detenerReconocedor(reconocedor), []);
 
   function alternar() {
     if (grabando) {
