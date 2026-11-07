@@ -44,7 +44,9 @@ def _texto(valor, maximo):
 
 def limpiar_items(contenido):
     """Lo que devolvio el modelo -> lista de items con solo los campos esperados."""
-    contenido = str(contenido or '').strip()
+    contenido = str(contenido or '')
+    # algunos modelos (Qwen, DeepSeek) escriben su razonamiento entre <think> antes del JSON
+    contenido = re.sub(r'<think>.*?</think>', '', contenido, flags=re.S).strip()
     contenido = re.sub(r'^```(?:json)?\s*|\s*```$', '', contenido)
     try:
         datos = json.loads(contenido)
@@ -92,15 +94,21 @@ class DictadoView(APIView):
         if settings.OMNIROUTE_API_KEY:
             cabeceras['Authorization'] = f'Bearer {settings.OMNIROUTE_API_KEY}'
         try:
-            r = requests.post(f'{settings.OMNIROUTE_URL}/v1/chat/completions', headers=cabeceras, timeout=TIMEOUT, json={
+            cuerpo = {
                 'model': settings.OMNIROUTE_MODEL,
-                'max_tokens': 280,
+                # los modelos que "piensan" (GPT OSS, Gemini 2.5) gastan parte de este limite
+                # razonando antes de responder: con poco margen la respuesta llega vacia
+                'max_tokens': settings.OMNIROUTE_MAX_TOKENS,
                 'temperature': 0.0,
                 'messages': [
                     {'role': 'system', 'content': INSTRUCCIONES},
                     {'role': 'user', 'content': texto},
                 ],
-            })
+            }
+            if settings.OMNIROUTE_REASONING_EFFORT:
+                cuerpo['reasoning_effort'] = settings.OMNIROUTE_REASONING_EFFORT
+            r = requests.post(f'{settings.OMNIROUTE_URL}/v1/chat/completions', headers=cabeceras,
+                              timeout=TIMEOUT, json=cuerpo)
             r.raise_for_status()
             contenido = r.json()['choices'][0]['message']['content']
         except (requests.exceptions.RequestException, ValueError, KeyError, IndexError, TypeError):
