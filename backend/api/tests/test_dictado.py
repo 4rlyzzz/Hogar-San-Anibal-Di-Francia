@@ -46,7 +46,21 @@ class DictadoTests(PruebaAPI):
         cabeceras = post.call_args.kwargs['headers']
         self.assertEqual(url, 'http://omniroute.test/v1/chat/completions')
         self.assertEqual(cabeceras['Authorization'], 'Bearer clave-de-prueba')
-        self.assertEqual(post.call_args.kwargs['json']['model'], 'modelo')
+        cuerpo = post.call_args.kwargs['json']
+        self.assertEqual(cuerpo['model'], 'modelo')
+        self.assertEqual(cuerpo['reasoning_effort'], 'low')
+
+    @override_settings(OMNIROUTE_REASONING_EFFORT='')
+    def test_sin_reasoning_effort_no_se_envia(self):
+        self.entrar_como(self.usuario)
+        with mock.patch.object(dictado.requests, 'post', return_value=RespuestaIA('[]')) as post:
+            self.assertEqual(self.dictar().status_code, 200)
+        self.assertNotIn('reasoning_effort', post.call_args.kwargs['json'])
+
+    def test_respuesta_vacia_o_con_razonamiento(self):
+        self.assertEqual(dictado.limpiar_items(None), [])
+        self.assertEqual(dictado.limpiar_items('<think>el usuario dice arroz</think>\n[{"producto": "Arroz", "cantidad": 2}]'),
+                         [{'tipo': None, 'producto': 'Arroz', 'cantidad': 2, 'unidad': '', 'vence': None}])
 
     def test_omniroute_caido_responde_503(self):
         self.entrar_como(self.usuario)
