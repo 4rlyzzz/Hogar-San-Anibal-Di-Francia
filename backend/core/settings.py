@@ -10,8 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
+import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
@@ -69,9 +71,22 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 
+def _origenes(nombre, defecto=''):
+    """Solo origenes completos (https://dominio). En Railway, una referencia a un servicio
+    que aun no tiene dominio queda como 'https://' y haria caer a Django al arrancar."""
+    validos = []
+    for origen in _lista(nombre, defecto):
+        partes = urlparse(origen)
+        if partes.scheme in ('http', 'https') and partes.netloc:
+            validos.append(f'{partes.scheme}://{partes.netloc}')
+        else:
+            print(f'AVISO: {nombre} ignora el valor incompleto {origen!r}', file=sys.stderr)
+    return validos
+
+
 # Origenes del frontend que pueden llamar a la API (en Railway: https://<frontend>.up.railway.app)
-CORS_ALLOWED_ORIGINS = _lista('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
-CSRF_TRUSTED_ORIGINS = _lista('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_ORIGINS))
+CORS_ALLOWED_ORIGINS = _origenes('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+CSRF_TRUSTED_ORIGINS = _origenes('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_ORIGINS))
 
 # Configuración de Django REST Framework con JWT
 REST_FRAMEWORK = {
@@ -120,6 +135,10 @@ CACHES = {
 OMNIROUTE_URL = os.getenv('OMNIROUTE_URL', '').rstrip('/')
 OMNIROUTE_API_KEY = os.getenv('OMNIROUTE_API_KEY', '')
 OMNIROUTE_MODEL = os.getenv('OMNIROUTE_MODEL', 'inventario-fallback')
+# Para modelos que razonan antes de responder: cuanto piensan (low/medium/high; vacio = no se envia)
+# y el limite de tokens de la respuesta, que incluye ese razonamiento.
+OMNIROUTE_REASONING_EFFORT = os.getenv('OMNIROUTE_REASONING_EFFORT', 'low')
+OMNIROUTE_MAX_TOKENS = int(os.getenv('OMNIROUTE_MAX_TOKENS', '1500'))
 
 # ---------- Produccion (DEBUG=False) ----------
 if not DEBUG:

@@ -69,7 +69,7 @@ Antes: sube a GitHub la rama con estos cambios y en Railway conecta tu cuenta de
 
 ### 3.1 Crear el proyecto y CouchDB
 1. Railway → **New Project** → **Deploy from GitHub repo** → elige el repositorio.
-2. Al servicio creado ponle de nombre **`couchdb`** (Settings → nombre). Así la dirección privada queda `couchdb.railway.internal`.
+2. Al **servicio** creado (la tarjeta dentro del proyecto, no el proyecto) ponle de nombre **`couchdb`**: clic en la tarjeta → pestaña **Settings** del servicio → nombre arriba. El nombre del proyecto puede ser cualquiera. El del servicio sí importa: las referencias como `${{couchdb.RAILWAY_PRIVATE_DOMAIN}}` lo usan.
 3. **Settings → Source → Root Directory:** `couchDB`
 4. **Variables:**
    ```
@@ -80,10 +80,14 @@ Antes: sube a GitHub la rama con estos cambios y en Railway conecta tu cuenta de
 6. **No** generes dominio público para este servicio.
 
 ### 3.2 Backend
+
+> **Orden:** backend y frontend se referencian entre sí (`${{frontend.RAILWAY_PUBLIC_DOMAIN}}` y `${{backend.RAILWAY_PUBLIC_DOMAIN}}`). Una referencia a un servicio que todavía no existe o no tiene dominio queda vacía. Lo más simple es crear **los dos servicios y generar sus dos dominios** (Settings → Networking → Generate Domain) **antes** de cargar las variables.
+
 1. En el proyecto: **New → GitHub Repo** (el mismo repositorio). Nombre: **`backend`**.
 2. **Root Directory:** `backend`
 3. **Variables:**
    ```
+   PORT=8080
    SECRET_KEY=<credencial 3>
    COUCHDB_URL=http://${{couchdb.RAILWAY_PRIVATE_DOMAIN}}:5984
    COUCHDB_USER=casa_app
@@ -96,7 +100,8 @@ Antes: sube a GitHub la rama con estos cambios y en Railway conecta tu cuenta de
    `healthcheck.railway.app` es el nombre con el que llega el chequeo de salud de Railway; sin él, el deploy queda esperando.
    No pongas `DEBUG`: sin esa variable Django arranca en modo producción.
    Lo que va entre `${{ }}` lo completa Railway: son referencias a variables de otros servicios, así la contraseña del administrador se escribe una sola vez.
-4. **Settings → Networking → Generate Domain** (te da algo como `backend-xxxx.up.railway.app`).
+4. **Settings → Networking → Generate Domain**, con target port **8080** (el mismo de `PORT`). Te da algo como `backend-xxxx.up.railway.app`.
+   Los cambios de configuración quedan **pendientes** hasta que pulses **Deploy / Apply changes** arriba en el lienzo: recién ahí se crea el dominio.
 5. **Settings → Deploy → Healthcheck Path:** `/api/salud/`
 6. Al arrancar, el backend corre `setup_couch` solo: crea las bases, el usuario `casa_app`, los permisos y los índices. Revisa en **Deploy Logs** que diga `CouchDB listo.`
 
@@ -104,10 +109,11 @@ Antes: sube a GitHub la rama con estos cambios y en Railway conecta tu cuenta de
 1. **New → GitHub Repo** (el mismo). Nombre: **`frontend`**. **Root Directory:** `frontend`
 2. **Variables:**
    ```
+   PORT=8080
    VITE_API_URL=https://${{backend.RAILWAY_PUBLIC_DOMAIN}}/api/
    ```
    Esta variable se usa **al construir**: si la cambias, tienes que hacer redeploy del frontend.
-3. **Settings → Networking → Generate Domain.** Esa es la dirección que van a usar en el hogar.
+3. **Settings → Networking → Generate Domain**, con target port **8080**. Esa es la dirección que van a usar en el hogar.
 4. Vuelve al **backend** y haz redeploy, para que `CORS_ALLOWED_ORIGINS` tome el dominio del frontend.
 
 ### 3.4 Primer Administrador de la app
