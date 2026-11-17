@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { interpretarDictado, separarDictado, buscarFecha, corregirNombres, tipoDictado } from '../src/logica/dictado.js';
+import { interpretarDictado, separarDictado, buscarFecha, corregirNombres, tipoDictado, productoDeNombre, cantidadDeLaIA } from '../src/logica/dictado.js';
 
 const productos = [
   { item: { nombre: 'Arroz', unidad: 'kg' }, categoria: 'Alimentos' },
@@ -101,4 +101,53 @@ test('separar y fechas', () => {
 
 test('corrige nombres mal escuchados', () => {
   assert.equal(corregirNombres('tres latas de leche y borrada de gloria', productos), 'tres latas de Leche Evaporada Gloria');
+});
+
+test('el nombre que entendio la IA se busca con su dosis', () => {
+  const salud = [
+    { item: { id: 1, nombre: 'Paracetamol 100mg', unidad: 'cajas' }, categoria: 'Salud' },
+    { item: { id: 2, nombre: 'Paracetamol 50 mg', unidad: 'cajas' }, categoria: 'Salud' },
+    { item: { id: 3, nombre: 'Paracetamol Jarabe 120 mg/5 ml', unidad: 'frascos' }, categoria: 'Salud' },
+    ...productos,
+  ];
+  const nombre = dicho => productoDeNombre(dicho, salud).producto?.item.nombre ?? null;
+  assert.equal(nombre('Paracetamol 100 mg'), 'Paracetamol 100mg');
+  assert.equal(nombre('paracetamol 100 miligramos'), 'Paracetamol 100mg');
+  assert.equal(nombre('Paracetamol 50mg'), 'Paracetamol 50 mg');
+  assert.equal(nombre('Paracetamol jarabe 120 mg/5 ml'), 'Paracetamol Jarabe 120 mg/5 ml');
+  // una dosis que no esta registrada no se cambia por otra
+  assert.equal(nombre('Paracetamol 200 mg'), null);
+  // sin dosis y con varios: se pregunta cual
+  assert.deepEqual(productoDeNombre('Paracetamol', salud).dudas.map(d => d.item.id), [1, 2]);
+  // el tamaño registrado aparte del nombre tambien cuenta
+  assert.equal(nombre('Leche Gloria 400 g'), 'Leche Evaporada Gloria');
+  assert.equal(nombre('Leche Gloria 1 kg'), null);
+  assert.equal(nombre('Arroz'), 'Arroz');
+  assert.equal(nombre('Fideos'), null);
+});
+
+test('el dictado local no repite la medida del nombre', () => {
+  const salud = [{ item: { id: 1, nombre: 'Paracetamol 100mg', unidad: 'cajas' }, categoria: 'Salud' }];
+  const [r] = interpretarDictado('dos cajas de paracetamol 100 mg', salud);
+  assert.equal(r.producto?.item.nombre, 'Paracetamol 100mg');
+  assert.equal(r.cantidad, 2);
+  assert.equal(r.nombreDicho, 'Paracetamol 100mg');
+});
+
+test('la cantidad de la IA no es el tamaño del envase', () => {
+  const arroz = { id: 9, nombre: 'Arroz', unidad: 'sacos', contenido: 50, medida: 'kg' };
+  // "5 sacos de arroz de 50 kg": la IA devolvio 50 kg, el dictado local entendio 5 sacos
+  assert.equal(cantidadDeLaIA(50, 'kg', arroz, 5), 5);
+  assert.equal(cantidadDeLaIA(50, 'sacos', arroz, 5), 5);
+  assert.equal(cantidadDeLaIA(5, 'sacos', arroz, 5), 5);
+  assert.equal(cantidadDeLaIA(5, 'sacos de 50 kg', arroz, null), 5);
+  // "50 kilos de arroz" es un saco; "100 kg" son dos
+  assert.equal(cantidadDeLaIA(50, 'kilos', arroz, null), 1);
+  assert.equal(cantidadDeLaIA(100, 'kg', arroz, null), 2);
+  // sin otra pista, 50 sacos son 50 sacos
+  assert.equal(cantidadDeLaIA(50, 'sacos', arroz, null), 50);
+  assert.equal(cantidadDeLaIA(500, 'gramos', { nombre: 'Avena', unidad: 'kg' }, null), 0.5);
+  assert.equal(cantidadDeLaIA('cinco', 'sacos', arroz, 5), 5);
+  assert.deepEqual(interpretarDictado('5 sacos de arroz de 50 kg que vencen el 15 de octubre de 2027', [{ item: arroz, categoria: 'Alimentos' }])
+    .map(r => [r.producto?.item.nombre, r.cantidad, r.vence]), [['Arroz', 5, '2027-10-15']]);
 });
