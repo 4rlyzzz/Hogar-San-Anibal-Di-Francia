@@ -35,10 +35,12 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
    - Escribe la medida abreviada con cifras: "cien miligramos" -> "100 mg", "medio litro" -> "500 ml".
    - La presentación ("en cajas de 10 unidades", "saco de 50 kg", "blíster de 10") solo describe el producto: no es la cantidad.
 5. CANTIDAD Y UNIDAD (NO HAGAS CÁLCULOS NI CONVERSIONES):
-   - cantidad: el número que se dijo para cuántos entran o salen, TAL CUAL. Nunca lo multipliques ni lo dividas. Mayor a 0; si no se comprende, usa 1.
+   - cantidad: el número que se dijo para cuántos entran o salen, TAL CUAL. Nunca lo multipliques ni lo dividas. Mayor a 0.
+   - Si no se dijo cuántos (solo el nombre o el tamaño del envase), cantidad null. NUNCA uses el tamaño del envase como cantidad.
    - unidad: la palabra dicha justo después de ese número ("cajas", "unidades", "kg", "sacos"). Si no se dijo ninguna, null.
    - Ejemplo: "dos cajas de paracetamol 100 mg" -> producto "Paracetamol 100 mg", cantidad 2, unidad "cajas".
    - Ejemplo: "salida de 60 paracetamol 100 mg en cajas de 10 unidades" -> producto "Paracetamol 100 mg", cantidad 60, unidad null.
+   - Ejemplo: "salida de paracetamol 100 mg en cajas de 20 unidades" -> producto "Paracetamol 100 mg", cantidad null, unidad null.
    - Ejemplo: "salida de 30 unidades de ibuprofeno 400 mg" -> producto "Ibuprofeno 400 mg", cantidad 30, unidad "unidades".
    - Ejemplo: "entrada de 5 sacos de arroz de 50 kg" -> producto "Arroz 50 kg", cantidad 5, unidad "sacos" (NUNCA cantidad 50).
    - Ejemplo: "tres latas de leche gloria de 400 gramos" -> producto "Leche Gloria 400 g", cantidad 3, unidad "latas".
@@ -47,7 +49,7 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
    - correcciones: si el usuario corrige una cifra o fecha, usa SIEMPRE la última opción.
 
 Responde SOLO el JSON plano, sin markdown:
-[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":1,"unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null"}]"""
+[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null"}]"""
 
 
 def _texto(valor, maximo):

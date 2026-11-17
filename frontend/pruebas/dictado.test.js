@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { interpretarDictado, separarDictado, buscarFecha, corregirNombres, tipoDictado, productoDeNombre, cantidadDeLaIA } from '../src/logica/dictado.js';
+import { interpretarDictado, separarDictado, buscarFecha, corregirNombres, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal } from '../src/logica/dictado.js';
 
 const productos = [
   { item: { nombre: 'Arroz', unidad: 'kg' }, categoria: 'Alimentos' },
@@ -171,4 +171,44 @@ test('el numero dicho es la cantidad, la presentacion solo describe', () => {
   assert.equal(cantidadDeLaIA(60, null, para, null), 60);
   assert.equal(cantidadDeLaIA(60, 'cajas', para, null), 60);
   assert.equal(cantidadDeLaIA(30, 'unidades', para, null), 3);
+});
+
+test('nombres mal escuchados por como suenan', () => {
+  const salud = [
+    { item: { id: 1, nombre: 'Arpiprazol 15 mg', unidad: 'blísters', contenido: 10, medida: 'unidades' }, categoria: 'Salud' },
+    { item: { id: 2, nombre: 'Arpiprazol 50 mg', unidad: 'blísters', contenido: 20, medida: 'unidades' }, categoria: 'Salud' },
+    { item: { id: 3, nombre: 'Pollo', unidad: 'kg' }, categoria: 'Alimentos' },
+    { item: { id: 4, nombre: 'Bollo', unidad: 'unidades' }, categoria: 'Alimentos' },
+  ];
+  const nombre = dicho => productoDeNombre(dicho, salud).producto?.item.nombre ?? null;
+  // el reconocedor escribio "arbibrasol"
+  assert.equal(nombre('Arbibrasol 15 mg'), 'Arpiprazol 15 mg');
+  assert.equal(nombre('arbibrasol 50 mg'), 'Arpiprazol 50 mg');
+  // la dosis sigue mandando
+  assert.equal(nombre('Arbibrasol 30 mg'), null);
+  // lo que se escucho igual gana a lo que solo suena parecido
+  assert.equal(nombre('pollo'), 'Pollo');
+  const [r] = interpretarDictado('15 arbibrasol 15 miligramos en blister de 10 unidades', salud);
+  assert.deepEqual([r.producto?.item.nombre, r.cantidad], ['Arpiprazol 15 mg', 15]);
+});
+
+test('sin decir cuantos no se inventa la cantidad', () => {
+  const salud = [
+    { item: { id: 1, nombre: 'Paracetamol 100 mg caja 10 unidades', unidad: 'cajas', contenido: 10, medida: 'unidades' }, categoria: 'Salud' },
+    { item: { id: 2, nombre: 'Paracetamol 100 mg caja 20 unidades', unidad: 'cajas', contenido: 20, medida: 'unidades' }, categoria: 'Salud' },
+  ];
+  const locales = interpretarDictado(tipoDictado('Salida de paracetamol 100 miligramos en cajas de 20 unidades.').resto, salud);
+  assert.equal(locales[0].producto?.item.id, 2);
+  assert.equal(locales[0].cantidad, null);
+  // la IA dijo solo "Paracetamol 100 mg": empatan, y desempata lo que entendio el local
+  const ia = productoDeNombre('Paracetamol 100 mg', salud);
+  assert.equal(ia.dudas.length, 2);
+  const elegido = desempatarConLocal(ia, locales);
+  assert.equal(elegido.producto?.item.id, 2);
+  // la IA tomo el 20 del tamaño como cantidad: no se usa
+  assert.equal(cantidadDeLaIA(20, 'unidades', elegido.producto.item, locales[0]), null);
+  assert.equal(cantidadDeLaIA(null, null, elegido.producto.item, locales[0]), null);
+  // si se dijo, se respeta
+  const [con] = interpretarDictado('salida de 3 paracetamol 100 miligramos en cajas de 20 unidades', salud);
+  assert.equal(cantidadDeLaIA(3, 'cajas', con.producto.item, con), 3);
 });
