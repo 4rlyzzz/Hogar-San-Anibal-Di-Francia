@@ -1593,7 +1593,7 @@ export async function agregarDictado(v) {
     const presentacion = itemsValidos[i] ? localDelProducto?.presentacion : r.presentacion;
     // la cantidad de la IA en la unidad del producto ("5 sacos de 50 kg" no son 50 sacos)
     const cantidad = itemsValidos[i]
-      ? cantidadDeLaIA(itemIA.cantidad, itemIA.unidad, producto?.item, localDelProducto?.cantidad ?? null)
+      ? cantidadDeLaIA(itemIA.cantidad, itemIA.unidad, producto?.item, localDelProducto ?? null)
       : r.cantidad;
 
     // 💡 Prioridad de Fecha: 1. Fecha ISO de OmniRoute, 2. Regex del Parser Local
