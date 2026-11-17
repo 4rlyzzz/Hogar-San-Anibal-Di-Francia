@@ -29,7 +29,7 @@ import { inventarioVacio } from './logica/inventario.js';
 import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js';
 import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA } from './logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto } from './logica/dictado.js';
 import { procesarTextoConOmniroute } from './servicios/Omniroute.js';
 
 // envases (en plural)
@@ -1521,8 +1521,6 @@ export function cantidadDicha(valor) {
 }
 
 
-const mismoProducto = (a, b) => Boolean(a && b && a.categoria === b.categoria && a.item.id === b.item.id);
-
 export async function agregarDictado(v) {
   // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
   const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
@@ -1584,10 +1582,10 @@ export async function agregarDictado(v) {
 
     // el producto: el nombre que entendio la IA se busca entre los registrados (con su dosis);
     // no se toma el del parser local por su posicion, que puede ser de otro producto
-    let { producto, dudas } = itemsValidos[i] ? productoDeNombre(itemIA.producto, productos) : { producto: r.producto, dudas: r.dudas ?? [] };
-    // la IA dijo "Paracetamol" sin dosis y hay varios: si el local entendio uno de ellos, ese es
-    const delLocal = r.producto && dudas.find(d => mismoProducto(d, r.producto));
-    if (delLocal) [producto, dudas] = [delLocal, []];
+    // si empatan varios ("Paracetamol 100 mg" de cajas de 10 y de 20), vale el que entendio el local
+    const { producto, dudas } = itemsValidos[i]
+      ? desempatarConLocal(productoDeNombre(itemIA.producto, productos), interpretadoLocal)
+      : { producto: r.producto, dudas: r.dudas ?? [] };
     // lo que entendio el dictado local de ese mismo producto (sin importar en que orden lo puso)
     const localDelProducto = producto ? interpretadoLocal.find(x => mismoProducto(x.producto, producto)) : null;
     const presentacion = itemsValidos[i] ? localDelProducto?.presentacion : r.presentacion;
