@@ -61,6 +61,17 @@ const docenas = { docena: 12, docenas: 12 };
 
 const medidas = new Set(['kg', 'g', 'L', 'ml']);
 
+// la dosis ("100 miligramos") es parte del nombre: ni cantidad ni una palabra que diga otro producto
+const dosis = new Set(['mg', 'mcg', 'miligramo', 'miligramos', 'microgramo', 'microgramos']);
+
+// "de 400 gramos", "cajas de 10 unidades": lo que trae cada envase, no cuantos entran
+function esTamanoDicho(tokens, inicio, unidad) {
+  if (tokens[inicio - 1] !== 'de' || !unidad) return false;
+  if (medidas.has(unidad)) return true;
+  const envase = unidadesDichas[tokens[inicio - 2]];
+  return unidad === 'unidades' && Boolean(envase) && !medidas.has(envase) && envase !== 'unidades';
+}
+
 // ---------- fecha de vencimiento dicha ----------
 const meses = {
   enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
@@ -199,7 +210,7 @@ export function dividirPorCantidades(parte, productos = []) {
     const anterior = tokens[i - 1];
     const n = leerNumero(tokens, i);
     if (!n) {
-      if (!relleno.has(tokens[i]) && !(tokens[i] in unidadesDichas)) {
+      if (!relleno.has(tokens[i]) && !(tokens[i] in unidadesDichas) && !dosis.has(tokens[i])) {
         // "arroz 10 kilos leche...": ya estaba completo, la palabra nueva es otro producto
         if (producto && cantidad && despues) cortar(i);
         producto = true;
@@ -211,7 +222,8 @@ export function dividirPorCantidades(parte, productos = []) {
     // "y medio", "cada una" y "de un litro" (tamaño) siguen con lo anterior
     // tambien "de 150" (un tamaño dicho sin la unidad)
     const sigue = ((tokens[i] === 'medio' || tokens[i] === 'media') && anterior === 'y') || anterior === 'cada'
-      || (anterior === 'de' && (!unidad || medidas.has(unidad)) && !(tokens[n.fin] in docenas));
+      || (anterior === 'de' && (!unidad || medidas.has(unidad)) && !(tokens[n.fin] in docenas))
+      || esTamanoDicho(tokens, i, unidad);
     const conUnidad = Boolean(unidad) || tokens[n.fin] in docenas;
     // un numero sin unidad despues del nombre es parte del nombre ("avena 3 ositos"),
     // salvo que ese producto ya tenga su cantidad: "10 latas de leche 10 pollos"
@@ -400,27 +412,32 @@ export function productoDeNombre(nombre, productos) {
 }
 
 // ---------- la cantidad que entendio la IA ----------
-// la IA a veces toma el tamaño de la presentacion como la cantidad: "5 sacos de arroz de 50 kg" -> 50
-// aqui se pasa a la unidad del producto y se revisa con lo que entendio el dictado local
-// local: la cantidad que entendio el dictado local para ese mismo producto (o null)
+// la IA devuelve el numero tal como se dijo y la palabra que lo acompaña ("60" y null, "5" y "sacos");
+// la cuenta la hace este codigo, igual que el dictado local:
+// - sin unidad o con el envase del producto: es la cantidad ("60 paracetamol en cajas de 10" -> 60 cajas)
+// - con una medida o "unidades": se pasa a envases ("100 kg" de arroz en sacos de 50 kg -> 2 sacos)
+// local: lo que entendio el dictado local de ese mismo producto ({ cantidad, unidadDicha }) o null
 export function cantidadDeLaIA(cantidad, unidad, item, local = null) {
-  if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) return local;
+  if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) return local?.cantidad ?? null;
   if (!item) return cantidad;
   const dicha = unidadesDichas[plano(String(unidad ?? '')).match(/[a-zñ]+/)?.[0]] ?? null;
   const tamano = item.medida && item.contenido ? { valor: item.contenido, medida: item.medida } : null;
+  const esMedida = dicha && dicha !== item.unidad && (medidas.has(dicha) || (dicha === 'unidades' && item.medida === 'unidades'));
 
-  if (dicha && medidas.has(dicha) && dicha !== item.unidad) {
+  if (esMedida) {
     // "50 kg" de un arroz en sacos de 50 kg: es el tamaño del saco; cuantos sacos lo dice el dictado local
     const enSuMedida = tamano ? convertir(cantidad, dicha, tamano.medida) : null;
-    if (enSuMedida != null && Math.abs(enSuMedida - tamano.valor) < 0.001) return local ?? 1;
-    // "100 kg de arroz" en sacos de 50 kg -> 2 sacos; "500 g" de algo en kg -> 0,5
+    if (enSuMedida != null && Math.abs(enSuMedida - tamano.valor) < 0.001) return local?.cantidad ?? 1;
+    // "100 kg de arroz" en sacos de 50 kg -> 2 sacos; "500 g" de algo en kg -> 0,5; "30 unidades" en cajas de 10 -> 3
     const directa = convertir(cantidad, dicha, item.unidad);
     if (directa != null) return redondear(directa);
     if (enSuMedida != null) return redondear(enSuMedida / tamano.valor);
     return cantidad;
   }
-  // "50 sacos" cuando el saco es de 50 kg y el dictado local entendio otra cantidad: se confia en el local
-  if (tamano && cantidad === tamano.valor && local != null && local !== cantidad) return local;
+  // "50 sacos" de un saco de 50 kg, cuando el dictado local oyo claramente "5 sacos": la IA tomo el tamaño
+  if (tamano && cantidad === tamano.valor && local?.unidadDicha === item.unidad && local.cantidad != null && local.cantidad !== cantidad) {
+    return local.cantidad;
+  }
   return cantidad;
 }
 
@@ -524,7 +541,8 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     } else i++;
   }
   // "de un litro", "de 400 gramos": despues de "de" una medida es el tamaño, no cuanto entra
-  const esTamano = n => n.unidad && medidas.has(n.unidad) && tokens[n.inicio - 1] === 'de';
+  // tambien "en blister de 10 unidades"
+  const esTamano = n => esTamanoDicho(tokens, n.inicio, n.unidad);
   const utiles = numeros.filter(n => !n.deNombre && !esTamano(n));
   // "3 latas de leche 400 gramos": una medida despues de un envase es el tamaño
   // ("10 kg de avena en 10 bolsas" no: ahi los kg van primero y son la cantidad)
@@ -538,7 +556,7 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
   for (const n of numeros) if (!n.deNombre) for (let k = n.inicio; k < n.fin; k++) deNumeros.add(k);
   const deProducto = tokens.map((t, k) => k).filter(k => {
     const t = tokens[k];
-    return !usados.has(k) && !deNumeros.has(k) && !relleno.has(t) && !(t in unidadesDichas) && !(t in docenas) && !esNumeroPalabra(t) && t !== 'medio' && t !== 'media';
+    return !usados.has(k) && !deNumeros.has(k) && !relleno.has(t) && !(t in unidadesDichas) && !dosis.has(t) && !(t in docenas) && !esNumeroPalabra(t) && t !== 'medio' && t !== 'media';
   });
   const dichas = deProducto.map(k => tokens[k]);
   const { producto, dudas } = buscarProducto(dichas, productos, tamano);

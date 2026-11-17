@@ -137,9 +137,10 @@ test('el dictado local no repite la medida del nombre', () => {
 test('la cantidad de la IA no es el tamaño del envase', () => {
   const arroz = { id: 9, nombre: 'Arroz', unidad: 'sacos', contenido: 50, medida: 'kg' };
   // "5 sacos de arroz de 50 kg": la IA devolvio 50 kg, el dictado local entendio 5 sacos
-  assert.equal(cantidadDeLaIA(50, 'kg', arroz, 5), 5);
-  assert.equal(cantidadDeLaIA(50, 'sacos', arroz, 5), 5);
-  assert.equal(cantidadDeLaIA(5, 'sacos', arroz, 5), 5);
+  const cincoSacos = { cantidad: 5, unidadDicha: 'sacos' };
+  assert.equal(cantidadDeLaIA(50, 'kg', arroz, cincoSacos), 5);
+  assert.equal(cantidadDeLaIA(50, 'sacos', arroz, cincoSacos), 5);
+  assert.equal(cantidadDeLaIA(5, 'sacos', arroz, cincoSacos), 5);
   assert.equal(cantidadDeLaIA(5, 'sacos de 50 kg', arroz, null), 5);
   // "50 kilos de arroz" es un saco; "100 kg" son dos
   assert.equal(cantidadDeLaIA(50, 'kilos', arroz, null), 1);
@@ -147,7 +148,27 @@ test('la cantidad de la IA no es el tamaño del envase', () => {
   // sin otra pista, 50 sacos son 50 sacos
   assert.equal(cantidadDeLaIA(50, 'sacos', arroz, null), 50);
   assert.equal(cantidadDeLaIA(500, 'gramos', { nombre: 'Avena', unidad: 'kg' }, null), 0.5);
-  assert.equal(cantidadDeLaIA('cinco', 'sacos', arroz, 5), 5);
+  assert.equal(cantidadDeLaIA('cinco', 'sacos', arroz, cincoSacos), 5);
   assert.deepEqual(interpretarDictado('5 sacos de arroz de 50 kg que vencen el 15 de octubre de 2027', [{ item: arroz, categoria: 'Alimentos' }])
     .map(r => [r.producto?.item.nombre, r.cantidad, r.vence]), [['Arroz', 5, '2027-10-15']]);
+});
+
+test('el numero dicho es la cantidad, la presentacion solo describe', () => {
+  const para = { id: 1, nombre: 'Paracetamol 100 mg', unidad: 'cajas', contenido: 10, medida: 'unidades' };
+  const ari = { id: 2, nombre: 'Arpiprazol 15 mg', unidad: 'blísters', contenido: 10, medida: 'unidades' };
+  const salud = [{ item: para, categoria: 'Salud' }, { item: ari, categoria: 'Salud' }];
+  const local = texto => interpretarDictado(tipoDictado(texto).resto, salud).map(r => [r.producto?.item.nombre ?? null, r.cantidad]);
+  assert.deepEqual(local('Salida de 60 paracetamol, 100 miligramos en cajas de 10 unidades.'), [['Paracetamol 100 mg', 60]]);
+  assert.deepEqual(local('Salida de 10 arpiprazol 15 miligramos en blister de 10 unidades.'), [['Arpiprazol 15 mg', 10]]);
+  assert.deepEqual(local('salida de 6 cajas de paracetamol 100 mg'), [['Paracetamol 100 mg', 6]]);
+  // dicho en unidades se pasa a cajas
+  assert.deepEqual(local('salida de 30 unidades de paracetamol 100 mg'), [['Paracetamol 100 mg', 3]]);
+
+  // lo que devuelve la IA: el numero tal cual y la palabra que lo acompaña
+  const [r] = interpretarDictado('10 arpiprazol 15 miligramos en blister de 10 unidades', salud);
+  assert.equal(cantidadDeLaIA(10, null, ari, r), 10);
+  assert.equal(cantidadDeLaIA(10, 'blister', ari, r), 10);
+  assert.equal(cantidadDeLaIA(60, null, para, null), 60);
+  assert.equal(cantidadDeLaIA(60, 'cajas', para, null), 60);
+  assert.equal(cantidadDeLaIA(30, 'unidades', para, null), 3);
 });
