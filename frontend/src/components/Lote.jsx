@@ -12,7 +12,7 @@ import {
 } from '../acciones.js';
 import { nombreCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado, tipoDictado } from '../logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -332,6 +332,9 @@ export function ModalLoteCodigo() {
 }
 
 // ---------- 1c. voz (se abre con el microfono junto al "+") ----------
+// cuanto esperar (ms) despues de la ultima tecla para consultar a la IA
+const ESPERA_AL_ESCRIBIR = 900;
+
 // una linea de "Entendí": arriba cuanto y que; abajo, en pequeño, lo que hay que saber
 function LineaEntendida({ r }) {
   const item = r.producto?.item;
@@ -383,6 +386,8 @@ export function ModalLoteVoz() {
   const reconocedor = useRef(null);
   // cada consulta lleva un numero: si llega una respuesta vieja (se siguio escribiendo), no pisa a la nueva
   const consulta = useRef(0);
+  // el temporizador de "dejo de escribir"
+  const espera = useRef(null);
 
   // Procesa con OmniRoute y obtiene la lista visual para el bloque "ENTENDÍ"
   const procesarConOmni = async (textoCompleto) => {
@@ -400,15 +405,24 @@ export function ModalLoteVoz() {
 
       // 2. Mapeo para previsualización gráfica en UI
       // lo que no trae producto se descarta; una cantidad invalida (0, negativa, texto) queda como "falta la cantidad"
+      // el nombre que entendio la IA se busca entre los registrados (con su dosis: 100 mg no es 50 mg)
+      const productos = todosLosProductos();
+      // el dictado local sirve para revisar la cantidad ("5 sacos de 50 kg" no son 50 sacos)
+      const local = interpretarDictado(textoDictado, productos, { donadores: estado.donadores, actividades: opcionesActividad() });
       const mapeados = (Array.isArray(json) ? json : [])
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
-        .map(i => ({
-          cantidad: cantidadDicha(i.cantidad),
-          unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
-          nombreDicho: i.producto.trim().slice(0, largos.nombreProducto),
-          producto: null,
-          dudas: []
-        }));
+        .map(i => {
+          const { producto, dudas } = productoDeNombre(i.producto, productos);
+          const suyo = producto && local.find(x => x.producto?.categoria === producto.categoria && x.producto.item.id === producto.item.id);
+          return {
+            cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo?.cantidad ?? null)),
+            unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
+            nombreDicho: i.producto.trim().slice(0, largos.nombreProducto),
+            producto,
+            dudas,
+            presentacion: suyo?.presentacion ?? null,
+          };
+        });
       // sin respuesta de la IA (no configurada o caida): se usa la interpretacion local
       if (!mapeados.length) throw new Error('sin IA');
       setItemsEntendidos(mapeados);
@@ -485,11 +499,15 @@ export function ModalLoteVoz() {
     }
   }
 
-  // al cerrar la ventana de voz se apaga el microfono
-  useEffect(() => () => detenerReconocedor(reconocedor), []);
+  // al cerrar la ventana de voz se apaga el microfono y no queda una consulta pendiente
+  useEffect(() => () => {
+    detenerReconocedor(reconocedor);
+    clearTimeout(espera.current);
+  }, []);
 
   function alternar() {
     if (grabando) {
+      clearTimeout(espera.current);
       if (reconocedor.current) reconocedor.current.debeSeguir = false;
       reconocedor.current?.stop();
       setGrabando(false);
@@ -551,8 +569,11 @@ export function ModalLoteVoz() {
               rows={2}
               value={texto}
               onChange={e => {
-                setTexto(e.target.value);
-                procesarConOmni(e.target.value);
+                const escrito = e.target.value;
+                setTexto(escrito);
+                // se consulta cuando deja de escribir, no con cada tecla
+                clearTimeout(espera.current);
+                espera.current = setTimeout(() => procesarConOmni(escrito), ESPERA_AL_ESCRIBIR);
               }}
               placeholder='Ej. "ingreso de dos kilos de arroz" o "salida de tres latas de leche"'
             />
