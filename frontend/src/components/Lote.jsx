@@ -415,7 +415,7 @@ export function ModalLoteVoz() {
           const { producto, dudas } = productoDeNombre(i.producto, productos);
           const suyo = producto && local.find(x => x.producto?.categoria === producto.categoria && x.producto.item.id === producto.item.id);
           return {
-            cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo?.cantidad ?? null)),
+            cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo || null)),
             unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
             nombreDicho: i.producto.trim().slice(0, largos.nombreProducto),
             producto,
