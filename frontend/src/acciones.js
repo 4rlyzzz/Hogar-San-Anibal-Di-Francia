@@ -29,7 +29,7 @@ import { inventarioVacio } from './logica/inventario.js';
 import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js';
 import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
-import { interpretarDictado, tipoDictado } from './logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA } from './logica/dictado.js';
 import { procesarTextoConOmniroute } from './servicios/Omniroute.js';
 
 // envases (en plural)
@@ -1521,6 +1521,8 @@ export function cantidadDicha(valor) {
 }
 
 
+const mismoProducto = (a, b) => Boolean(a && b && a.categoria === b.categoria && a.item.id === b.item.id);
+
 export async function agregarDictado(v) {
   // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
   const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
@@ -1533,7 +1535,8 @@ export async function agregarDictado(v) {
   });
 
   // 3. OmniRoute (LLM): Parsing de alta precisión para productos, cantidades y fechas ISO
-  const itemsProcesados = await procesarTextoConOmniroute(v.dictado);
+  // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
+  const itemsProcesados = await procesarTextoConOmniroute(dicho.resto);
 
   // --- FILTRO POST-PROCESADO: Anti-alucinaciones y limpieza de ruido ---
   const ruídosComunes = new Set(['eh', 'um', 'ah', 'pantalla', 'ruido', 'undefined', 'null', 'algo', 'cosa']);
@@ -1574,9 +1577,24 @@ export async function agregarDictado(v) {
   }
 
   // 4. Mapeo final y fusión de metadatos (Híbrido IA + Local)
+  const productos = todosLosProductos();
   for (let i = 0; i < listaBase.length; i++) {
     const itemIA = itemsValidos[i] || {};
     const r = interpretadoLocal[i] || interpretadoLocal[0] || {};
+
+    // el producto: el nombre que entendio la IA se busca entre los registrados (con su dosis);
+    // no se toma el del parser local por su posicion, que puede ser de otro producto
+    let { producto, dudas } = itemsValidos[i] ? productoDeNombre(itemIA.producto, productos) : { producto: r.producto, dudas: r.dudas ?? [] };
+    // la IA dijo "Paracetamol" sin dosis y hay varios: si el local entendio uno de ellos, ese es
+    const delLocal = r.producto && dudas.find(d => mismoProducto(d, r.producto));
+    if (delLocal) [producto, dudas] = [delLocal, []];
+    // lo que entendio el dictado local de ese mismo producto (sin importar en que orden lo puso)
+    const localDelProducto = producto ? interpretadoLocal.find(x => mismoProducto(x.producto, producto)) : null;
+    const presentacion = itemsValidos[i] ? localDelProducto?.presentacion : r.presentacion;
+    // la cantidad de la IA en la unidad del producto ("5 sacos de 50 kg" no son 50 sacos)
+    const cantidad = itemsValidos[i]
+      ? cantidadDeLaIA(itemIA.cantidad, itemIA.unidad, producto?.item, localDelProducto?.cantidad ?? null)
+      : r.cantidad;
 
     // 💡 Prioridad de Fecha: 1. Fecha ISO de OmniRoute, 2. Regex del Parser Local
     const fechaFinal = itemIA.vence || (r.vence && reglas.vencimiento(r.vence).ok ? r.vence : null);
@@ -1590,13 +1608,14 @@ export async function agregarDictado(v) {
       origen: 'voz',
       dicho: (itemIA.producto || r.dicho || '').slice(0, 100),
       nombreDicho: (itemIA.producto || r.nombreDicho || '').slice(0, largos.nombreProducto),
-      cantidad: cantidadDicha(itemIA.cantidad ?? r.cantidad),
-      dudas: r.dudas ? r.dudas.map(d => claveProducto(d.categoria, d.item.id)) : [],
-      avisos: r.presentacion ? { presentacion: r.presentacion } : {},
+      cantidad: cantidadDicha(cantidad),
+      dudas: dudas.map(d => claveProducto(d.categoria, d.item.id)),
+      // el aviso de presentacion lo calculo el parser local: solo vale si es su mismo producto
+      avisos: presentacion ? { presentacion } : {},
       
       // Metadatos adjuntos para rendering visual (previsualización y lista final)
       ...(esIngreso && fechaFinal && { vence: fechaFinal }),
-      ...(r.producto && { categoria: r.producto.categoria, productoId: r.producto.item.id }),
+      ...(producto && { categoria: producto.categoria, productoId: producto.item.id }),
       ...(esIngreso && {
         donador: donadorId,
         donadorDicho: donadorTexto.slice(0, largos.nombreDonador),

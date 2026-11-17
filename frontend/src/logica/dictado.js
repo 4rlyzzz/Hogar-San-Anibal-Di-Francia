@@ -338,6 +338,92 @@ export function buscarProducto(dichas, productos, tamano = null) {
   return { producto: { item, categoria }, dudas: [], otroTamano };
 }
 
+// ---------- el nombre que entendio la IA -> el producto registrado ----------
+// la dosis o el tamaño distingue productos: "Paracetamol 100 mg" no es "Paracetamol 50 mg"
+// por eso "100 mg", "100mg" y "100 miligramos" se juntan en una sola palabra ("100mg") antes de comparar
+function abreviatura(unidad) {
+  if (/^(?:miligramos?|mg)$/.test(unidad)) return 'mg';
+  if (unidad === 'mcg') return 'mcg';
+  if (/^(?:kilogramos?|kilos?|kg)$/.test(unidad)) return 'kg';
+  if (/^(?:gramos?|grs?|g)$/.test(unidad)) return 'g';
+  if (/^(?:mililitros?|ml)$/.test(unidad)) return 'ml';
+  if (/^(?:litros?|lts?|l)$/.test(unidad)) return 'l';
+  return null;
+}
+
+const medidaSuelta = /(\d+(?:[.,]\d+)?)\s*(miligramos?|mcg|mg|kilogramos?|kilos?|kg|gramos?|grs?|g|mililitros?|ml|litros?|lts?|l)(?![a-zñ])/g;
+
+function palabrasConMedida(texto) {
+  return plano(String(texto ?? ''))
+    .replace(medidaSuelta, (_, n, u) => n.replace(',', '.') + abreviatura(u))
+    .split(/[^a-z0-9ñ.]+/)
+    .map(p => p.replace(/^\.+|\.+$/g, ''))
+    .filter(Boolean);
+}
+
+const esMedidaDicha = p => /^\d/.test(p);
+const medidaRegistrada = { mg: null, mcg: null, g: 'g', kg: 'kg', ml: 'ml', l: 'L' };
+
+// el producto sin la dosis en el nombre pero con su tamaño registrado (Leche Gloria, latas de 400 g)
+function contradiceTamano(item, medida) {
+  const m = medida.match(/^(\d+(?:\.\d+)?)([a-z]+)$/);
+  if (!m || !item.medida || !item.contenido) return false;
+  const enSuMedida = medidaRegistrada[m[2]] ? convertir(Number(m[1]), medidaRegistrada[m[2]], item.medida) : null;
+  return enSuMedida != null && Math.abs(enSuMedida - item.contenido) >= 0.001;
+}
+
+// productos: [{ item, categoria }]; devuelve { producto, dudas } como buscarProducto
+export function productoDeNombre(nombre, productos) {
+  const nada = { producto: null, dudas: [] };
+  const dichas = palabrasConMedida(nombre).filter(p => !relleno.has(p));
+  if (!dichas.some(p => !esMedidaDicha(p))) return nada;
+  const medidasDichas = dichas.filter(esMedidaDicha);
+
+  const candidatos = productos.map(p => {
+    const suyas = palabrasConMedida(p.item.nombre);
+    const suyasMedidas = suyas.filter(esMedidaDicha);
+    // una dosis dicha que no es la suya lo descarta
+    const contradice = medidasDichas.some(m => (suyasMedidas.length ? !suyasMedidas.includes(m) : contradiceTamano(p.item, m)));
+    if (contradice || !suyas.length) return { ...p, puntos: 0 };
+    const acierta = d => suyas.some(s => (esMedidaDicha(d) || esMedidaDicha(s) ? d === s : palabraCoincide(d, s)));
+    const palabrasAcertadas = dichas.filter(d => !esMedidaDicha(d) && acierta(d)).length;
+    if (palabrasAcertadas === 0) return { ...p, puntos: 0 };
+    const aciertos = dichas.filter(acierta).length;
+    return { ...p, puntos: aciertos / dichas.length + (aciertos / suyas.length) * 0.5 };
+  }).filter(p => p.puntos > 0).sort((a, b) => b.puntos - a.puntos);
+
+  if (!candidatos.length) return nada;
+  const empatan = candidatos.filter(p => p.puntos === candidatos[0].puntos);
+  if (empatan.length > 1) return { producto: null, dudas: empatan.map(({ item, categoria }) => ({ item, categoria })) };
+  const { item, categoria } = candidatos[0];
+  return { producto: { item, categoria }, dudas: [] };
+}
+
+// ---------- la cantidad que entendio la IA ----------
+// la IA a veces toma el tamaño de la presentacion como la cantidad: "5 sacos de arroz de 50 kg" -> 50
+// aqui se pasa a la unidad del producto y se revisa con lo que entendio el dictado local
+// local: la cantidad que entendio el dictado local para ese mismo producto (o null)
+export function cantidadDeLaIA(cantidad, unidad, item, local = null) {
+  if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) return local;
+  if (!item) return cantidad;
+  const dicha = unidadesDichas[plano(String(unidad ?? '')).match(/[a-zñ]+/)?.[0]] ?? null;
+  const tamano = item.medida && item.contenido ? { valor: item.contenido, medida: item.medida } : null;
+
+  if (dicha && medidas.has(dicha) && dicha !== item.unidad) {
+    // "50 kg" de un arroz en sacos de 50 kg: es el tamaño del saco; cuantos sacos lo dice el dictado local
+    const enSuMedida = tamano ? convertir(cantidad, dicha, tamano.medida) : null;
+    if (enSuMedida != null && Math.abs(enSuMedida - tamano.valor) < 0.001) return local ?? 1;
+    // "100 kg de arroz" en sacos de 50 kg -> 2 sacos; "500 g" de algo en kg -> 0,5
+    const directa = convertir(cantidad, dicha, item.unidad);
+    if (directa != null) return redondear(directa);
+    if (enSuMedida != null) return redondear(enSuMedida / tamano.valor);
+    return cantidad;
+  }
+  // "50 sacos" cuando el saco es de 50 kg y el dictado local entendio otra cantidad: se confia en el local
+  if (tamano && cantidad === tamano.valor && local != null && local !== cantidad) return local;
+  return cantidad;
+}
+
 // ---------- donador y actividad ----------
 // "que me lo donó la parroquia", "donado por Plaza Vea", "de parte de la familia Quispe"
 const avisosDonador = [['donado', 'por'], ['donada', 'por'], ['donados', 'por'], ['donadas', 'por'], ['de', 'parte', 'de'], ['dono'], ['donaron'], ['trajo'], ['trajeron'], ['regalaron'], ['enviaron'], ['envio']];
@@ -564,7 +650,13 @@ export function corregirNombres(texto, productos) {
         if (!parecidas(dichas[j], suyas.at(-1))) continue;
         const ventana = compacto(dichas.slice(i, j + 1));
         const parecido = 1 - distancia(ventana, objetivo) / Math.max(ventana.length, objetivo.length);
-        if (parecido >= 0.8) cambios.push({ desde: trozos[i].index, hasta: trozos[j].index + trozos[j][0].length, reemplazo, parecido });
+        let hasta = trozos[j].index + trozos[j][0].length;
+        // "paracetamol 100 mg" con "Paracetamol 100mg" registrado: el "mg" dicho ya va en el nombre
+        const pegada = suyas.at(-1).match(/^(\d+)([a-z]+)$/);
+        if (pegada && dichas[j] === pegada[1] && dichas[j + 1] && abreviatura(dichas[j + 1]) === pegada[2]) {
+          hasta = trozos[j + 1].index + trozos[j + 1][0].length;
+        }
+        if (parecido >= 0.8) cambios.push({ desde: trozos[i].index, hasta, reemplazo, parecido });
       }
     }
   }
