@@ -12,7 +12,7 @@ import {
 } from '../acciones.js';
 import { nombreCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA } from '../logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -412,8 +412,9 @@ export function ModalLoteVoz() {
       const mapeados = (Array.isArray(json) ? json : [])
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
         .map(i => {
-          const { producto, dudas } = productoDeNombre(i.producto, productos);
-          const suyo = producto && local.find(x => x.producto?.categoria === producto.categoria && x.producto.item.id === producto.item.id);
+          // si empatan varios, vale el que entendio el local por el tamaño dicho ("cajas de 20 unidades")
+          const { producto, dudas } = desempatarConLocal(productoDeNombre(i.producto, productos), local);
+          const suyo = producto && local.find(x => mismoProducto(x.producto, producto));
           return {
             cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo || null)),
             unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',

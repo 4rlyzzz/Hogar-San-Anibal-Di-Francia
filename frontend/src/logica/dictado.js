@@ -164,14 +164,17 @@ const separador = new RegExp(
 // ---------- numeros que son parte de un nombre ----------
 // el 3 de "Avena 3 Ositos" o el 120 de "Paracetamol Jarabe 120 mg/5 ml" no son cantidades,
 // pero solo cuando van junto a las palabras de ese nombre: "5 lentejas" si es una cantidad
+// cada numero guarda la palabra que va antes y la que va despues en el nombre, cada una en su lado:
+// en "15 arpiprazol 15 mg" el primer 15 es la cantidad (en el nombre el 15 va DESPUES de arpiprazol)
 function numerosEnNombres(productos) {
   const vecinos = new Map();
   for (const { item } of productos) {
     const suyas = palabras(item.nombre);
     suyas.forEach((p, k) => {
       if (!/^\d/.test(p)) return;
-      if (!vecinos.has(p)) vecinos.set(p, new Set());
-      for (const v of [suyas[k - 1], suyas[k + 1]]) if (v) vecinos.get(p).add(v);
+      if (!vecinos.has(p)) vecinos.set(p, { antes: new Set(), despues: new Set() });
+      if (suyas[k - 1]) vecinos.get(p).antes.add(suyas[k - 1]);
+      if (suyas[k + 1]) vecinos.get(p).despues.add(suyas[k + 1]);
     });
   }
   return vecinos;
@@ -180,7 +183,8 @@ function numerosEnNombres(productos) {
 function esDeNombre(vecinos, tokens, i, fin) {
   const suyos = vecinos.get(tokens[i]);
   if (!suyos) return false;
-  return [tokens[i - 1], tokens[fin]].some(t => t && [...suyos].some(v => palabraCoincide(t, v)));
+  const junto = (t, lado) => Boolean(t) && [...lado].some(v => palabraCoincide(t, v));
+  return junto(tokens[i - 1], suyos.antes) || junto(tokens[fin], suyos.despues);
 }
 
 // sin comas ("10 pollos de un kilo 10 bolsas de lentejas"): una cantidad nueva despues de un producto empieza otro
@@ -303,15 +307,30 @@ export function separarDictado(texto) {
 // ---------- parecido entre palabras ----------
 const singular = p => (p.length > 4 && p.endsWith('es') ? p.slice(0, -2) : p.length > 3 && p.endsWith('s') ? p.slice(0, -1) : p);
 
-function palabraCoincide(dicha, delNombre) {
-  if (dicha === delNombre || singular(dicha) === singular(delNombre)) return true;
-  return dicha.length >= 3 && palabraParecida(dicha, delNombre);
+// el reconocedor de voz confunde las letras que suenan casi igual: "arbibrasol" por "arpiprazol"
+// p=b, t=d, k=g (ademas de lo que ya junta sonido(): v=b, z=s, c=k...)
+const sonidoParecido = p => sonido(p).replace(/p/g, 'b').replace(/t/g, 'd').replace(/k/g, 'g');
+
+// cuanto se parece una palabra dicha a una del nombre: 1 igual, 0.9 con una letra distinta,
+// 0.7 solo suena parecido, 0 nada (asi "pollo" prefiere "Pollo" antes que "Bollo")
+function parecido(dicha, delNombre) {
+  if (dicha === delNombre || singular(dicha) === singular(delNombre)) return 1;
+  if (dicha.length < 3) return 0;
+  if (palabraParecida(dicha, delNombre)) return 0.9;
+  if (dicha.length >= 5 && palabraParecida(sonidoParecido(dicha), sonidoParecido(delNombre))) return 0.7;
+  return 0;
 }
+
+function palabraCoincide(dicha, delNombre) {
+  return parecido(dicha, delNombre) > 0;
+}
+
+const mejorParecido = (dicha, delNombre) => Math.max(0, ...delNombre.map(p => parecido(dicha, p)));
 
 // que tanto se parece lo dicho al nombre (0 = nada)
 function puntaje(dichas, nombre) {
   const delNombre = palabras(nombre);
-  const aciertos = dichas.filter(d => delNombre.some(p => palabraCoincide(d, p))).length;
+  const aciertos = dichas.reduce((suma, d) => suma + mejorParecido(d, delNombre), 0);
   if (aciertos === 0) return 0;
   return aciertos / dichas.length + (aciertos / delNombre.length) * 0.5;
 }
@@ -397,10 +416,11 @@ export function productoDeNombre(nombre, productos) {
     // una dosis dicha que no es la suya lo descarta
     const contradice = medidasDichas.some(m => (suyasMedidas.length ? !suyasMedidas.includes(m) : contradiceTamano(p.item, m)));
     if (contradice || !suyas.length) return { ...p, puntos: 0 };
-    const acierta = d => suyas.some(s => (esMedidaDicha(d) || esMedidaDicha(s) ? d === s : palabraCoincide(d, s)));
-    const palabrasAcertadas = dichas.filter(d => !esMedidaDicha(d) && acierta(d)).length;
+    // las dosis tienen que ser iguales; las palabras pueden sonar parecido ("arbibrasol")
+    const acierto = d => Math.max(0, ...suyas.map(s => (esMedidaDicha(d) || esMedidaDicha(s) ? Number(d === s) : parecido(d, s))));
+    const palabrasAcertadas = dichas.filter(d => !esMedidaDicha(d) && acierto(d) > 0).length;
     if (palabrasAcertadas === 0) return { ...p, puntos: 0 };
-    const aciertos = dichas.filter(acierta).length;
+    const aciertos = dichas.reduce((suma, d) => suma + acierto(d), 0);
     return { ...p, puntos: aciertos / dichas.length + (aciertos / suyas.length) * 0.5 };
   }).filter(p => p.puntos > 0).sort((a, b) => b.puntos - a.puntos);
 
@@ -411,6 +431,17 @@ export function productoDeNombre(nombre, productos) {
   return { producto: { item, categoria }, dudas: [] };
 }
 
+export const mismoProducto = (a, b) => Boolean(a && b && a.categoria === b.categoria
+  && (a.item === b.item || (a.item.id != null && a.item.id === b.item.id)));
+
+// la IA dijo "Paracetamol 100 mg" y hay de cajas de 10 y de 20: si el dictado local entendio
+// uno de ellos (oyo "cajas de 20 unidades"), ese es. locales: lo que devolvio interpretarDictado
+export function desempatarConLocal({ producto, dudas }, locales) {
+  if (producto || !dudas.length) return { producto, dudas };
+  const elegido = dudas.find(d => locales.some(x => mismoProducto(x.producto, d)));
+  return elegido ? { producto: elegido, dudas: [] } : { producto, dudas };
+}
+
 // ---------- la cantidad que entendio la IA ----------
 // la IA devuelve el numero tal como se dijo y la palabra que lo acompaña ("60" y null, "5" y "sacos");
 // la cuenta la hace este codigo, igual que el dictado local:
@@ -419,6 +450,9 @@ export function productoDeNombre(nombre, productos) {
 // local: lo que entendio el dictado local de ese mismo producto ({ cantidad, unidadDicha }) o null
 export function cantidadDeLaIA(cantidad, unidad, item, local = null) {
   if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) return local?.cantidad ?? null;
+  // "salida de paracetamol en cajas de 20 unidades": ese 20 es el tamaño dicho, no cuantos salen
+  // (si no se dijo cuantos, queda sin cantidad y la pantalla avisa "falta la cantidad")
+  if (local?.tamano && cantidad === local.tamano.valor && local.cantidad !== cantidad) return local.cantidad ?? null;
   if (!item) return cantidad;
   const dicha = unidadesDichas[plano(String(unidad ?? '')).match(/[a-zñ]+/)?.[0]] ?? null;
   const tamano = item.medida && item.contenido ? { valor: item.contenido, medida: item.medida } : null;
@@ -619,6 +653,8 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     // la presentacion dicha que no esta registrada: { unidad, tamano, texto: 'bolsas de 10 L' } o null
     presentacion,
     vence: fecha?.iso ?? null,
+    // el tamaño dicho ("cajas de 20 unidades" -> { valor: 20, medida: 'unidades' }) o null
+    tamano,
     // para proponer un producto nuevo con ese nombre
     nombreDicho: deProducto.map(k => originales[k]).join(' '),
     donador,
