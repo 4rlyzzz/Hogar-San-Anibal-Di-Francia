@@ -254,8 +254,8 @@ export function dividirPorCantidades(parte, productos = []) {
 // ---------- ingreso o salida, dicho en voz alta ----------
 // 'saco' no va: tambien es un envase ("un saco de arroz")
 const palabrasTipo = {
-  Ingreso: ['ingreso', 'ingresos', 'ingresa', 'ingresan', 'ingresar', 'ingresamos', 'ingresaron', 'entrada', 'entradas', 'entra', 'entran', 'entro', 'entraron', 'llego', 'llegaron', 'recibimos'],
-  Salida: ['salida', 'salidas', 'sale', 'salen', 'salio', 'salieron', 'saca', 'sacan', 'sacar', 'sacamos', 'sacaron'],
+  Ingreso: ['ingreso', 'ingresos', 'ingresa', 'ingresan', 'ingresar', 'ingresamos', 'ingresaron', 'entrada', 'entradas', 'entra', 'entran', 'entro', 'entraron', 'llego', 'llegaron', 'recibimos', 'compramos'],
+  Salida: ['salida', 'salidas', 'sale', 'salen', 'salio', 'salieron', 'saca', 'sacan', 'sacar', 'sacamos', 'sacaron', 'venta', 'ventas', 'vendi', 'vendimos', 'vendieron', 'vender', 'vendemos'],
 };
 const tipoDePalabra = new Map(Object.entries(palabrasTipo).flatMap(([tipo, lista]) => lista.map(p => [p, tipo])));
 // tambien lo que la acompaña: "registrar un ingreso de ..." (ese "un" no es una cantidad)
@@ -515,9 +515,99 @@ function buscarActividad(tokens, actividades) {
   return mejor;
 }
 
+const avisosComprador = [['vendido', 'a'], ['vendida', 'a'], ['vendidos', 'a'], ['vendidas', 'a'], ['le', 'vendi', 'a'], ['a', 'nombre', 'de'],
+  ['comprador'], ['compradora'], ['cliente'], ['compro'], ['compraron']];
+const avisosProveedor = [['comprado', 'a'], ['comprada', 'a'], ['comprados', 'a'], ['compradas', 'a'], ['proveedor'], ['proveedora'], ['distribuidor']];
+const mediosDichos = { yape: 'yape-plin', plin: 'yape-plin', efectivo: 'efectivo', cash: 'efectivo', transferencia: 'transferencia', deposito: 'transferencia', transfirio: 'transferencia' };
+const palabrasPago = new Set(['pago', 'pagaron', 'pagado', 'pagada', 'pagan', 'paga']);
+const palabrasSoles = new Set(['soles', 'sol', 'nuevos']);
+
+function buscarAvisoDe(avisos, tokens, usados) {
+  for (let i = 0; i < tokens.length; i++) {
+    if (usados.has(i)) continue;
+    const aviso = avisos.find(a => a.every((t, k) => tokens[i + k] === t && !usados.has(i + k)));
+    if (aviso) return { inicio: i, fin: i + aviso.length };
+  }
+  return null;
+}
+
+function buscarPago(tokens, usados) {
+  let medioPago = '';
+  let precio = null;
+  tokens.forEach((t, k) => {
+    if (t in mediosDichos && !usados.has(k)) {
+      medioPago = mediosDichos[t];
+      usados.add(k);
+      for (let j = k - 1; j >= 0 && j >= k - 3 && ['con', 'en', 'por', 'y', ...palabrasPago].includes(tokens[j]); j--) usados.add(j);
+    }
+    if (palabrasPago.has(t)) usados.add(k);
+  });
+  for (let i = 0; i < tokens.length; i++) {
+    if (usados.has(i)) continue;
+    const n = leerNumero(tokens, i);
+    if (!n) continue;
+    const conSoles = palabrasSoles.has(tokens[n.fin]);
+    const conSigno = tokens[i - 1] === 's';
+    if (!conSoles && !conSigno) {
+      i = n.fin - 1;
+      continue;
+    }
+    precio = n.valor;
+    for (let k = i; k < n.fin; k++) usados.add(k);
+    if (conSigno) usados.add(i - 1);
+    let k = n.fin;
+    while (palabrasSoles.has(tokens[k])) usados.add(k++);
+    if (tokens[k] === 'con' && /^\d{1,2}$/.test(tokens[k + 1] ?? '')) {
+      precio += Number(tokens[k + 1]) / 100;
+      usados.add(k).add(k + 1);
+      k += 2;
+    }
+    if (tokens[k] === 'cada') usados.add(k).add(k + 1);
+    if (tokens[i - 1] === 'a' || tokens[i - 1] === 'por') usados.add(i - 1);
+    if (tokens[i - 2] === 'a' && conSigno) usados.add(i - 2);
+    break;
+  }
+  return { medioPago, precio: precio != null ? redondear(precio) : null };
+}
+
+function personaRegistrada(previas, tokens, usados, lista) {
+  for (let i = 0; i < tokens.length; i++) {
+    if (usados.has(i) || !previas.includes(tokens[i])) continue;
+    const posiciones = [];
+    for (let k = i + 1; k < tokens.length && posiciones.length < 5 && !usados.has(k); k++) {
+      if (!relleno.has(tokens[k]) && !['sra', 'senora', 'senor', 'sr', 'don', 'dona'].includes(tokens[k])) posiciones.push(k);
+    }
+    for (let n = posiciones.length; n > 0; n--) {
+      const persona = buscarDonador(posiciones.slice(0, n).map(k => tokens[k]), lista);
+      if (persona && puntaje(posiciones.slice(0, n).map(k => tokens[k]), persona.nombre) >= 0.75) {
+        for (let k = i; k <= posiciones[n - 1]; k++) usados.add(k);
+        return persona;
+      }
+    }
+  }
+  return null;
+}
+
+function buscarPersona(avisos, tokens, originales, usados, lista, previas = []) {
+  const aviso = buscarAvisoDe(avisos, tokens, usados);
+  if (!aviso) return { persona: previas.length ? personaRegistrada(previas, tokens, usados, lista) : null, dicho: '' };
+  const resto = [];
+  const posiciones = [];
+  for (let k = aviso.inicio; k < tokens.length; k++) {
+    if (usados.has(k)) continue;
+    if (k >= aviso.fin && !relleno.has(tokens[k]) && !['es', 'el', 'la', 'sra', 'senora', 'senor', 'sr', 'don', 'dona'].includes(tokens[k])) {
+      resto.push(tokens[k]);
+      posiciones.push(k);
+    }
+    usados.add(k);
+  }
+  const persona = resto.length ? buscarDonador(resto, lista) : null;
+  return { persona, dicho: persona ? '' : posiciones.map(k => originales[k]).join(' ') };
+}
+
 // ---------- una parte: cantidad, unidad, tamaño, producto y donador ----------
 // extra: { donadores, actividades } para reconocer quien dono
-export function interpretarParte(parte, productos, { donadores = [], actividades = [] } = {}) {
+export function interpretarParte(parte, productos, { donadores = [], actividades = [], compradores = [], proveedores = [] } = {}) {
   // las mismas palabras normalizadas y como se escribieron (plano no cambia el largo)
   const trozos = [...plano(parte).replace(/[^a-z0-9ñ.\s]/g, ' ').matchAll(/\S+/g)];
   const tokens = trozos.map(m => m[0]);
@@ -528,6 +618,10 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
   tokens.forEach((t, k) => {
     if (t === 'cada') usados.add(k).add(k + 1);
   });
+
+  const pago = buscarPago(tokens, usados);
+  const comprador = buscarPersona(avisosComprador, tokens, originales, usados, compradores, ['a', 'para']);
+  const proveedor = buscarPersona(avisosProveedor, tokens, originales, usados, proveedores, ['a', 'de', 'del']);
 
   // actividad
   const act = buscarActividad(tokens, actividades);
@@ -660,6 +754,12 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     donador,
     donadorDicho,
     actividad: act?.actividad ?? null,
+    comprador: comprador.persona,
+    compradorDicho: comprador.dicho,
+    proveedor: proveedor.persona,
+    proveedorDicho: proveedor.dicho,
+    precio: pago.precio,
+    medioPago: pago.medioPago,
     // "todo esto lo donó..." vale para todos
     paraTodos: tokens.includes('todo') || tokens.includes('todos'),
   };
@@ -742,9 +842,14 @@ export function interpretarDictado(texto, productos, extra = {}) {
     }
     const esProducto = r.producto || r.dudas.length || r.cantidad != null;
     const tieneDonador = r.donador || r.donadorDicho || r.actividad;
+    const tieneVenta = r.comprador || r.compradorDicho || r.proveedor || r.proveedorDicho || r.medioPago || r.precio != null;
     if (esProducto) {
       resultado.push(r);
       if (r.paraTodos && tieneDonador) paraTodos = r;
+    } else if (tieneVenta && resultado.length) {
+      const anterior = resultado.at(-1);
+      for (const campo of ['comprador', 'compradorDicho', 'proveedor', 'proveedorDicho', 'medioPago']) if (r[campo]) anterior[campo] = r[campo];
+      if (r.precio != null) anterior.precio = r.precio;
     } else if (tieneDonador) {
       if (r.paraTodos || resultado.length === 0) paraTodos = r;
       else {
@@ -777,4 +882,4 @@ export function preprocesarTextoVoz(texto) {
     .trim();
 
   return limpio;
-}
+}

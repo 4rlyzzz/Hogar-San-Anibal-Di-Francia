@@ -3536,3 +3536,92 @@ button.uf-usuario:hover b {
   color: #3d4b46;
   white-space: pre-line;
 }
+
+.morado { background: #f1ecfb; color: #6b4fc0; }
+.avatar-morado { background: #8a6ad8; }
+.barra-morado { background: #8a6ad8; }
+.leyenda-barras i.barra-morado { background: #8a6ad8; }
+
+.selector-categoria {
+  flex-wrap: wrap;
+}
+
+.selector-categoria button {
+  white-space: normal;
+  min-width: max-content;
+}
+
+.tarjeta-precio {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b4fc0;
+  font-variant-numeric: tabular-nums;
+}
+
+.merch-barra {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 16px;
+}
+
+.merch-barra .pestanas-merch {
+  margin-left: 0;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+
+.merch-barra .pestanas-merch::-webkit-scrollbar {
+  display: none;
+}
+
+.merch-valor {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6f7e79;
+}
+
+.merch-valor b {
+  color: #17211f;
+  font-variant-numeric: tabular-nums;
+}
+
+.merch-total {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.merch-nota {
+  display: block;
+  margin: -6px 0 14px;
+  font-size: 11px;
+  color: #7c8b86;
+}
+
+.lote-total-ventas {
+  margin: 12px 0 0;
+  text-align: right;
+  font-size: 13px;
+  color: #3d4b46;
+}
+
+.lote-total-ventas b {
+  color: #17211f;
+  font-variant-numeric: tabular-nums;
+}
+
+.persona-monto {
+  display: flex;
+  flex-direction: column;
+}
+
+.persona-monto small,
+.donador-telefono small {
+  display: block;
+  font-weight: 500;
+  font-size: 11px;
+  color: #7c8b86;
+}

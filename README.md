@@ -154,6 +154,14 @@ npm install
 
 Revisa también si `backend/.env.example` o `frontend/.env.example` tienen variables nuevas y agrégalas a tu `.env` (así apareció `SECRET_KEY`).
 
+Si el cambio agregó bases nuevas en CouchDB (así llegaron `casa_proveedores` y `casa_compradores` con Merchandising), prepáralas una vez. En **backend**, con `COUCHDB_ADMIN_USER` y `COUCHDB_ADMIN_PASSWORD` en tu `.env`:
+
+```powershell
+python manage.py setup_couch
+```
+
+Lo que ya existe se deja como está: solo crea lo que falta (bases, permisos e índices). También sirve volver a correr `couchDB\setup.ps1`.
+
 ## 7. Pruebas de regresión
 
 Antes de subir cambios (o después de un pull), revisa que todo lo que ya funcionaba siga funcionando. En una terminal en la raíz ejecutar:
@@ -171,11 +179,23 @@ Ejecuta, en orden: la revisión de Django, las pruebas del backend (login, sesio
 - Las pruebas están en `backend/api/tests/` y `frontend/pruebas/`. Al agregar una funcionalidad nueva, agrega también su prueba.
 
 
-## 8. Detener o iniciar CouchDB
+## 8. Merchandising, proveedores y compradores
+
+Además de Alimentos y Salud e higiene, la sección **Merchandising** lleva lo que el hogar vende:
+
+- **Panetón**: marca, presentación, precio y descuento por cantidad (por ejemplo, desde 6 unidades). Sus ingresos piden fecha de vencimiento y costo unitario.
+- **Hecho en el hogar**: lo elaboran los chicos. *General* (rosarios, tazas, llaveros…) o *Alimentos* (con presentación y si es perecible). No tiene proveedor: el ingreso anota el taller y, si se quiere, el costo de materiales.
+- **Promocionales**: lo que se manda a hacer con un proveedor. *General* o *Prendas*: cada talla y color es un producto distinto.
+
+En Merchandising la salida es una **venta**: el precio se autocompleta (con el descuento si llega a la cantidad mínima) y se puede cambiar. Además se anota el comprador, el medio de pago y el comprobante. Proveedores y compradores tienen sus pestañas, como Donadores. Todo queda en el Historial, se filtra y se descarga en Excel.
+
+Los productos nuevos de Merchandising se crean igual que los demás: **+ → Registrar ingreso → Crear producto nuevo → Merchandising**. El precio se cambia después desde el detalle del producto (**Editar precio y datos**).
+
+## 9. Detener o iniciar CouchDB
 
 Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como administrador y ejecutar, según corresponda:
 
 ```powershell
 net stop "Apache CouchDB"
 net start "Apache CouchDB"
-```
+```

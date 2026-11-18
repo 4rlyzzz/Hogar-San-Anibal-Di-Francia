@@ -17,9 +17,11 @@ from .couchdb_service import (
     get_document_by_id,
     delete_document,
     actualizar_con_reintento,
+    nombre_propio,
     slug,
 )
 from .authentication import IsAdminRole
+from . import merch
 
 # Hash de relleno: se usa cuando el usuario no existe para que la respuesta
 # tarde lo mismo y no se pueda averiguar qué usuarios existen por el tiempo.
@@ -94,12 +96,16 @@ def principal_id(usuarios):
 def _nombre_donador(nombre):
     """'parroquia san josé' -> 'Parroquia San José'. Las siglas (ONG) se respetan,
     salvo que todo venga en mayusculas. Igual que nombreDonador en logica/donadores.js."""
-    palabras = str(nombre or '').split()
-    todo_mayuscula = ' '.join(palabras) == ' '.join(palabras).upper()
-    return ' '.join(
-        p if (not todo_mayuscula and len(p) > 1 and p == p.upper()) else p[:1].upper() + p[1:].lower()
-        for p in palabras
-    )
+    return nombre_propio(nombre)
+
+
+def grupo_categoria(categoria):
+    categoria = str(categoria or '').lower()
+    if categoria in ('salud', 'medicinas', 'higiene'):
+        return 'salud'
+    if categoria == merch.CATEGORIA:
+        return merch.CATEGORIA
+    return 'alimentos'
 
 
 class CustomLoginView(APIView):
@@ -222,7 +228,9 @@ class InventarioListCreateView(APIView):
         except DatoInvalido as e:
             return Response({'error': str(e)}, status=400)
 
-        categoria = 'salud' if str(datos.get('categoria', '')).lower() == 'salud' else 'alimentos'
+        categoria = grupo_categoria(datos.get('categoria'))
+        if categoria == merch.CATEGORIA:
+            return self._crear_merch(datos, minimo)
         doc_data = {
             'tipo': 'producto',
             'nombre': ' '.join(str(datos.get('nombre', '')).split())[:60],
@@ -244,17 +252,39 @@ class InventarioListCreateView(APIView):
         if not doc_data['nombre']:
             return Response({'error': 'El nombre del producto es obligatorio'}, status=400)
 
-        repetido = _producto_con_nombre(categoria, doc_data['nombre'])
-        if repetido is False:
-            return Response({'error': 'Error al consultar la base de datos'}, status=503)
-        if repetido:
-            return Response({'error': f"Ya existe \"{repetido['nombre']}\": elígelo en vez de crearlo otra vez"}, status=409)
+        return _crear_unico(doc_data, categoria)
 
-        # identificador fijo: si dos personas lo crean a la vez, CouchDB deja solo uno
-        data, status_code = create_document(doc_data, f"producto:{categoria}:{slug(doc_data['nombre'])}")
-        if status_code == 409:
-            return Response({'error': f"Ya existe \"{doc_data['nombre']}\" (otra persona lo acaba de crear)"}, status=409)
-        return Response(data, status=status_code)
+    def _crear_merch(self, datos, minimo):
+        try:
+            campos = merch.producto_desde(datos)
+        except merch.DatoInvalido as e:
+            return Response({'error': str(e)}, status=400)
+        doc_data = {
+            'tipo': 'producto',
+            'categoria': merch.CATEGORIA,
+            'cantidad': 0,
+            'stock_minimo': minimo,
+            'codigo': str(datos.get('codigo') or campos['nombre'][:2])[:4].upper(),
+            'codigosBarras': datos.get('codigosBarras', []) if isinstance(datos.get('codigosBarras'), list) else [],
+            'lotes': [],
+            'unidos': [],
+            **campos,
+        }
+        return _crear_unico(doc_data, merch.CATEGORIA)
+
+
+def _crear_unico(doc_data, categoria):
+    repetido = _producto_con_nombre(categoria, doc_data['nombre'])
+    if repetido is False:
+        return Response({'error': 'Error al consultar la base de datos'}, status=503)
+    if repetido:
+        return Response({'error': f"Ya existe \"{repetido['nombre']}\": elígelo en vez de crearlo otra vez"}, status=409)
+
+    # identificador fijo: si dos personas lo crean a la vez, CouchDB deja solo uno
+    data, status_code = create_document(doc_data, f"producto:{categoria}:{slug(doc_data['nombre'])}")
+    if status_code == 409:
+        return Response({'error': f"Ya existe \"{doc_data['nombre']}\" (otra persona lo acaba de crear)"}, status=409)
+    return Response(data, status=status_code)
 
 
 def _producto_con_nombre(categoria, nombre, excepto=None):
@@ -264,8 +294,7 @@ def _producto_con_nombre(categoria, nombre, excepto=None):
         return False
     buscado = slug(nombre)
     for p in productos:
-        es_salud = str(p.get('categoria', '')).lower() in ('salud', 'medicinas', 'higiene')
-        if p['_id'] != excepto and (es_salud == (categoria == 'salud')) and slug(p.get('nombre')) == buscado:
+        if p['_id'] != excepto and grupo_categoria(p.get('categoria')) == categoria and slug(p.get('nombre')) == buscado:
             return p
     return None
 
@@ -293,13 +322,23 @@ class InventarioDetailView(APIView):
             actual, status_code = get_document_by_id(doc_id, 'producto')
             if status_code != 200:
                 return Response(actual, status=status_code)
-            categoria = 'salud' if str(actual.get('categoria', '')).lower() in ('salud', 'medicinas', 'higiene') else 'alimentos'
-            repetido = _producto_con_nombre(categoria, doc_data['nombre'], excepto=doc_id)
+            repetido = _producto_con_nombre(grupo_categoria(actual.get('categoria')), doc_data['nombre'], excepto=doc_id)
             if repetido:
                 return Response({'error': f"Ya existe otro producto llamado \"{repetido['nombre']}\""}, status=409)
 
+        def cambiar(doc):
+            if not merch.es_merch(doc):
+                return doc_data
+            try:
+                return {**doc_data, **merch.cambios_producto(doc, request.data)}
+            except merch.DatoInvalido as e:
+                raise DatoInvalido(str(e))
+
         # sobre la version actual: si se cruza con un movimiento, se reintenta (no se pisa el stock)
-        data, status_code = actualizar_con_reintento(doc_id, 'producto', lambda doc: doc_data)
+        try:
+            data, status_code = actualizar_con_reintento(doc_id, 'producto', cambiar)
+        except DatoInvalido as e:
+            return Response({'error': str(e)}, status=400)
         return Response(data, status=status_code)
 
     def delete(self, request, doc_id):
@@ -323,20 +362,35 @@ class HistorialListCreateView(APIView):
         return Response(data, status=status_code)
 
 
-class DonadoresListCreateView(APIView):
+def _telefono(valor):
+    valor = ' '.join(str(valor or '').split())[:20]
+    if not valor:
+        return ''
+    digitos = sum(c.isdigit() for c in valor)
+    if not all(c.isdigit() or c in ' +-()' for c in valor) or not 6 <= digitos <= 15:
+        raise DatoInvalido('El número de contacto debe tener entre 6 y 15 dígitos')
+    return valor
+
+
+class PersonasListCreateView(APIView):
     permission_classes = [IsAuthenticated]
+    tipo = 'donador'
+    nombre = 'donador'
+    telefono_obligatorio = False
 
     def get(self, request):
-        data, status_code = get_documents_by_type('donador')
+        data, status_code = get_documents_by_type(self.tipo)
+        if status_code == 404 and self.tipo != 'donador':
+            return Response([], status=200)
         return Response(data, status=status_code)
 
     def post(self, request):
         datos = request.data
 
         doc_data = {
-            'tipo': 'donador',
+            'tipo': self.tipo,
             # primera letra de cada palabra en mayuscula
-            'nombre': _nombre_donador(datos.get('nombre', '')),
+            'nombre': _nombre_donador(' '.join(str(datos.get('nombre') if isinstance(datos.get('nombre'), str) else '').split())[:60]),
             'telefono': datos.get('telefono', datos.get('contacto', '')),
             'contacto': datos.get('contacto', datos.get('telefono', '')),
             'email': datos.get('email', ''),
@@ -346,23 +400,65 @@ class DonadoresListCreateView(APIView):
             'creadoPorId': getattr(request.user, 'id', ''),
             'creado': datos.get('creado') or _ahora()
         }
-
         if not doc_data['nombre']:
-            return Response({'error': 'El nombre del donador es obligatorio'}, status=400)
+            return Response({'error': f'El nombre del {self.nombre} es obligatorio'}, status=400)
+        if self.tipo != 'donador':
+            try:
+                telefono = _telefono(doc_data['telefono'])
+                if self.telefono_obligatorio and not telefono:
+                    raise DatoInvalido('Falta el número de contacto')
+                doc_data.update(telefono=telefono, contacto=telefono, email='',
+                                creado=_fecha_iso(datos.get('creado')) or _ahora())
+                if self.tipo == 'proveedor':
+                    doc_data['ruc'] = _ruc(datos.get('ruc'))
+            except DatoInvalido as e:
+                return Response({'error': str(e)}, status=400)
 
         # los donadores viejos tienen otro tipo de identificador: se revisa el nombre
-        existentes, status_code = get_documents_by_type('donador')
+        existentes, status_code = get_documents_by_type(self.tipo)
         if status_code != 200:
+            if status_code == 404:
+                return Response({'error': 'Falta preparar la base de datos: corre "python manage.py setup_couch"'}, status=503)
             return Response(existentes, status=status_code)
         clave = slug(doc_data['nombre'])
         if any(slug(d.get('nombre')) == clave for d in existentes):
             return Response({'error': f"\"{doc_data['nombre']}\" ya está registrado"}, status=409)
 
         # identificador fijo: si dos personas lo crean a la vez, CouchDB deja solo uno
-        data, status_code = create_document(doc_data, f'donador:{clave}')
+        data, status_code = create_document(doc_data, f'{self.tipo}:{clave}')
         if status_code == 409:
             return Response({'error': f"\"{doc_data['nombre']}\" ya está registrado (otra persona lo acaba de agregar)"}, status=409)
         return Response(data, status=status_code)
+
+
+def _fecha_iso(valor):
+    try:
+        return datetime.fromisoformat(str(valor).replace('Z', '+00:00')).isoformat() if valor else None
+    except ValueError:
+        return None
+
+
+def _ruc(valor):
+    valor = str(valor or '').strip()
+    if valor and not (valor.isdigit() and len(valor) == 11):
+        raise DatoInvalido('El RUC tiene que tener 11 dígitos')
+    return valor
+
+
+class DonadoresListCreateView(PersonasListCreateView):
+    tipo = 'donador'
+    nombre = 'donador'
+
+
+class ProveedoresListCreateView(PersonasListCreateView):
+    tipo = 'proveedor'
+    nombre = 'proveedor'
+    telefono_obligatorio = True
+
+
+class CompradoresListCreateView(PersonasListCreateView):
+    tipo = 'comprador'
+    nombre = 'comprador'
 
 
 class UsuariosListCreateView(APIView):

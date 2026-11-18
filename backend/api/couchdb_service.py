@@ -26,6 +26,8 @@ DBS = {
     'producto':   os.getenv('COUCHDB_DB_INVENTARIO', 'casa_inventario'),
     'donador':    os.getenv('COUCHDB_DB_DONADORES', 'casa_donadores'),
     'movimiento': os.getenv('COUCHDB_DB_MOVIMIENTOS', 'casa_movimientos'),
+    'proveedor':  os.getenv('COUCHDB_DB_PROVEEDORES', 'casa_proveedores'),
+    'comprador':  os.getenv('COUCHDB_DB_COMPRADORES', 'casa_compradores'),
 }
 TIPOS_VALIDOS = set(DBS)
 
@@ -169,6 +171,15 @@ def slug(texto):
     return re.sub(r'[^a-z0-9]+', '-', sin_tildes.lower()).strip('-')[:80]
 
 
+def nombre_propio(nombre):
+    palabras = str(nombre or '').split()
+    todo_mayuscula = ' '.join(palabras) == ' '.join(palabras).upper()
+    return ' '.join(
+        p if (not todo_mayuscula and len(p) > 1 and p == p.upper()) else p[:1].upper() + p[1:].lower()
+        for p in palabras
+    )
+
+
 def get_document_by_id(doc_id, tipo_esperado):
     """Obtiene un documento por ID, solo si es del tipo esperado y sin secretos."""
     data, status = _leer_documento(doc_id, tipo_esperado)
@@ -240,4 +251,4 @@ def delete_document(doc_id, rev, tipo_esperado):
     actual, status = _leer_documento(doc_id, tipo_esperado)
     if status != 200:
         return actual, status
-    return _request('DELETE', _doc_url(tipo_esperado, actual['_id']),params={'rev': rev})
+    return _request('DELETE', _doc_url(tipo_esperado, actual['_id']),params={'rev': rev})

@@ -2,6 +2,8 @@
 import { useSyncExternalStore } from 'react';
 import { inventarioVacio } from './logica/inventario.js';
 import { filtrosHistorialVacios } from './logica/historial.js';
+import { merchVacio } from './logica/merch.js';
+import { personasVacio } from './logica/personas.js';
 
 export const estado = {
   seccion: 'Inicio',
@@ -11,6 +13,9 @@ export const estado = {
   historialFiltros: filtrosHistorialVacios(),
   donadoresFiltros: { actividad: 'Todos', anio: 'Todos' },
   inventarioFiltros: inventarioVacio(),
+  merchFiltros: merchVacio(),
+  proveedoresFiltros: personasVacio(),
+  compradoresFiltros: personasVacio(),
   // panel de filtros abierto (o null)
   filtrosAbiertos: null,
   filtro: 'Todos',
@@ -25,8 +30,11 @@ export const estado = {
   // se llenan con los datos del backend al entrar
   alimentos: [],
   salud: [],
+  merch: [],
   historial: [],
   donadores: [],
+  proveedores: [],
+  compradores: [],
   cuentas: [],
 };
 

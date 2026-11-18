@@ -83,3 +83,18 @@ class SaludTests(PruebaAPI):
     def test_responde_sin_sesion(self):
         r = self.client.get('/api/salud/')
         self.assertEqual((r.status_code, r.data), (200, {'ok': True}))
+
+
+class DictadoMerchTests(PruebaAPI):
+    def test_ventas_y_compras(self):
+        items = dictado.limpiar_items(json.dumps([
+            {'tipo': 'salida', 'producto': 'Panetón', 'cantidad': 3, 'comprador': ' Rosa   Quispe ', 'precio': 25, 'medio_pago': 'yape-plin'},
+            {'tipo': 'ingreso', 'producto': 'Polo', 'cantidad': 5, 'proveedor': 'Textiles Sur', 'precio': -2, 'medio_pago': 'tarjeta'},
+            {'producto': 'Taza', 'precio': True, 'comprador': ['x']},
+        ]))
+        self.assertEqual(items[0]['comprador'], 'Rosa Quispe')
+        self.assertEqual((items[0]['precio'], items[0]['medio_pago']), (25, 'yape-plin'))
+        self.assertEqual(items[1]['proveedor'], 'Textiles Sur')
+        self.assertNotIn('precio', items[1])
+        self.assertNotIn('medio_pago', items[1])
+        self.assertEqual(set(items[2]), {'tipo', 'producto', 'cantidad', 'unidad', 'vence'})

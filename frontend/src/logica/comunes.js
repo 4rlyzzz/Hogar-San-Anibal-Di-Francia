@@ -10,8 +10,12 @@ export function iniciales(nombre) {
 }
 
 // nombre visible de cada categoria
-export const nombresCategoria = { Alimentos: 'Alimentos', Salud: 'Salud e higiene' };
+export const nombresCategoria = { Alimentos: 'Alimentos', Salud: 'Salud e higiene', Merchandising: 'Merchandising' };
 export const nombreCategoria = categoria => nombresCategoria[categoria] || categoria;
+const coloresCategoria = { Alimentos: 'verde', Salud: 'azul', Merchandising: 'morado' };
+export const colorCategoria = categoria => coloresCategoria[categoria] || 'gris';
+
+export const mediosPago = [['efectivo', 'Efectivo'], ['yape-plin', 'Yape / Plin'], ['transferencia', 'Transferencia']];
 
 export const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
 
@@ -214,6 +218,7 @@ export function textoPara(fila) {
 // texto de la columna DETALLE
 export function textoDetalle(fila) {
   const extra = [fila.nota, fila.observaciones].filter(Boolean).map(t => ' · ' + t).join('');
+  if (fila.categoria === 'Merchandising' && fila.movimiento !== 'Ajuste' && !fila.motivo) return detalleMerch(fila) + extra;
   if (fila.movimiento === 'Ajuste') return (fila.motivo || 'Ajuste') + extra;
   if (fila.movimiento === 'Ingreso') {
     if (fila.donador) return fila.donador + (fila.actividad ? ' · ' + fila.actividad : '') + extra;
@@ -223,6 +228,16 @@ export function textoDetalle(fila) {
   if (ninosDe(fila).length) return 'Para ' + textoPara(fila) + extra;
   const base = fila.categoria === 'Salud' ? 'Uso general' : '';
   return base ? base + extra : extra.slice(3);
+}
+
+function detalleMerch(fila) {
+  const soles = n => `S/ ${Number(n).toFixed(2)}`;
+  if (fila.movimiento === 'Ingreso') {
+    const quien = fila.proveedor ? `Compra a ${fila.proveedor}` : fila.taller ? `Hecho por ${fila.taller}` : fila.inicial ? 'Registro inicial' : 'Ingreso';
+    return quien + (fila.costoTotal != null ? ` · ${soles(fila.costoTotal)}` : '');
+  }
+  const medio = mediosPago.find(([v]) => v === fila.medioPago)?.[1];
+  return [fila.comprador ? `Venta a ${fila.comprador}` : 'Venta', fila.total != null ? soles(fila.total) : '', medio].filter(Boolean).join(' · ');
 }
 
 // '+20 kg', '−5 kg' (con el signo menos tipografico)

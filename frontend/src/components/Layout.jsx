@@ -5,6 +5,7 @@ import { usuario } from '../data/datos.js';
 import { largos } from '../validacion.js';
 import {
   IconoBuscar, IconoCampana, IconoInicio, IconoAlimentos, IconoSalud, IconoHistorial, IconoDonadores, IconoFijar, IconoSalir, IconoUsuarios, IconoMicrofono,
+  IconoMerch, IconoProveedores, IconoCompradores,
 } from '../assets/iconos.jsx';
 import { irA, buscar, fijarMenu, agregar, empezarDictado, abrirModal, verActividad, abrirClave, salir, cambiar } from '../acciones.js';
 import { calcularAlertas } from '../logica/alertas.js';
@@ -14,6 +15,8 @@ import { Inicio } from '../pages/Inicio.jsx';
 import { Inventario } from '../pages/Inventario.jsx';
 import { Historial } from '../pages/Historial.jsx';
 import { Donadores } from '../pages/Donadores.jsx';
+import { Merchandising } from '../pages/Merchandising.jsx';
+import { Personas } from '../pages/Personas.jsx';
 import { Usuarios } from '../pages/Usuarios.jsx';
 
 // etiqueta: nombre que se muestra si es distinto de la clave
@@ -23,8 +26,11 @@ const secciones = [
   { nombre: 'Inicio', Icono: IconoInicio, grupo: 'GENERAL' },
   { nombre: 'Alimentos', Icono: IconoAlimentos, grupo: 'INVENTARIO' },
   { nombre: 'Salud', etiqueta: 'Salud e higiene', Icono: IconoSalud, grupo: 'INVENTARIO' },
+  { nombre: 'Merchandising', Icono: IconoMerch, grupo: 'INVENTARIO' },
   { nombre: 'Historial', Icono: IconoHistorial, grupo: 'REGISTROS' },
   { nombre: 'Donadores', Icono: IconoDonadores, grupo: 'REGISTROS' },
+  { nombre: 'Proveedores', Icono: IconoProveedores, grupo: 'REGISTROS' },
+  { nombre: 'Compradores', Icono: IconoCompradores, grupo: 'REGISTROS' },
   { nombre: 'Usuarios', Icono: IconoUsuarios, grupo: 'ADMINISTRACIÓN', soloAdmin: true },
 ];
 
@@ -32,8 +38,11 @@ const paginas = {
   Inicio: () => <Inicio />,
   Alimentos: () => <Inventario key="Alimentos" categoria="Alimentos" />,
   Salud: () => <Inventario key="Salud" categoria="Salud" />,
+  Merchandising: () => <Merchandising />,
   Historial: () => <Historial />,
   Donadores: () => <Donadores />,
+  Proveedores: () => <Personas key="proveedor" tipo="proveedor" />,
+  Compradores: () => <Personas key="comprador" tipo="comprador" />,
   Usuarios: () => <Usuarios />,
 };
 
@@ -108,8 +117,12 @@ function Menu({ seccion }) {
 }
 
 function MenuMovil({ seccion }) {
+  const activo = useRef(null);
+  useEffect(() => {
+    activo.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [seccion]);
   return seccionesVisibles().map(s => (
-    <button key={s.nombre} className={s.nombre === seccion ? 'activo' : ''} data-accion="seccion" data-seccion={s.nombre} aria-label={s.etiqueta || s.nombre} onClick={() => irA(s.nombre)}>
+    <button key={s.nombre} ref={s.nombre === seccion ? activo : null} className={s.nombre === seccion ? 'activo' : ''} data-accion="seccion" data-seccion={s.nombre} aria-label={s.etiqueta || s.nombre} onClick={() => irA(s.nombre)}>
       <s.Icono />
     </button>
   ));
@@ -195,8 +208,8 @@ export function Layout() {
       </div>
 
       <nav className="menu-movil" id="menu-movil"><MenuMovil seccion={seccion} /></nav>
-      {/* en Donadores y Usuarios el "+" no registra movimientos */}
-      {seccion !== 'Donadores' && seccion !== 'Usuarios' && (
+      {/* en Donadores, Proveedores, Compradores y Usuarios el "+" no registra movimientos */}
+      {!['Donadores', 'Proveedores', 'Compradores', 'Usuarios'].includes(seccion) && (
         <button className="btn-flotante btn-flotante-voz" data-accion="dictar" aria-label="Registrar por voz" title="Registrar por voz" onClick={empezarDictado}>
           <IconoMicrofono />
         </button>

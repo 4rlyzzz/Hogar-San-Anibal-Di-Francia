@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useEstado } from '../estado.js';
 import { IconoAlimentos, IconoSalud, IconoReloj, IconoCaja } from '../assets/iconos.jsx';
 import { irA, verProducto, cambiar } from '../acciones.js';
-import { nombreCategoria, colorVencimiento, textoCambio, diasParaVencer, porVencer, bajoMinimo, fechaDe, meses } from '../logica/comunes.js';
+import { nombreCategoria, colorCategoria, colorVencimiento, textoCambio, diasParaVencer, porVencer, bajoMinimo, fechaDe, meses } from '../logica/comunes.js';
 import { calcularAlertas, ordenarAlertas, coloresPrioridad, itemSobrestock } from '../logica/alertas.js';
 import { Encabezado, TituloSeccion, TituloOrden, Recuadro, clasesMovimiento } from '../components/Comunes.jsx';
 import { AlertaSobrestock } from '../components/AlertaSobrestock.jsx';
@@ -10,7 +10,7 @@ import { PastillasProblemas } from '../components/Paneles.jsx';
 
 // ---------- recuadros de arriba ----------
 function Recuadros({ estado }) {
-  const todos = [...estado.alimentos, ...estado.salud];
+  const todos = [...estado.alimentos, ...estado.salud, ...estado.merch];
   return (
     <div className="panel-recuadros">
       <Recuadro color="verde" Icono={IconoAlimentos} numero={estado.alimentos.length} titulo="Alimentos" detalle={`${estado.alimentos.filter(porVencer).length} por vencer`} />
@@ -112,8 +112,8 @@ function Lienzo({ tope, columnas, ancho, nombres, alFinal = false, children }) {
 
 // barras de stock, del mas bajo al mas alto
 function GraficoStock({ estado, categoria }) {
-  const lista = [...(categoria === 'Salud' ? estado.salud : estado.alimentos)].sort((a, b) => a.cantidad / a.minimo - b.cantidad / b.minimo);
-  const color = categoria === 'Salud' ? 'barra-azul' : 'barra-verde';
+  const lista = [...({ Salud: estado.salud, Merchandising: estado.merch }[categoria] ?? estado.alimentos)].sort((a, b) => a.cantidad / a.minimo - b.cantidad / b.minimo);
+  const color = { Salud: 'barra-azul', Merchandising: 'barra-morado' }[categoria] ?? 'barra-verde';
   const tope = topeEje(Math.max(...lista.map(i => Math.max(i.cantidad, i.minimo))));
   const alto = n => Math.min(100, n / tope * 100);
 
@@ -224,7 +224,7 @@ function Grafico({ estado }) {
       <div className="grafico-cabecera">
         <Selector campo="vista" opciones={['Movimientos', 'Stock']} actual={vista} clase="pestanas-grafico" />
         {esStock
-          ? <Selector campo="categoria" opciones={['Alimentos', 'Salud']} actual={categoria} />
+          ? <Selector campo="categoria" opciones={['Alimentos', 'Salud', 'Merchandising']} actual={categoria} clase="selector-stock" />
           : <Selector campo="periodo" opciones={['Día', 'Semana', 'Mes']} actual={periodo} />}
       </div>
       {esStock ? <GraficoStock estado={estado} categoria={categoria} /> : <GraficoMovimientos estado={estado} periodo={periodo} />}
@@ -241,6 +241,7 @@ function PanelSobrestock({ estado }) {
   const proximos = [
     ...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })),
     ...estado.salud.map(item => ({ item, categoria: 'Salud' })),
+    ...estado.merch.map(item => ({ item, categoria: 'Merchandising' })),
   ]
     .filter(p => (diasParaVencer(p.item) ?? -1) >= 0)
     .sort((a, b) => diasParaVencer(a.item) - diasParaVencer(b.item))
@@ -295,7 +296,7 @@ function MovimientosRecientes({ estado }) {
               <div className="linea-texto">
                 <b>{f.responsable}</b> registró {verbos[f.movimiento]} de{' '}
                 <span className="mono">{textoCambio(f)}</span>
-                <small>{f.insumo}{f.donador ? ` · donado por ${f.donador}` : ''}</small>
+                <small>{f.insumo}{f.donador ? ` · donado por ${f.donador}` : ''}{f.comprador ? ` · vendido a ${f.comprador}` : ''}{f.proveedor ? ` · de ${f.proveedor}` : ''}</small>
               </div>
             </li>
           );
@@ -316,7 +317,7 @@ function OtrasAlertas({ estado }) {
   return (
     <div className="tabla">
       <div className="tabla-header">
-        <TituloSeccion codigo="AV" color="rojo" titulo="Otras alertas" detalle={`${filas.length} de alimentos, salud e higiene`} />
+        <TituloSeccion codigo="AV" color="rojo" titulo="Otras alertas" detalle={`${filas.length} de alimentos, salud e higiene y merchandising`} />
       </div>
 
       <div className="alerta-fila fila-titulos">
@@ -329,7 +330,7 @@ function OtrasAlertas({ estado }) {
       {filas.map(f => (
         <button key={f.categoria + f.item.id} className="alerta-fila fila-boton" data-accion="ver-producto" onClick={() => verProducto(f.categoria, f.item.id)}>
           <span className="fila-insumo">{f.item.nombre}</span>
-          <span className="alerta-fila-categoria"><span className={`pastilla ${f.categoria === 'Salud' ? 'azul' : 'verde'}`}>{nombreCategoria(f.categoria)}</span></span>
+          <span className="alerta-fila-categoria"><span className={`pastilla ${colorCategoria(f.categoria)}`}>{nombreCategoria(f.categoria)}</span></span>
           <span className="alerta-fila-tipo"><PastillasProblemas problemas={f.problemas} /></span>
           <span className="alerta-fila-prioridad"><span className={`pastilla ${coloresPrioridad[f.prioridad]}`}>{f.prioridad}</span></span>
         </button>

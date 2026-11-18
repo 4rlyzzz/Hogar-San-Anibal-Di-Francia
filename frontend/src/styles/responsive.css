@@ -695,8 +695,19 @@
     box-shadow: 0 12px 30px -12px rgba(23, 33, 31, 0.28);
   }
 
+  .menu-movil {
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .menu-movil::-webkit-scrollbar {
+    display: none;
+  }
+
   .menu-movil button {
-    flex: 1;
+    flex: 1 0 44px;
+    scroll-snap-align: center;
     height: 52px;
     max-width: 72px;
     border: 0;

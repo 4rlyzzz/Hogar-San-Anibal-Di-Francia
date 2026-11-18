@@ -11,8 +11,10 @@ $DbPorTipo = @{
     producto   = "casa_inventario"
     donador    = "casa_donadores"
     movimiento = "casa_movimientos"
+    proveedor  = "casa_proveedores"
+    comprador  = "casa_compradores"
 }
-$Bases = @("casa_usuarios", "casa_inventario", "casa_donadores", "casa_movimientos")
+$Bases = @("casa_usuarios", "casa_inventario", "casa_donadores", "casa_movimientos", "casa_proveedores", "casa_compradores")
 
 Write-Host ""
 Write-Host "===================================="
@@ -441,4 +443,4 @@ Write-Host "Documentos cargados: $TotalCargados"
 Write-Host ""
 Write-Host "Siguiente paso: reinicia Django y recarga el navegador"
 Write-Host "(las revisiones _rev de los documentos son nuevas)."
-Write-Host ""
+Write-Host ""

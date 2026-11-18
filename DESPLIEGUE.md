@@ -104,6 +104,7 @@ Antes: sube a GitHub la rama con estos cambios y en Railway conecta tu cuenta de
    Los cambios de configuración quedan **pendientes** hasta que pulses **Deploy / Apply changes** arriba en el lienzo: recién ahí se crea el dominio.
 5. **Settings → Deploy → Healthcheck Path:** `/api/salud/`
 6. Al arrancar, el backend corre `setup_couch` solo: crea las bases, el usuario `casa_app`, los permisos y los índices. Revisa en **Deploy Logs** que diga `CouchDB listo.`
+   Si la app ya estaba desplegada y una actualización trae bases nuevas (por ejemplo `casa_proveedores` y `casa_compradores` de Merchandising), el backend necesita `COUCHDB_ADMIN_PASSWORD` en el redeploy para crearlas. Si la quitaste (paso 3.5), vuelve a ponerla, haz redeploy y después quítala otra vez.
 
 ### 3.3 Frontend
 1. **New → GitHub Repo** (el mismo). Nombre: **`frontend`**. **Root Directory:** `frontend`
@@ -135,7 +136,7 @@ python manage.py crear_usuario
 (El comando `railway ssh` exacto también aparece en el panel: clic derecho sobre el servicio backend → *Copy SSH Command*.)
 
 ### 3.5 (Recomendado) Quitar la clave de administrador del backend
-Cuando `setup_couch` ya corrió, puedes borrar `COUCHDB_ADMIN_PASSWORD` de las variables del **backend**. Django sigue funcionando solo con `casa_app`, y si alguien llegara a vulnerar el backend no tendría la clave de administrador. Vuelve a agregarla cuando necesites correr `setup_couch` o rotar la contraseña de `casa_app`.
+Cuando `setup_couch` ya corrió, puedes borrar `COUCHDB_ADMIN_PASSWORD` de las variables del **backend**. (Mientras falten las bases de proveedores y compradores, esas listas salen vacías y al agregar uno se avisa que falta correr `setup_couch`.) Django sigue funcionando solo con `casa_app`, y si alguien llegara a vulnerar el backend no tendría la clave de administrador. Vuelve a agregarla cuando necesites correr `setup_couch` o rotar la contraseña de `casa_app`.
 
 ## 4. Revisión después de desplegar
 - [ ] `https://<backend>/api/salud/` responde `{"ok": true}`.

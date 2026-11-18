@@ -1,4 +1,4 @@
-import { fechaDe, cambioDe, nombreCategoria, textoPara } from './comunes.js';
+import { fechaDe, cambioDe, nombreCategoria, textoPara, mediosPago } from './comunes.js';
 
 const negrita = texto => ({ value: texto, fontWeight: 'bold' });
 
@@ -9,6 +9,8 @@ function pareceFormula(valor) {
   return /^[=@\t\r]/.test(valor) || (/^[+-]/.test(valor) && !/^[+\-\d\s()]+$/.test(valor));
 }
 const texto = valor => ({ value: pareceFormula(valor) ? "'" + valor : valor });
+const soles = valor => (valor != null && valor !== '' ? { value: Number(valor), type: Number, format: '"S/" #,##0.00' } : { value: null });
+const comprobante = f => [{ boleta: 'Boleta', factura: 'Factura' }[f.comprobanteTipo], f.comprobanteNumero].filter(Boolean).join(' ');
 
 // columnas del Excel del historial
 const columnasHistorial = [
@@ -16,6 +18,7 @@ const columnasHistorial = [
   { header: negrita('Hora'), width: 8, cell: f => texto(f.fecha.split(' ')[2]) },
   { header: negrita('Producto'), width: 32, cell: f => texto(f.insumo) },
   { header: negrita('Categoría'), width: 16, cell: f => texto(nombreCategoria(f.categoria)) },
+  { header: negrita('Tipo / subcategoría'), width: 26, cell: f => texto(f.tipoTexto || '') },
   { header: negrita('Movimiento'), width: 12, cell: f => texto(f.movimiento) },
   { header: negrita('Cantidad'), width: 10, cell: f => ({ value: cambioDe(f), type: Number }) },
   { header: negrita('Unidad'), width: 10, cell: f => texto(f.unidad) },
@@ -29,6 +32,15 @@ const columnasHistorial = [
   { header: negrita('Motivo del ajuste'), width: 26, cell: f => texto(f.motivo || '') },
   { header: negrita('Detalle'), width: 30, cell: f => texto(f.nota || (f.corrige ? `Corrige el ajuste del ${f.corrige.fecha}` : '')) },
   { header: negrita('Observaciones'), width: 30, cell: f => texto(f.observaciones || '') },
+  { header: negrita('Proveedor'), width: 24, cell: f => texto(f.proveedor || '') },
+  { header: negrita('Elaborado por'), width: 22, cell: f => texto(f.taller || '') },
+  { header: negrita('Comprador'), width: 24, cell: f => texto(f.comprador || '') },
+  { header: negrita('Costo unitario'), width: 14, cell: f => soles(f.costoUnitario) },
+  { header: negrita('Precio unitario'), width: 14, cell: f => soles(f.precioUnitario) },
+  { header: negrita('Total'), width: 12, cell: f => soles(f.total ?? f.costoTotal) },
+  { header: negrita('Medio de pago'), width: 14, cell: f => texto(mediosPago.find(([v]) => v === f.medioPago)?.[1] ?? '') },
+  { header: negrita('Comprobante'), width: 18, cell: f => texto(comprobante(f)) },
+  { header: negrita('Lote'), width: 12, cell: f => texto(f.loteCodigo || '') },
 ];
 
 // 'Leche Evaporada Gloria' -> 'leche-evaporada-gloria'
@@ -41,11 +53,16 @@ export function nombreArchivoHistorial(filtros) {
   const partes = ['historial'];
   if (filtros.movimiento !== 'Todos') partes.push({ Ingreso: 'ingresos', Salida: 'salidas', Ajuste: 'ajustes' }[filtros.movimiento]);
   if (filtros.categoria !== 'Todos') partes.push(filtros.categoria);
+  if (filtros.tipoMerch && filtros.tipoMerch !== 'Todos') partes.push(filtros.tipoMerch);
+  if (filtros.subcategoria && filtros.subcategoria !== 'Todos') partes.push(filtros.subcategoria);
   if (filtros.responsable !== 'Todos') partes.push(filtros.responsable);
   if (filtros.producto !== 'Todos') partes.push(filtros.producto);
   if (filtros.para !== 'Todos') partes.push('para-' + filtros.para);
   if (filtros.donador !== 'Todos') partes.push(filtros.donador);
   if (filtros.actividad !== 'Todos') partes.push(filtros.actividad);
+  if (filtros.proveedor && filtros.proveedor !== 'Todos') partes.push(filtros.proveedor);
+  if (filtros.comprador && filtros.comprador !== 'Todos') partes.push(filtros.comprador);
+  if (filtros.medioPago && filtros.medioPago !== 'Todos') partes.push(filtros.medioPago);
   if (filtros.desde) partes.push('desde-' + filtros.desde);
   if (filtros.hasta) partes.push('hasta-' + filtros.hasta);
 
@@ -83,4 +100,30 @@ export function nombreArchivoDonadores(filtros) {
 export async function descargarDonadores(filas, nombreArchivo) {
   const { default: writeExcelFile } = await import('write-excel-file/browser');
   await writeExcelFile(filas, { columns: columnasDonadores, sheet: 'Donadores', stickyRowsCount: 1 }).toFile(nombreArchivo);
+}
+
+function columnasPersonas(tipo) {
+  const esProveedor = tipo === 'proveedor';
+  return [
+    { header: negrita(esProveedor ? 'Proveedor' : 'Comprador'), width: 30, cell: x => texto(x.persona.nombre) },
+    { header: negrita('Teléfono'), width: 16, cell: x => texto(x.persona.telefono || '') },
+    ...(esProveedor ? [{ header: negrita('RUC'), width: 14, cell: x => texto(x.persona.ruc || '') }] : []),
+    { header: negrita(esProveedor ? 'Compras' : 'Compras hechas'), width: 12, cell: x => ({ value: x.movimientos.length, type: Number }) },
+    { header: negrita(esProveedor ? 'Total comprado' : 'Total vendido'), width: 16, cell: x => soles(x.monto) },
+    { header: negrita('Qué'), width: 36, cell: x => texto(x.tipos.map(([t, n]) => `${t} (${n})`).join(', ')) },
+    { header: negrita('Última'), width: 14, cell: x => (x.movimientos[0] ? { value: fechaDe(x.movimientos[0].fecha), type: Date, format: 'dd/mm/yyyy' } : { value: null }) },
+    { header: negrita('Agregado por'), width: 18, cell: x => texto(x.persona.creadoPor || '') },
+  ];
+}
+
+export function nombreArchivoPersonas(tipo, filtros, nombresTipo = {}) {
+  const partes = [tipo === 'proveedor' ? 'proveedores' : 'compradores'];
+  if (filtros.tipoMerch !== 'Todos') partes.push(nombresTipo[filtros.tipoMerch] ?? filtros.tipoMerch);
+  if (filtros.anio !== 'Todos') partes.push(filtros.anio);
+  return partes.map(paraArchivo).join('_') + '.xlsx';
+}
+
+export async function descargarPersonas(tipo, filas, nombreArchivo) {
+  const { default: writeExcelFile } = await import('write-excel-file/browser');
+  await writeExcelFile(filas, { columns: columnasPersonas(tipo), sheet: tipo === 'proveedor' ? 'Proveedores' : 'Compradores', stickyRowsCount: 1 }).toFile(nombreArchivo);
 }
