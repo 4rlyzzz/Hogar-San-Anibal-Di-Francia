@@ -14,7 +14,11 @@ import {
   guardarUsuarioAPI,
   actualizarUsuarioAPI,
   getMiCuentaAPI,
-  cambiarClaveAPI
+  cambiarClaveAPI,
+  getProveedoresAPI,
+  guardarProveedorAPI,
+  getCompradoresAPI,
+  guardarCompradorAPI,
 } from './servicios/api.js';
 // los formularios mandan sus valores como objeto { campo: texto }; si algo no pasa la validacion se lanza Invalido
 import { estado, refrescar } from './estado.js';
@@ -28,7 +32,12 @@ import { planDescuento, disponible, cantidadVencida } from './logica/lotes.js';
 import { inventarioVacio } from './logica/inventario.js';
 import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js';
 import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
-import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores } from './logica/exportar.js';
+import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores, descargarPersonas, nombreArchivoPersonas } from './logica/exportar.js';
+import {
+  CATEGORIA as MERCH, esMerch, tiposMerch, ordenTipos, unidadesVenta, articulosDe, tallas, comprobantes, mediosPago, nombreMerch,
+  precioSugerido, pideVence, puedeVence, llevaLote, llevaProveedor, pideProveedor, llevaCosto, merchVacio, textoTipoMovimiento,
+} from './logica/merch.js';
+import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
 import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto } from './logica/dictado.js';
 import { procesarTextoConOmniroute } from './servicios/Omniroute.js';
 
@@ -139,8 +148,16 @@ function guardarEnBD(trabajo) {
   return cola;
 }
 
+const camposMerch = ['tipoMerch', 'subcategoria', 'marca', 'presentacion', 'precio', 'descuentoDesde', 'precioDescuento', 'descripcion',
+  'articulo', 'variante', 'perecible', 'diseno', 'talla', 'color', 'material'];
+
 // datos del producto que se pueden editar (el stock no: solo cambia con un movimiento en el servidor)
 function docProducto(item, categoria) {
+  if (esMerch(categoria)) {
+    const doc = { categoria: 'merchandising', nombre: item.nombreBase, unidad: item.unidad, stock_minimo: item.minimo || 0, codigosBarras: item.codigosBarras || [] };
+    for (const campo of camposMerch) if (item[campo] !== undefined && item[campo] !== null && item[campo] !== '') doc[campo] = item[campo];
+    return doc;
+  }
   return {
     nombre: item.nombre,
     categoria: categoria.toLowerCase() === 'salud' ? 'salud' : 'alimentos',
@@ -190,13 +207,19 @@ function movimientoDesdeDoc(doc) {
     ...doc,
     id: doc._id || doc.id,
     movimiento: rawMov.charAt(0).toUpperCase() + rawMov.slice(1).toLowerCase(),
-    categoria: rawCat.toLowerCase() === 'salud' ? 'Salud' : 'Alimentos',
+    categoria: { salud: 'Salud', merchandising: MERCH }[rawCat.toLowerCase()] ?? 'Alimentos',
     insumo: doc.insumo || doc.nombre || 'Sin insumo',
     cantidad: Number(doc.cantidad) || 0,
     saldo: Number(doc.saldo) || 0,
     responsable: doc.responsable || doc.usuario_id || 'admin',
     donador: nombreDonador(doc.donador),
+    ...(doc.proveedor && { proveedor: nombreDonador(doc.proveedor) }),
+    ...(doc.comprador && { comprador: nombreDonador(doc.comprador) }),
   };
+}
+
+function personaDesdeDoc(doc) {
+  return { ...donadorDesdeDoc(doc), ruc: doc.ruc || '' };
 }
 
 function donadorDesdeDoc(doc) {
@@ -331,6 +354,9 @@ function guardarVista() {
       historialFiltros: estado.historialFiltros,
       donadoresFiltros: estado.donadoresFiltros,
       inventarioFiltros: estado.inventarioFiltros,
+      merchFiltros: estado.merchFiltros,
+      proveedoresFiltros: estado.proveedoresFiltros,
+      compradoresFiltros: estado.compradoresFiltros,
       usuarios: estado.usuarios,
       alertasOrden: estado.alertasOrden,
       grafico: estado.grafico,
@@ -366,7 +392,7 @@ function leerVista() {
   if (typeof vista.seccion === 'string') estado.seccion = vista.seccion;
   if (typeof vista.filtro === 'string') estado.filtro = vista.filtro;
   if (typeof vista.busqueda === 'string') estado.busqueda = limpiarTexto(vista.busqueda).slice(0, largos.busqueda);
-  for (const grupo of ['historialFiltros', 'donadoresFiltros', 'inventarioFiltros', 'usuarios', 'alertasOrden', 'grafico']) {
+  for (const grupo of ['historialFiltros', 'donadoresFiltros', 'inventarioFiltros', 'merchFiltros', 'proveedoresFiltros', 'compradoresFiltros', 'usuarios', 'alertasOrden', 'grafico']) {
     estado[grupo] = mezclar(estado[grupo], vista[grupo]);
   }
   if (vista.lote && ['Ingreso', 'Salida'].includes(vista.lote.tipo) && Array.isArray(vista.lote.items)) {
@@ -457,7 +483,7 @@ export function salir() {
   guardarSesion(null); // Elimina usuario guardado
   Object.assign(usuario, { id: null, nombre: '', iniciales: '', rol: '' });
   // no deja los datos del anterior a la vista del siguiente
-  Object.assign(estado, { alimentos: [], salud: [], historial: [], donadores: [], cuentas: [], lote: null });
+  Object.assign(estado, { alimentos: [], salud: [], merch: [], historial: [], donadores: [], proveedores: [], compradores: [], cuentas: [], lote: null });
   estado.modal = null;
   estado.menuUsuario = false;
   refrescar();
@@ -492,6 +518,7 @@ export function irA(seccion) {
   estado.filtrosAbiertos = null;
   // limpia los filtros al cambiar de pestaña
   estado.inventarioFiltros = inventarioVacio();
+  estado.merchFiltros = merchVacio();
   window.scrollTo(0, 0);
   refrescar();
   // ultimo acceso y actividad de cada cuenta al dia
@@ -509,7 +536,7 @@ export function buscar(texto) {
 }
 
 // grupos y ordenes que se pueden cambiar
-const gruposFiltro = ['historialFiltros', 'donadoresFiltros', 'inventarioFiltros', 'usuarios'];
+const gruposFiltro = ['historialFiltros', 'donadoresFiltros', 'inventarioFiltros', 'merchFiltros', 'proveedoresFiltros', 'compradoresFiltros', 'usuarios'];
 const ordenesPermitidos = {
   usuarios: ['nombre', 'acceso', 'movimientos', 'agregado'],
   alertasOrden: ['producto', 'categoria', 'alerta', 'prioridad'],
@@ -534,12 +561,21 @@ export function cambiarFiltro(grupo, campo, valor, opciones = null) {
   if (opciones ? !permitido(valor, opciones) : !fechaFiltro(valor).ok) return;
   estado[grupo][campo] = valor;
   if (grupo === 'usuarios' && campo === 'orden') estado.usuarios.invertido = false;
-  // al cambiar de categoria se limpian producto y niño
-  if (grupo === 'historialFiltros' && campo === 'categoria') {
-    estado.historialFiltros.producto = 'Todos';
-    estado.historialFiltros.para = 'Todos';
-  }
+  limpiarDependientes(grupo, campo);
   refrescar();
+}
+
+function limpiarDependientes(grupo, campo) {
+  const f = estado[grupo];
+  if ((grupo === 'merchFiltros' || grupo === 'historialFiltros') && campo === 'tipoMerch') f.subcategoria = 'Todos';
+  if (grupo !== 'historialFiltros') return;
+  // al cambiar de categoria se limpian producto y niño; tipo y subcategoria solo valen en merchandising
+  if (campo === 'categoria') {
+    Object.assign(f, { producto: 'Todos', para: 'Todos' });
+    if (f.categoria !== MERCH) Object.assign(f, { tipoMerch: 'Todos', subcategoria: 'Todos' });
+  }
+  if (campo === 'tipoMerch' || campo === 'subcategoria') f.producto = 'Todos';
+  if ((campo === 'tipoMerch' || campo === 'subcategoria') && f[campo] !== 'Todos') f.categoria = MERCH;
 }
 
 // valor sin filtro
@@ -550,6 +586,7 @@ function sinFiltro(campo) {
 export function quitarFiltro(grupo, campo) {
   if (!permitido(grupo, gruposFiltro) || !Object.hasOwn(estado[grupo], campo)) return;
   estado[grupo][campo] = sinFiltro(campo);
+  limpiarDependientes(grupo, campo);
   refrescar();
 }
 
@@ -562,6 +599,10 @@ export function limpiarFiltros(grupo) {
   } else if (grupo === 'inventarioFiltros') {
     // el orden se mantiene
     estado.inventarioFiltros = { ...inventarioVacio(), orden: estado.inventarioFiltros.orden };
+  } else if (grupo === 'merchFiltros') {
+    estado.merchFiltros = { ...merchVacio(), orden: estado.merchFiltros.orden };
+  } else if (grupo === 'proveedoresFiltros' || grupo === 'compradoresFiltros') {
+    estado[grupo] = personasVacio();
   } else if (grupo === 'usuarios') {
     // el orden se mantiene
     estado.usuarios.rol = 'Todos';
@@ -582,8 +623,11 @@ export function cerrarFiltros() {
 
 // ---------- listas ----------
 export function listaDe(categoria) {
+  if (esMerch(categoria)) return estado.merch;
   return categoria === 'Salud' ? estado.salud : estado.alimentos;
 }
+
+export const categorias = ['Alimentos', 'Salud', MERCH];
 
 function productoPorId(categoria, id) {
   return listaDe(categoria).find(i => mismoId(i.id, id));
@@ -603,11 +647,7 @@ export function opcionesNinos() {
 
 // ---------- productos parecidos ----------
 export function productosParecidos(nombre) {
-  const todos = [
-    ...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })),
-    ...estado.salud.map(item => ({ item, categoria: 'Salud' })),
-  ];
-  return todos.filter(({ item }) => coincideNombre(nombre, item.nombre)).slice(0, 3);
+  return todosLosProductos().filter(({ item }) => coincideNombre(nombre, item.nombre)).slice(0, 3);
 }
 
 // ---------- campos que se repiten ----------
@@ -700,6 +740,189 @@ async function recargarDonadores() {
   refrescar();
 }
 
+const apiPersona = {
+  proveedor: { guardar: guardarProveedorAPI, traer: getProveedoresAPI },
+  comprador: { guardar: guardarCompradorAPI, traer: getCompradoresAPI },
+};
+
+function listaPersona(tipo) {
+  return estado[personas[tipo].lista];
+}
+
+function leerPersonaNueva(tipo, v, campoNombre, campoTelefono, campoRuc = null) {
+  const p = personas[tipo];
+  const nombre = nombreDonador(leer(v, campoNombre, tipo === 'proveedor' ? reglas.nombreProveedor : reglas.nombreComprador));
+  if (listaPersona(tipo).some(d => d.nombre.toLowerCase() === nombre.toLowerCase())) {
+    falla(`"${nombre}" ya está registrado: elígelo de la lista.`, campoNombre);
+  }
+  const telefono = leer(v, campoTelefono, p.telefonoObligatorio ? reglas.telefono : reglas.telefonoOpcional);
+  const ruc = campoRuc ? leer(v, campoRuc, reglas.ruc) : '';
+  return { nombre, telefono, ruc };
+}
+
+function elegirPersona(tipo, v, campo, obligatorio = false) {
+  const elegido = v[campo] ?? '';
+  if (elegido === '') {
+    if (obligatorio) falla(`Elige el ${personas[tipo].singular}.`, campo);
+    return { nombre: '', nuevo: null };
+  }
+  if (elegido !== 'nuevo') {
+    const persona = listaPersona(tipo).find(d => mismoId(d.id, elegido));
+    if (!persona) falla(`Elige el ${personas[tipo].singular} de la lista.`, campo);
+    return { nombre: persona.nombre, nuevo: null };
+  }
+  const nuevo = leerPersonaNueva(tipo, v, `${campo}-nombre`, `${campo}-telefono`);
+  return { nombre: nuevo.nombre, nuevo };
+}
+
+async function crearPersona(tipo, { nombre, telefono = '', ruc = '', observaciones = '' }) {
+  const creado = new Date();
+  const res = await apiPersona[tipo].guardar({ nombre, telefono, ruc, observaciones, creado: creado.toISOString() });
+  listaPersona(tipo).push({
+    id: res.id || res._id, _rev: res.rev || res._rev, tipo, nombre, telefono, contacto: telefono, ruc, observaciones,
+    creadoPor: usuario.nombre, creadoPorId: usuario.id, creado,
+  });
+  refrescar();
+}
+
+async function recargarPersonas(tipo) {
+  const docs = await apiPersona[tipo].traer();
+  if (Array.isArray(docs)) estado[personas[tipo].lista] = docs.map(personaDesdeDoc);
+  refrescar();
+}
+
+async function personaDeMovimiento(tipo, persona) {
+  if (!persona?.nuevo) return persona?.nombre ?? '';
+  try {
+    await crearPersona(tipo, persona.nuevo);
+  } catch (err) {
+    if (err.response?.status !== 409) {
+      if (motivoDelServidor(err)) throw new Invalido(motivoDelServidor(err));
+      throw err;
+    }
+    await recargarPersonas(tipo);
+  }
+  return persona.nombre;
+}
+
+export function abrirPersona(tipo) {
+  if (personas[tipo]) abrirModal({ tipo: 'persona', persona: tipo });
+}
+
+export async function guardarPersona(modal, v) {
+  const tipo = modal.persona;
+  const { nombre, telefono, ruc } = leerPersonaNueva(tipo, v, 'nuevo-nombre', 'nuevo-telefono', tipo === 'proveedor' ? 'nuevo-ruc' : null);
+  const observaciones = leer(v, 'nuevo-observaciones', reglas.observaciones);
+  try {
+    await crearPersona(tipo, { nombre, telefono, ruc, observaciones });
+  } catch (err) {
+    if (err.response?.status === 409) {
+      await recargarPersonas(tipo);
+      falla(`"${nombre}" ya está registrado (otra persona lo acaba de agregar): elígelo de la lista.`, 'nuevo-nombre');
+    }
+    if (motivoDelServidor(err)) falla(motivoDelServidor(err));
+    throw err;
+  }
+  estado.modal = null;
+  mostrarToast(`${personas[tipo].singular === 'proveedor' ? 'Proveedor' : 'Comprador'} agregado · ${nombre}`);
+}
+
+export function verPersona(tipo, id) {
+  const persona = personas[tipo] && listaPersona(tipo).find(x => mismoId(x.id, id));
+  if (persona) abrirModal({ tipo: 'panel-persona', persona: tipo, personaId: persona.id });
+}
+
+export function historialPersona(tipo, persona) {
+  estado.historialFiltros = { ...filtrosHistorialVacios(), categoria: MERCH, [personas[tipo].campo]: persona.nombre };
+  estado.modal = null;
+  irA('Historial');
+}
+
+export function descargarExcelPersonas(tipo) {
+  const p = personas[tipo];
+  const filas = listaPersonas(estado, tipo).map(x => ({ ...x, monto: montoDe(x.movimientos, tipo), tipos: tiposDe(x.movimientos, estado.merch) }));
+  if (filas.length === 0) return Promise.resolve();
+  const nombresTipo = Object.fromEntries(ordenTipos.map(t => [t, tiposMerch[t].nombre]));
+  return descargar(() => descargarPersonas(tipo, filas, nombreArchivoPersonas(tipo, estado[p.filtros], nombresTipo)), `Excel descargado · ${filas.length} ${p.plural}`);
+}
+
+function leerMerch(v, item, esIngreso) {
+  const comprobante = () => {
+    const tipo = v['comprobante-tipo'] ?? '';
+    if (tipo && !permitido(tipo, comprobantes.map(([c]) => c))) falla('Elige boleta o factura.', 'comprobante-tipo');
+    return { comprobanteTipo: tipo, comprobanteNumero: leer(v, 'comprobante-numero', reglas.comprobanteNumero) };
+  };
+  if (esIngreso) {
+    let vence = null;
+    if (pideVence(item)) {
+      if (!v.vencimiento) falla('Pon la fecha de vencimiento.', 'vencimiento');
+      vence = leer(v, 'vencimiento', reglas.vencimiento);
+    } else if (puedeVence(item)) vence = leerVencimiento(v);
+    return {
+      vence,
+      proveedor: llevaProveedor(item) ? elegirPersona('proveedor', v, 'proveedor', pideProveedor(item)) : { nombre: '', nuevo: null },
+      costo: llevaCosto(item) ? leer(v, 'costo', reglas.costoUnitario) : null,
+      ...(llevaCosto(item) ? comprobante() : { comprobanteTipo: '', comprobanteNumero: '' }),
+      loteCodigo: llevaLote(item) ? leer(v, 'lote-codigo', reglas.loteCodigo) : '',
+      taller: item.tipoMerch === 'hogar' ? leer(v, 'taller', reglas.taller) : '',
+      costoMateriales: item.tipoMerch === 'hogar' ? leer(v, 'costo-materiales', reglas.costoMateriales) : null,
+    };
+  }
+  const medio = v['medio-pago'] ?? '';
+  if (medio && !permitido(medio, mediosPago.map(([m]) => m))) falla('Elige el medio de pago de la lista.', 'medio-pago');
+  return {
+    precio: leer(v, 'precio', reglas.precioUnitario),
+    comprador: elegirPersona('comprador', v, 'comprador'),
+    medioPago: medio,
+    ...comprobante(),
+  };
+}
+
+function peticionMerch(m, nombres) {
+  return {
+    proveedor: nombres.proveedor ?? '', comprador: nombres.comprador ?? '',
+    costo_unitario: m.costo ?? null, costo_materiales: m.costoMateriales ?? null, taller: m.taller ?? '', lote_codigo: m.loteCodigo ?? '',
+    precio_unitario: m.precio ?? null, medio_pago: m.medioPago ?? '',
+    comprobante_tipo: m.comprobanteTipo ?? '', comprobante_numero: m.comprobanteNumero ?? '',
+  };
+}
+
+export function abrirEditarMerch(id) {
+  const item = productoPorId(MERCH, id);
+  if (item) abrirModal({ tipo: 'editar-merch', item });
+}
+
+export async function guardarEdicionMerch(modal, v) {
+  const { item } = modal;
+  const cambios = {
+    precio: leer(v, 'precio', reglas.precio),
+    stock_minimo: leer(v, 'minimo', cantidadDe(item.unidad, { que: 'el stock mínimo', puedeSerCero: true })),
+    descripcion: leer(v, 'descripcion', reglas.descripcion),
+  };
+  if (item.tipoMerch === 'paneton') {
+    cambios.descuentoDesde = leer(v, 'descuento-desde', reglas.descuentoDesde);
+    cambios.precioDescuento = leer(v, 'precio-descuento', reglas.precioDescuento);
+    leerDescuento(cambios);
+  }
+  if (item.tipoMerch === 'promocional') cambios.diseno = leer(v, 'diseno', reglas.diseno);
+  if (item.subcategoria === 'prendas') cambios.material = leer(v, 'material', reglas.material);
+  try {
+    actualizarProducto(item, await actualizarProductoAPI(item.id, cambios));
+  } catch (err) {
+    if (motivoDelServidor(err)) falla(motivoDelServidor(err));
+    throw err;
+  }
+  estado.modal = null;
+  mostrarToast(`Datos guardados · ${item.nombre}`);
+}
+
+function leerDescuento(d) {
+  if (d.descuentoDesde == null && d.precioDescuento == null) return;
+  if (d.descuentoDesde == null) falla('Pon desde cuántas unidades va el descuento.', 'descuento-desde');
+  if (d.precioDescuento == null) falla('Pon el precio con descuento.', 'precio-descuento');
+  if (d.precioDescuento >= d.precio) falla('El precio con descuento tiene que ser menor que el precio de venta.', 'precio-descuento');
+}
+
 // ---------- ingreso o salida ----------
 export function abrirMovimiento(categoria, id, tipo) {
   const item = productoPorId(categoria, id);
@@ -719,10 +942,16 @@ export function revisarMovimiento(modal, v) {
       : `No puedes sacar más de lo que hay (${item.cantidad} ${item.unidad}).`, 'cantidad');
   }
 
+  const observaciones = leer(v, 'observaciones', reglas.observaciones);
+  if (esMerch(categoria)) {
+    const merch = leerMerch(v, item, tipo === 'Ingreso');
+    const plan = tipo === 'Salida' ? planDescuento(item, cantidad) : [];
+    return { cantidad, vence: merch.vence ?? null, plan, donador: { nombre: '', nuevo: null }, actividad: '', para: [], observaciones, merch };
+  }
+
   // vencimiento del lote nuevo
   const vence = tipo === 'Ingreso' ? leerVencimiento(v) : null;
   const para = categoria === 'Salud' && tipo === 'Salida' ? leerPara(v) : [];
-  const observaciones = leer(v, 'observaciones', reglas.observaciones);
 
   let donador = { nombre: '', nuevo: null };
   let actividad = '';
@@ -741,9 +970,13 @@ export async function confirmarMovimiento(modal, datos) {
   if (estado.modal !== modal) return;
   const { item, movimiento: tipo } = modal;
   const donador = await donadorDeMovimiento(datos.donador);
+  const merch = datos.merch && peticionMerch(datos.merch, {
+    proveedor: await personaDeMovimiento('proveedor', datos.merch.proveedor),
+    comprador: await personaDeMovimiento('comprador', datos.merch.comprador),
+  });
   const fila = await enviarMovimiento(item, {
     tipo: tipo === 'Salida' ? 'salida' : 'ingreso', cantidad: datos.cantidad, vence: datos.vence ?? null,
-    donador, actividad: donador ? datos.actividad : '', para: datos.para, observaciones: datos.observaciones,
+    donador, actividad: donador ? datos.actividad : '', para: datos.para, observaciones: datos.observaciones, ...merch,
   });
   agregarAlHistorial(fila);
   if (estado.modal === modal) estado.modal = null;
@@ -755,13 +988,13 @@ export async function confirmarMovimiento(modal, datos) {
 // aqui solo se define (nombre, presentacion, minimo, codigo); cuanto entra, vence y donador van en su fila
 // desde: { itemId } para completar esa fila (sin itemId se agrega una), nombre y codigoBarras para empezar
 export function abrirProducto(categoria, desde = {}) {
-  if (estado.lote?.tipo !== 'Ingreso' || !permitido(categoria, ['Alimentos', 'Salud'])) return;
+  if (estado.lote?.tipo !== 'Ingreso' || !permitido(categoria, categorias)) return;
   abrirModal({ ...desde, tipo: 'producto', categoria });
 }
 
 // producto que tiene ese codigo de barras: { item, categoria } o null
 export function productoPorCodigo(codigo) {
-  for (const categoria of ['Alimentos', 'Salud']) {
+  for (const categoria of categorias) {
     const item = listaDe(categoria).find(i => i.codigosBarras?.includes(codigo));
     if (item) return { item, categoria };
   }
@@ -836,9 +1069,9 @@ const mismaBase = (a, b) => palabras(a).join(' ') === palabras(b).join(' ');
 
 // los tamaños que ya hay de ese producto, incluidos los nuevos de la lista: [{ item, categoria, nuevo }]
 function familia(base, exceptoItem) {
-  const existentes = todosLosProductos().filter(({ item }) => mismaBase(baseDe(item.nombre, item), base)).map(p => ({ ...p, nuevo: false }));
+  const existentes = todosLosProductos().filter(({ item, categoria }) => !esMerch(categoria) && mismaBase(baseDe(item.nombre, item), base)).map(p => ({ ...p, nuevo: false }));
   const enLista = (estado.lote?.items ?? [])
-    .filter(x => x.id !== exceptoItem && x.productoNuevo && mismaBase(baseDe(x.productoNuevo.nombre, x.productoNuevo), base))
+    .filter(x => x.id !== exceptoItem && x.productoNuevo && !esMerch(x.categoria) && mismaBase(baseDe(x.productoNuevo.nombre, x.productoNuevo), base))
     .map(x => ({ item: x.productoNuevo, categoria: x.categoria, nuevo: true }));
   return [...existentes, ...enLista];
 }
@@ -887,7 +1120,8 @@ async function renombrarProducto(item, categoria, nombre) {
 export function guardarProducto(modal, v) {
   const { categoria } = modal;
   const lote = estado.lote;
-  if (lote?.tipo !== 'Ingreso' || !permitido(categoria, ['Alimentos', 'Salud'])) return;
+  if (lote?.tipo !== 'Ingreso' || !permitido(categoria, categorias)) return;
+  if (esMerch(categoria)) return guardarProductoMerch(modal, v);
 
   const escrito = leer(v, 'nombre', reglas.nombreProducto);
   const { unidad, envase, contenido, medida } = leerPresentacion(v, categoria);
@@ -921,6 +1155,75 @@ export function guardarProducto(modal, v) {
     lote.items.push(x);
   }
   Object.assign(x, { categoria, productoId: null, productoNuevo, dudas: [], avisos: {} });
+  abrirItem(x.id, { nuevo: !modal.itemId });
+}
+
+export function leerProductoMerch(v) {
+  const tipoMerch = v['tipo-merch'] ?? '';
+  if (!permitido(tipoMerch, ordenTipos)) falla('Elige el tipo de merchandising.', 'tipo-merch');
+  const subs = tiposMerch[tipoMerch].subcategorias.map(([sub]) => sub);
+  const subcategoria = subs.length ? v.subcategoria ?? '' : null;
+  if (subs.length && !permitido(subcategoria, subs)) falla('Elige la subcategoría.', 'subcategoria');
+
+  const p = { tipoMerch, subcategoria, nombreBase: formatoNombre(leer(v, 'nombre', reglas.nombreMerch)) };
+  if (tipoMerch === 'paneton') {
+    Object.assign(p, { unidad: 'unidades', marca: leer(v, 'marca', reglas.marca), presentacion: leer(v, 'presentacion', reglas.presentacionMerch) });
+  } else {
+    p.unidad = v.unidad ?? '';
+    if (!permitido(p.unidad, unidadesVenta.map(([u]) => u))) falla('Elige la unidad de venta.', 'unidad');
+  }
+  const lista = articulosDe(tipoMerch, subcategoria);
+  if (lista.length) {
+    p.articulo = v.articulo ?? '';
+    if (!permitido(p.articulo, lista)) falla('Elige el tipo de artículo.', 'articulo');
+  }
+  if (tipoMerch === 'hogar' && subcategoria === 'general') p.variante = leer(v, 'variante', reglas.variante);
+  if (tipoMerch === 'hogar' && subcategoria === 'alimentos') {
+    p.presentacion = leer(v, 'presentacion', reglas.presentacionMerch);
+    if (!permitido(v.perecible ?? '', ['si', 'no'])) falla('Indica si es perecible.', 'perecible');
+    p.perecible = v.perecible === 'si';
+  }
+  if (tipoMerch === 'promocional') p.diseno = leer(v, 'diseno', reglas.diseno);
+  if (subcategoria === 'prendas') {
+    p.talla = v.talla ?? '';
+    if (!permitido(p.talla, tallas)) falla('Elige la talla.', 'talla');
+    p.color = formatoNombre(leer(v, 'color', reglas.color));
+    p.material = leer(v, 'material', reglas.material);
+  }
+  p.precio = leer(v, 'precio', reglas.precio);
+  if (tipoMerch === 'paneton') {
+    p.descuentoDesde = leer(v, 'descuento-desde', reglas.descuentoDesde);
+    p.precioDescuento = leer(v, 'precio-descuento', reglas.precioDescuento);
+    leerDescuento(p);
+  }
+  p.descripcion = leer(v, 'descripcion', reglas.descripcion);
+  p.minimo = leer(v, 'minimo', cantidadDe(p.unidad, { que: 'el stock mínimo', puedeSerCero: true }));
+  p.nombre = nombreMerch(p);
+  if (!reglas.nombreProducto(p.nombre).ok) falla(`Con sus datos el nombre quedaría "${p.nombre}", que es muy largo: acórtalo.`, 'nombre');
+  return p;
+}
+
+function guardarProductoMerch(modal, v) {
+  const lote = estado.lote;
+  const p = leerProductoMerch(v);
+  const igual = otro => palabras(otro).join(' ') === palabras(p.nombre).join(' ');
+  const existente = estado.merch.find(i => igual(i.nombre));
+  if (existente) falla(`Ya existe "${existente.nombre}" en Merchandising: elígelo en vez de crearlo otra vez.`, 'nombre');
+  if (lote.items.some(x => x.id !== modal.itemId && x.productoNuevo && esMerch(x.categoria) && igual(x.productoNuevo.nombre))) {
+    falla(`"${p.nombre}" ya se está creando en esta lista.`, 'nombre');
+  }
+  const codigoBarras = leerCodigoBarras(v, 'codigo-barras', { opcional: true });
+  const otros = lote.items.filter(x => x.id !== modal.itemId && x.productoNuevo);
+  if (codigoBarras && otros.some(x => x.productoNuevo.codigosBarras?.includes(codigoBarras))) falla('Ese código ya es de otro producto nuevo de esta lista.', 'codigo-barras');
+
+  const productoNuevo = { ...p, codigo: p.nombre.slice(0, 2).toUpperCase(), cantidad: 0, lotes: [] };
+  if (codigoBarras) productoNuevo.codigosBarras = [codigoBarras];
+  let x = lote.items.find(i => i.id === modal.itemId);
+  if (!x) {
+    x = nuevoItem({});
+    lote.items.push(x);
+  }
+  Object.assign(x, { categoria: MERCH, productoId: null, productoNuevo, dudas: [], avisos: {} });
   abrirItem(x.id, { nuevo: !modal.itemId });
 }
 
@@ -963,7 +1266,8 @@ export function historialProducto(item, categoria) {
 // los que vienen de la base pueden no tener contenido/medida (undefined) y los nuevos los tienen en null: valen igual
 function sePuedenUnir(item, otro) {
   const igual = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
-  return !mismoId(item.id, otro.id) && igual(otro.unidad, item.unidad) && igual(otro.contenido, item.contenido) && igual(otro.medida, item.medida);
+  const campos = ['unidad', 'contenido', 'medida', ...(item.tipoMerch ? ['tipoMerch', 'subcategoria', 'talla'] : [])];
+  return !mismoId(item.id, otro.id) && campos.every(c => igual(otro[c], item[c]));
 }
 
 // todos los que se pueden unir; primero los de nombre parecido
@@ -1133,7 +1437,7 @@ async function descargar(crear, aviso) {
 
 // descarga lo filtrado
 export function descargarExcelHistorial() {
-  const filas = filtrarHistorial(estado);
+  const filas = filtrarHistorial(estado).map(f => ({ ...f, tipoTexto: textoTipoMovimiento(f, estado.merch) }));
   if (filas.length === 0) return Promise.resolve();
   return descargar(() => descargarHistorial(filas, nombreArchivoHistorial(estado.historialFiltros)), `Excel descargado · ${filas.length} movimientos`);
 }
@@ -1306,6 +1610,8 @@ async function refrescarMiCuenta() {
 // en Inicio, inventario e Historial deja elegir: registrar varios, producto nuevo, donador...
 export function agregar() {
   if (estado.seccion === 'Donadores') abrirModal({ tipo: 'donador' });
+  else if (estado.seccion === 'Proveedores') abrirPersona('proveedor');
+  else if (estado.seccion === 'Compradores') abrirPersona('comprador');
   else if (estado.seccion === 'Usuarios') abrirUsuario();
   else abrirModal({ tipo: 'elegir' });
 }
@@ -1332,8 +1638,23 @@ function nuevoItem(datos) {
   return {
     id: siguienteItem++, origen: 'manual', categoria: null, productoId: null, productoNuevo: null, dudas: [], cantidad: null, vence: undefined,
     donador: '', donadorNuevo: null, donadorDicho: '', actividad: '', para: [], observaciones: '', dicho: '', nombreDicho: '', codigoBarras: '', avisos: {},
+    ...merchVacioItem(),
     ...datos,
   };
+}
+
+function merchVacioItem() {
+  return {
+    proveedor: '', proveedorNuevo: null, proveedorDicho: '', comprador: '', compradorNuevo: null, compradorDicho: '',
+    costo: null, costoMateriales: null, taller: '', loteCodigo: '', precio: null, medioPago: '', comprobanteTipo: '', comprobanteNumero: '',
+  };
+}
+
+export function personaDeItem(x, tipo) {
+  const elegido = x[tipo];
+  if (elegido === 'nuevo') return x[`${tipo}Nuevo`]?.nombre ?? '';
+  if (!elegido) return '';
+  return listaPersona(tipo).find(d => mismoId(d.id, elegido))?.nombre ?? '';
 }
 
 // 'Alimentos:3' identifica un producto en los desplegables; 'nuevo' es el producto que se esta creando
@@ -1343,13 +1664,17 @@ export function productoPorClave(clave) {
   const corte = String(clave).indexOf(':');
   if (corte < 0) return null;
   const categoria = clave.slice(0, corte);
-  if (!permitido(categoria, ['Alimentos', 'Salud'])) return null;
+  if (!permitido(categoria, categorias)) return null;
   const item = productoPorId(categoria, clave.slice(corte + 1));
   return item ? { item, categoria } : null;
 }
 
 export function todosLosProductos() {
-  return [...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })), ...estado.salud.map(item => ({ item, categoria: 'Salud' }))];
+  return [
+    ...estado.alimentos.map(item => ({ item, categoria: 'Alimentos' })),
+    ...estado.salud.map(item => ({ item, categoria: 'Salud' })),
+    ...estado.merch.map(item => ({ item, categoria: MERCH })),
+  ];
 }
 
 // { item, categoria, nuevo } o null si todavia no se sabe que producto es
@@ -1404,7 +1729,8 @@ function problemasDeFila(x) {
     const r = cantidadDe(item.unidad)(String(x.cantidad));
     if (!r.ok) problemas.push(r.error);
   }
-  if (tipo === 'Ingreso') {
+  if (esMerch(producto.categoria)) problemas.push(...problemasMerch(x, item, tipo));
+  else if (tipo === 'Ingreso') {
     if (x.vence === undefined) problemas.push('Falta la fecha de vencimiento');
     if (x.donadorDicho && !x.donador) problemas.push(`Donador "${x.donadorDicho}" no registrado`);
     if (x.donador && !x.actividad) problemas.push('Falta la actividad de la donación');
@@ -1415,6 +1741,21 @@ function problemasDeFila(x) {
     const filas = filasDelMismo(x);
     const total = redondear(filas.reduce((s, o) => s + (o.cantidad || 0), 0));
     if (total > disponible(item)) problemas.push(`Solo hay ${disponible(item)} ${item.unidad}${filas.length > 1 ? ` (en la lista suman ${total})` : ''}`);
+  }
+  return problemas;
+}
+
+function problemasMerch(x, item, tipo) {
+  const problemas = [];
+  const dicho = campo => x[`${campo}Dicho`] && !x[campo];
+  if (tipo === 'Ingreso') {
+    if (pideVence(item) && !x.vence) problemas.push('Falta la fecha de vencimiento');
+    if (llevaCosto(item) && x.costo == null) problemas.push('Falta el costo unitario');
+    if (llevaProveedor(item) && dicho('proveedor')) problemas.push(`Proveedor "${x.proveedorDicho}" no registrado`);
+    else if (pideProveedor(item) && !x.proveedor) problemas.push('Falta el proveedor');
+  } else {
+    if (x.precio == null) problemas.push('Falta el precio');
+    if (dicho('comprador')) problemas.push(`Comprador "${x.compradorDicho}" no registrado`);
   }
   return problemas;
 }
@@ -1500,17 +1841,23 @@ export function agregarCodigo(texto) {
     if (hay <= 0) falla(`"${item.nombre}" no tiene stock para sacar.`, 'codigo');
     if (enLista + 1 > hay) falla(`Solo hay ${hay} ${item.unidad} de "${item.nombre}" y ya van ${enLista} en la lista.`, 'codigo');
   }
-  if (repetido) repetido.cantidad = nueva;
+  const precio = encontrado && esMerch(encontrado.categoria) && estado.lote.tipo === 'Salida' ? { precio: precioSugerido(encontrado.item, nueva) } : {};
+  if (repetido) Object.assign(repetido, { cantidad: nueva, ...precio });
   else {
     estado.lote.items.push(nuevoItem({
       origen: 'codigo',
       codigoBarras: codigo,
       cantidad: 1,
       ...(encontrado && { categoria: encontrado.categoria, productoId: encontrado.item.id }),
+      ...precio,
     }));
   }
   refrescar();
   return encontrado ? encontrado.item.nombre : null;
+}
+
+export function extraDictado() {
+  return { donadores: estado.donadores, actividades: opcionesActividad(), compradores: estado.compradores, proveedores: estado.proveedores };
 }
 
 // cantidad entendida de lo que se dijo: un numero mayor que 0 y dentro del tope, o null
@@ -1527,10 +1874,7 @@ export async function agregarDictado(v) {
   const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
 
   // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
-  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), { 
-    donadores: estado.donadores, 
-    actividades: opcionesActividad() 
-  });
+  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado());
 
   // 3. OmniRoute (LLM): Parsing de alta precisión para productos, cantidades y fechas ISO
   // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
@@ -1602,6 +1946,10 @@ export async function agregarDictado(v) {
     const donadorTexto = r.donadorDicho || itemIA.donador || '';
     const actividadTexto = r.actividad || itemIA.actividad || '';
 
+    const merch = producto && esMerch(producto.categoria)
+      ? merchDictado(producto.item, esIngreso, cantidadDicha(cantidad), { ...r, ...(localDelProducto ?? {}) }, itemIA)
+      : null;
+
     lote.items.push(nuevoItem({
       origen: 'voz',
       dicho: (itemIA.producto || r.dicho || '').slice(0, 100),
@@ -1614,16 +1962,35 @@ export async function agregarDictado(v) {
       // Metadatos adjuntos para rendering visual (previsualización y lista final)
       ...(esIngreso && fechaFinal && { vence: fechaFinal }),
       ...(producto && { categoria: producto.categoria, productoId: producto.item.id }),
-      ...(esIngreso && {
+      ...(esIngreso && !merch && {
         donador: donadorId,
         donadorDicho: donadorTexto.slice(0, largos.nombreDonador),
         actividad: actividadTexto,
       }),
+      ...merch,
     }));
   }
 
   abrirLista();
 }
+function merchDictado(item, esIngreso, cantidad, local, ia) {
+  const tipo = esIngreso ? 'proveedor' : 'comprador';
+  const dichoIA = typeof ia[tipo] === 'string' ? ia[tipo].trim() : '';
+  const registrado = dichoIA
+    ? listaPersona(tipo).find(d => coincideNombre(dichoIA, d.nombre) && coincideNombre(d.nombre, dichoIA))
+    : local[tipo];
+  const dicho = registrado ? '' : (dichoIA || local[`${tipo}Dicho`] || '').slice(0, largos.nombreDonador);
+  const precio = cantidadDicha(ia.precio) ?? local.precio ?? null;
+  const medio = permitido(ia.medio_pago, mediosPago.map(([m]) => m)) ? ia.medio_pago : local.medioPago || '';
+  return {
+    [tipo]: registrado ? String(registrado.id) : '',
+    [`${tipo}Dicho`]: dicho,
+    ...(esIngreso
+      ? { costo: llevaCosto(item) ? precio : null, ...(!puedeVence(item) && { vence: null }) }
+      : { precio: precio ?? (cantidad != null ? precioSugerido(item, cantidad) : Number(item.precio ?? 0)), medioPago: medio }),
+  };
+}
+
 // ---------- editar o quitar una fila ----------
 // nuevo: si se vuelve sin guardar, la fila se quita y se regresa a donde se eligio (la busqueda)
 export function abrirItem(id, { nuevo = false } = {}) {
@@ -1684,14 +2051,35 @@ export function guardarItem(modal, v) {
       falla(`Solo se pueden sacar ${disponible(item)} ${item.unidad}${otras ? ` y en otras filas ya van ${otras}` : ''}.`, 'cantidad');
     }
   }
+  const observaciones = leer(v, 'observaciones', reglas.observaciones);
+  const base = { categoria, productoId: elegido.nuevo ? null : item.id, productoNuevo: elegido.nuevo ? x.productoNuevo : null, cantidad, observaciones, dudas: [], avisos: {}, errorServidor: '' };
+
+  if (esMerch(categoria)) {
+    const m = leerMerch(v, item, esIngreso);
+    const persona = tipo => {
+      const leido = m[tipo];
+      if (!leido?.nombre) return { [tipo]: '', [`${tipo}Nuevo`]: null };
+      if (leido.nuevo) {
+        const otra = estado.lote.items.find(o => o !== x && o[`${tipo}Nuevo`]?.nombre.toLowerCase() === leido.nombre.toLowerCase());
+        if (otra && otra[`${tipo}Nuevo`].telefono !== leido.nuevo.telefono) falla(`"${leido.nombre}" ya está en otra fila con otro número.`, `${tipo}-telefono`);
+        return { [tipo]: 'nuevo', [`${tipo}Nuevo`]: leido.nuevo };
+      }
+      return { [tipo]: String(listaPersona(tipo).find(d => d.nombre === leido.nombre)?.id ?? ''), [`${tipo}Nuevo`]: null };
+    };
+    Object.assign(x, base, merchVacioItem(), {
+      vence: esIngreso ? m.vence : undefined, donador: '', donadorNuevo: null, donadorDicho: '', actividad: '', para: [],
+      ...(esIngreso ? persona('proveedor') : persona('comprador')),
+      costo: m.costo ?? null, costoMateriales: m.costoMateriales ?? null, taller: m.taller ?? '', loteCodigo: m.loteCodigo ?? '',
+      precio: m.precio ?? null, medioPago: m.medioPago ?? '', comprobanteTipo: m.comprobanteTipo, comprobanteNumero: m.comprobanteNumero,
+    });
+    return abrirLista();
+  }
+
   const vence = esIngreso ? leerVencimiento(v) : undefined;
   const donador = esIngreso ? leerDonadorItem(v, x) : { donador: '', donadorNuevo: null, actividad: '' };
   const para = !esIngreso && categoria === 'Salud' ? leerPara(v) : [];
-  const observaciones = leer(v, 'observaciones', reglas.observaciones);
 
-  Object.assign(x, {
-    categoria, productoId: elegido.nuevo ? null : item.id, productoNuevo: elegido.nuevo ? x.productoNuevo : null, cantidad, vence, ...donador, donadorDicho: '', para, observaciones, dudas: [], avisos: {}, errorServidor: '',
-  });
+  Object.assign(x, base, merchVacioItem(), { vence, ...donador, donadorDicho: '', para });
 
   abrirLista();
 }
@@ -1722,8 +2110,16 @@ export async function confirmarLote(modal) {
   if (estado.modal !== modal || !estado.lote) return;
   const lote = estado.lote;
   const { tipo } = lote;
-  // donadores y productos nuevos se crean una sola vez aunque esten en varias filas
+  // donadores, proveedores, compradores y productos nuevos se crean una sola vez aunque esten en varias filas
   const donadoresNuevos = new Map();
+  const personasNuevas = { proveedor: new Map(), comprador: new Map() };
+  const nombreDePersona = async (x, tipo) => {
+    if (x[tipo] !== 'nuevo') return personaDeItem(x, tipo);
+    const nuevo = x[`${tipo}Nuevo`];
+    const clave = nuevo.nombre.toLowerCase();
+    if (!personasNuevas[tipo].has(clave)) personasNuevas[tipo].set(clave, await personaDeMovimiento(tipo, { nombre: nuevo.nombre, nuevo }));
+    return personasNuevas[tipo].get(clave);
+  };
   const productosNuevos = new Map();
   const fallidas = [];
   const total = lote.items.length;
@@ -1741,8 +2137,14 @@ export async function confirmarLote(modal) {
         item = productosNuevos.get(x.productoNuevo);
       }
 
+      const merch = esMerch(categoria) && peticionMerch(x, {
+        proveedor: tipo === 'Ingreso' ? await nombreDePersona(x, 'proveedor') : '',
+        comprador: tipo === 'Salida' ? await nombreDePersona(x, 'comprador') : '',
+      });
+
       let donador = '';
-      if (tipo === 'Ingreso' && x.donador === 'nuevo') {
+      if (merch) donador = '';
+      else if (tipo === 'Ingreso' && x.donador === 'nuevo') {
         const clave = x.donadorNuevo.nombre.toLowerCase();
         if (!donadoresNuevos.has(clave)) donadoresNuevos.set(clave, await donadorDeMovimiento({ nombre: x.donadorNuevo.nombre, nuevo: x.donadorNuevo }));
         donador = donadoresNuevos.get(clave);
@@ -1750,7 +2152,7 @@ export async function confirmarLote(modal) {
 
       const fila = await enviarMovimiento(item, {
         tipo: tipo === 'Salida' ? 'salida' : 'ingreso', cantidad: x.cantidad, vence: x.vence ?? null,
-        donador, actividad: donador ? x.actividad : '', para: x.para, observaciones: x.observaciones, canal: x.origen, inicial: nuevo,
+        donador, actividad: donador ? x.actividad : '', para: x.para, observaciones: x.observaciones, canal: x.origen, inicial: nuevo, ...merch,
         // la proxima vez el codigo ya se reconoce
         ...(x.codigoBarras && !productoPorCodigo(x.codigoBarras) && { codigo_barras: x.codigoBarras }),
       });
@@ -1769,6 +2171,10 @@ export async function confirmarLote(modal) {
     if (creado) Object.assign(x, { productoId: creado.id, productoNuevo: null });
     const donadorCreado = x.donador === 'nuevo' && estado.donadores.find(d => d.nombre.toLowerCase() === x.donadorNuevo.nombre.toLowerCase());
     if (donadorCreado) Object.assign(x, { donador: String(donadorCreado.id), donadorNuevo: null });
+    for (const tipo of ['proveedor', 'comprador']) {
+      const creado = x[tipo] === 'nuevo' && listaPersona(tipo).find(d => d.nombre.toLowerCase() === x[`${tipo}Nuevo`].nombre.toLowerCase());
+      if (creado) Object.assign(x, { [tipo]: String(creado.id), [`${tipo}Nuevo`]: null });
+    }
   }
 
   const productos = n => `${n} ${n === 1 ? 'producto' : 'productos'}`;
@@ -1813,6 +2219,8 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
       getHistorialAPI(),
       getDonadoresAPI(),
       esAdmin() ? getUsuariosAPI() : Promise.resolve(null),
+      getProveedoresAPI(),
+      getCompradoresAPI(),
     ]);
 
     // si algo falla se avisa (lo que no cargo queda como estaba)
@@ -1820,11 +2228,13 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
       mostrarToast('No se pudo conectar con el servidor. Algunos datos no se cargaron.');
     }
     if (!aplicar()) return;
-    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu] = resultados.map(r => (r.status === 'fulfilled' ? r.value : null));
+    const [respuestaInv, respuestaHist, respuestaDon, respuestaUsu, respuestaProv, respuestaComp] = resultados.map(r => (r.status === 'fulfilled' ? r.value : null));
 
     if (respuestaInv) {
       const documentos = Array.isArray(respuestaInv) ? respuestaInv : (respuestaInv.docs || []);
-      const formateados = documentos.map(productoDesdeDoc);
+      const todos = documentos.map(productoDesdeDoc);
+      estado.merch = todos.filter(doc => (doc.categoriaNombre || '').toLowerCase() === 'merchandising');
+      const formateados = todos.filter(doc => !estado.merch.includes(doc));
 
       const saludDB = formateados.filter(doc => 
         (doc.almacen && (doc.almacen.includes('medicinas') || doc.almacen.includes('higiene'))) || 
@@ -1853,6 +2263,8 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
     if (Array.isArray(respuestaDon)) {
       estado.donadores = respuestaDon.map(donadorDesdeDoc);
     }
+    if (Array.isArray(respuestaProv)) estado.proveedores = respuestaProv.map(personaDesdeDoc);
+    if (Array.isArray(respuestaComp)) estado.compradores = respuestaComp.map(personaDesdeDoc);
 
     // cuentas de usuario
     if (Array.isArray(respuestaUsu)) {
@@ -1876,4 +2288,4 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
   } catch (error) {
     console.error('Error al actualizar el estado con datos de CouchDB:', error);
   }
-}
+}

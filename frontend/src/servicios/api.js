@@ -174,6 +174,26 @@ export const guardarDonadorAPI = async (donador) => {
   return response.data;
 };
 
+export const getProveedoresAPI = async () => {
+  const response = await api.get('proveedores/');
+  return response.data;
+};
+
+export const guardarProveedorAPI = async (proveedor) => {
+  const response = await api.post('proveedores/', proveedor);
+  return response.data;
+};
+
+export const getCompradoresAPI = async () => {
+  const response = await api.get('compradores/');
+  return response.data;
+};
+
+export const guardarCompradorAPI = async (comprador) => {
+  const response = await api.post('compradores/', comprador);
+  return response.data;
+};
+
 // --- USUARIOS ---
 export const getUsuariosAPI = async () => {
   const response = await api.get('usuarios/');
@@ -190,4 +210,4 @@ export const actualizarUsuarioAPI = async (id, usuarioDoc) => {
   return response.data;
 };
 
-export default api;
+export default api;

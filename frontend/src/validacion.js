@@ -203,6 +203,32 @@ export function claveLogin(entrada) {
   return { ok: true, valor };
 }
 
+export function telefonoOpcional(entrada) {
+  return limpiarTexto(entrada) ? telefono(entrada) : { ok: true, valor: '' };
+}
+
+export function ruc(entrada) {
+  const valor = limpiarTexto(entrada).replace(/\s/g, '');
+  if (!valor) return { ok: true, valor: '' };
+  if (!/^\d{11}$/.test(valor)) return { ok: false, error: 'El RUC tiene que tener 11 dígitos.' };
+  return { ok: true, valor };
+}
+
+function codigoLibre({ max, que, signos = '-' }) {
+  const permitidos = new RegExp(`^[0-9A-Za-z${signos.replace(/[-/.]/g, '\\$&')}]+$`);
+  return entrada => {
+    const valor = limpiarTexto(entrada).replace(/\s/g, '');
+    if (!valor) return { ok: true, valor: '' };
+    if (valor.length > max) return { ok: false, error: `${mayuscula(que)} puede tener hasta ${max} caracteres.` };
+    if (!permitidos.test(valor)) return { ok: false, error: `${mayuscula(que)} solo puede tener letras, números y ${signos.split('').join(' ')}` };
+    return { ok: true, valor };
+  };
+}
+
+export function dinero(que, { opcional = false, puedeSerCero = false } = {}) {
+  return numero({ min: 0, max: cantidadMaxima, decimales: 2, que, minimoExcluido: !puedeSerCero, opcional });
+}
+
 // tiene que ser una de las opciones
 export function opcion(opciones, que = 'una opción') {
   return entrada => (opciones.includes(entrada) ? { ok: true, valor: entrada } : { ok: false, error: `Elige ${que} de la lista.` });
@@ -230,6 +256,27 @@ export const reglas = {
   codigoBarras: entrada => codigoBarras(entrada),
   codigoBarrasOpcional: entrada => codigoBarras(entrada, { opcional: true }),
   dictado,
+  nombreMerch: texto({ min: 2, max: 60, tipo: 'producto', que: 'el nombre' }),
+  marca: texto({ min: 2, max: 40, tipo: 'producto', que: 'la marca' }),
+  presentacionMerch: texto({ min: 2, max: 40, tipo: 'producto', que: 'la presentación' }),
+  variante: texto({ max: 30, tipo: 'producto', que: 'la variante', opcional: true }),
+  color: texto({ min: 2, max: 20, tipo: 'letras', que: 'el color' }),
+  material: texto({ max: 30, tipo: 'producto', que: 'el material', opcional: true }),
+  diseno: texto({ max: 60, tipo: 'libre', que: 'el diseño', opcional: true }),
+  descripcion: texto({ max: 200, tipo: 'libre', que: 'la descripción', opcional: true }),
+  precio: dinero('el precio de venta'),
+  precioDescuento: dinero('el precio con descuento', { opcional: true }),
+  descuentoDesde: numero({ min: 2, max: cantidadMaxima, que: 'desde cuántas unidades va el descuento', opcional: true }),
+  costoUnitario: dinero('el costo unitario'),
+  costoMateriales: dinero('el costo de materiales', { opcional: true, puedeSerCero: true }),
+  precioUnitario: dinero('el precio unitario', { puedeSerCero: true }),
+  comprobanteNumero: codigoLibre({ max: 20, que: 'el número de comprobante' }),
+  loteCodigo: codigoLibre({ max: 20, que: 'el lote', signos: '-./' }),
+  taller: texto({ max: 40, tipo: 'nombre', que: 'el taller o grupo', opcional: true }),
+  nombreProveedor: texto({ min: 2, max: 60, tipo: 'nombre', que: 'el nombre del proveedor' }),
+  nombreComprador: texto({ min: 2, max: 60, tipo: 'nombre', que: 'el nombre del comprador' }),
+  telefonoOpcional,
+  ruc,
 };
 
 // maxlength de los inputs
@@ -249,6 +296,17 @@ export const largos = {
   nombreUsuario: 20,
   clave: 64,
   busqueda: 60,
+  marca: 40,
+  presentacionMerch: 40,
+  variante: 30,
+  color: 20,
+  material: 30,
+  diseno: 60,
+  descripcion: 200,
+  comprobante: 20,
+  loteCodigo: 20,
+  taller: 40,
+  ruc: 11,
 };
 
 function mayuscula(texto) {

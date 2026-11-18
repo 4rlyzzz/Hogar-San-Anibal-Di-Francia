@@ -57,6 +57,18 @@ export const IconoDonadores = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8.5" r="3.2" stroke="currentColor" strokeWidth="1.7"/><path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/><path d="M15.5 5.6a3 3 0 0 1 0 5.8M17.5 14.6c1.6.6 2.7 2.1 3 4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
 );
 
+export const IconoMerch = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5.5 8h13l-1 11.2a1 1 0 0 1-1 .8h-9a1 1 0 0 1-1-.8L5.5 8Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+);
+
+export const IconoProveedores = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6.5h10.5v9H3zM13.5 9.5h3.8l2.7 3v3h-6.5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><circle cx="7" cy="17.5" r="1.8" stroke="currentColor" strokeWidth="1.7"/><circle cx="16.5" cy="17.5" r="1.8" stroke="currentColor" strokeWidth="1.7"/></svg>
+);
+
+export const IconoCompradores = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8.5" r="3.2" stroke="currentColor" strokeWidth="1.7"/><path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8 1.4 0 2.7.5 3.6 1.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/><path d="M15 13.5h4.5l1.5 2.2-1.5 2.3H15z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+);
+
 export const IconoFijar = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3" stroke="currentColor" strokeWidth="1.7"/><path d="M9 4.5v15" stroke="currentColor" strokeWidth="1.7"/><path d="m13.5 10 2 2-2 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
 );

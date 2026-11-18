@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useEstado } from '../estado.js';
 import { IconoDescargar } from '../assets/iconos.jsx';
 import { verMovimiento, descargarExcelHistorial, cambiarFiltro } from '../acciones.js';
-import { nombreCategoria, nombresCategoria, textoCambio, textoStock, textoDetalle } from '../logica/comunes.js';
-import { filtrarHistorial, opcionesDe, chipsHistorial } from '../logica/historial.js';
+import { nombreCategoria, nombresCategoria, colorCategoria, textoCambio, textoStock, textoDetalle, mediosPago } from '../logica/comunes.js';
+import { filtrarHistorial, opcionesDe, chipsHistorial, subcategoriasDe } from '../logica/historial.js';
+import { tiposMerch, ordenTipos, tipoDeMovimiento } from '../logica/merch.js';
 import { Encabezado, clasesMovimiento } from '../components/Comunes.jsx';
 import { BotonFiltros, PanelFiltros, CampoSelect, CampoFecha, Chips, opcionesCon } from '../components/Filtros.jsx';
 
@@ -37,10 +38,18 @@ export function Historial() {
   const ingresos = filas.filter(x => x.movimiento === 'Ingreso').length;
 
   // los productos se acotan a la categoria elegida
-  const paraProductos = f.categoria === 'Todos' ? estado.historial : estado.historial.filter(x => x.categoria === f.categoria);
+  const paraProductos = estado.historial.filter(x => {
+    if (f.categoria !== 'Todos' && x.categoria !== f.categoria) return false;
+    if (f.tipoMerch === 'Todos' && f.subcategoria === 'Todos') return true;
+    const t = tipoDeMovimiento(x, estado.merch);
+    return (f.tipoMerch === 'Todos' || t.tipoMerch === f.tipoMerch) && (f.subcategoria === 'Todos' || t.subcategoria === f.subcategoria);
+  });
+  const subcategorias = subcategoriasDe(f.tipoMerch);
   const chips = chipsHistorial(f);
   // "para quien" solo en Salud
-  const ninos = f.categoria === 'Alimentos' ? [] : opcionesDe(estado.historial, 'para');
+  const ninos = ['Alimentos', 'Merchandising'].includes(f.categoria) ? [] : opcionesDe(estado.historial, 'para');
+  const conMerch = f.categoria === 'Merchandising' || (f.categoria === 'Todos' && estado.historial.some(x => x.categoria === 'Merchandising'));
+  const sinMerch = f.categoria !== 'Todos' && f.categoria !== 'Merchandising';
   const abierto = estado.filtrosAbiertos === 'historialFiltros';
   const antiguos = f.orden === 'antiguos';
 
@@ -74,7 +83,7 @@ export function Historial() {
               <button key={indice} className={`fila fila-boton ${clasesMovimiento[fila.movimiento]}`} data-accion="ver-movimiento" onClick={() => verMovimiento(indice)}>
                 <span className="fila-fecha">{fila.fecha}</span>
                 <span className="fila-insumo">{fila.insumo}</span>
-                <span className="fila-categoria"><span className={`pastilla ${fila.categoria === 'Salud' ? 'azul' : 'verde'}`}>{nombreCategoria(fila.categoria)}</span></span>
+                <span className="fila-categoria"><span className={`pastilla ${colorCategoria(fila.categoria)}`}>{nombreCategoria(fila.categoria)}</span></span>
                 <span className="fila-movimiento">● {fila.movimiento}</span>
                 <span className="fila-cantidad">{textoCambio(fila)}</span>
                 <span className="fila-saldo" title="Stock antes → después de este movimiento">{textoStock(fila)}</span>
@@ -92,11 +101,30 @@ export function Historial() {
             <CampoSelect grupo="historialFiltros" campo="orden" titulo="Ordenar por fecha" opciones={ordenes} actual={f.orden} />
             <CampoSelect grupo="historialFiltros" campo="movimiento" titulo="Movimiento" opciones={[['Todos', 'Todos'], ['Ingreso', 'Solo ingresos'], ['Salida', 'Solo salidas'], ['Ajuste', 'Solo ajustes']]} actual={f.movimiento} />
             <CampoSelect grupo="historialFiltros" campo="categoria" titulo="Categoría" opciones={opcionesCon('Todas', Object.entries(nombresCategoria))} actual={f.categoria} />
+            {f.categoria === 'Merchandising' && (
+              <>
+                <CampoSelect grupo="historialFiltros" campo="tipoMerch" titulo="Tipo de merchandising" opciones={opcionesCon('Todos', ordenTipos.map(t => [t, tiposMerch[t].nombre]))} actual={f.tipoMerch} />
+                {subcategorias.length > 0 && (
+                  <CampoSelect grupo="historialFiltros" campo="subcategoria" titulo="Subcategoría" opciones={opcionesCon('Todas', subcategorias)} actual={f.subcategoria} />
+                )}
+              </>
+            )}
             <CampoSelect grupo="historialFiltros" campo="responsable" titulo="Responsable" opciones={opcionesCon('Todos', opcionesDe(estado.historial, 'responsable'))} actual={f.responsable} />
             <CampoSelect grupo="historialFiltros" campo="producto" titulo="Producto" opciones={opcionesCon('Todos', opcionesDe(paraProductos, 'insumo'))} actual={f.producto} />
             {ninos.length > 0 && <CampoSelect grupo="historialFiltros" campo="para" titulo="Para (niño/a)" opciones={opcionesCon('Todos', ninos)} actual={f.para} />}
-            <CampoSelect grupo="historialFiltros" campo="donador" titulo="Donador" opciones={opcionesCon('Todos', opcionesDe(estado.historial, 'donador'))} actual={f.donador} />
-            <CampoSelect grupo="historialFiltros" campo="actividad" titulo="Actividad de donación" opciones={opcionesCon('Todas', opcionesDe(estado.historial, 'actividad'))} actual={f.actividad} />
+            {f.categoria !== 'Merchandising' && (
+              <>
+                <CampoSelect grupo="historialFiltros" campo="donador" titulo="Donador" opciones={opcionesCon('Todos', opcionesDe(estado.historial, 'donador'))} actual={f.donador} />
+                <CampoSelect grupo="historialFiltros" campo="actividad" titulo="Actividad de donación" opciones={opcionesCon('Todas', opcionesDe(estado.historial, 'actividad'))} actual={f.actividad} />
+              </>
+            )}
+            {conMerch && !sinMerch && (
+              <>
+                <CampoSelect grupo="historialFiltros" campo="proveedor" titulo="Proveedor" opciones={opcionesCon('Todos', opcionesDe(estado.historial, 'proveedor'))} actual={f.proveedor} />
+                <CampoSelect grupo="historialFiltros" campo="comprador" titulo="Comprador" opciones={opcionesCon('Todos', opcionesDe(estado.historial, 'comprador'))} actual={f.comprador} />
+                <CampoSelect grupo="historialFiltros" campo="medioPago" titulo="Medio de pago" opciones={opcionesCon('Todos', mediosPago)} actual={f.medioPago} />
+              </>
+            )}
             <div className="campos-dos">
               <CampoFecha grupo="historialFiltros" campo="desde" titulo="Desde" actual={f.desde} />
               <CampoFecha grupo="historialFiltros" campo="hasta" titulo="Hasta" actual={f.hasta} />

@@ -3,7 +3,8 @@ import { estado } from '../estado.js';
 import { calcularAlertas } from '../logica/alertas.js';
 import { ModalMovimiento, ModalProducto, ModalAjuste, ModalUnir, ModalBaja, ModalElegir, ModalDonador, ModalUsuario, ModalClave } from './Modales.jsx';
 import { ModalLoteManual, ModalLoteCodigo, ModalLoteVoz, ModalLoteLista, ModalLoteItem } from './Lote.jsx';
-import { PanelProducto, PanelMovimiento, PanelDonador, PanelActividad, PanelAlertas } from './Paneles.jsx';
+import { PanelProducto, PanelMovimiento, PanelDonador, PanelPersona, PanelActividad, PanelAlertas } from './Paneles.jsx';
+import { ModalEditarMerch, ModalPersona } from './Merch.jsx';
 
 const ventanas = {
   movimiento: ModalMovimiento,
@@ -15,6 +16,8 @@ const ventanas = {
   donador: ModalDonador,
   usuario: ModalUsuario,
   clave: ModalClave,
+  persona: ModalPersona,
+  'editar-merch': ModalEditarMerch,
   'lote-manual': ModalLoteManual,
   'lote-codigo': ModalLoteCodigo,
   'lote-voz': ModalLoteVoz,
@@ -23,6 +26,7 @@ const ventanas = {
   'panel-producto': PanelProducto,
   'panel-movimiento': PanelMovimiento,
   'panel-donador': PanelDonador,
+  'panel-persona': PanelPersona,
   'panel-actividad': PanelActividad,
   alertas: () => <PanelAlertas alertas={calcularAlertas(estado)} />,
 };

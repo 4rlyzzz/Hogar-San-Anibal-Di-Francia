@@ -8,9 +8,11 @@ import { IconoCodigo, IconoMicrofono, IconoEditar, IconoBorrar, IconoIngreso, Ic
 import {
   abrirBusqueda, abrirCodigo, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
-  opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe,
+  opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe, categorias, personaDeItem, extraDictado,
 } from '../acciones.js';
-import { nombreCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
+import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
+import { esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
+import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
 import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
@@ -31,10 +33,8 @@ function CabeceraLote({ titulo, subtitulo, onVolver }) {
   return <Cabecera codigo={<t.Icono />} color={t.color} titulo={titulo ?? t.titulo} subtitulo={subtitulo} onVolver={onVolver} />;
 }
 
-const colorCategoria = categoria => (categoria === 'Salud' ? 'azul' : 'verde');
-
 // 'Lata x 400 g' o 'Suelto, en kg': para no confundir tamaños del mismo producto
-const presentacion = item => textoPresentacion(item) || `Suelto, en ${item.unidad}`;
+const presentacion = item => (item.tipoMerch ? textoMerch(item) || textoTipo(item) : textoPresentacion(item) || `Suelto, en ${item.unidad}`);
 
 // ---------- 1a. buscar el producto ----------
 export function ModalLoteManual() {
@@ -73,7 +73,7 @@ export function ModalLoteManual() {
             })}
           </div>
           {!esSalida && (
-            <button type="button" className="btn-anadir" data-accion="crear-producto" onClick={() => abrirProducto('Alimentos', { nombre: busqueda.trim().slice(0, largos.nombreProducto) })}>
+            <button type="button" className="btn-anadir" data-accion="crear-producto" onClick={() => abrirProducto(categorias.includes(estado.seccion) ? estado.seccion : 'Alimentos', { nombre: busqueda.trim().slice(0, largos.nombreProducto) })}>
               + ¿No está? Crear producto nuevo
             </button>
           )}
@@ -352,6 +352,10 @@ function LineaEntendida({ r }) {
   if (r.vence) datos.push(`vence ${fechaVence(r.vence)}`);
   if (r.donador || r.donadorDicho) datos.push(`donó ${r.donador?.nombre ?? r.donadorDicho}`);
   if (r.actividad) datos.push(r.actividad);
+  if (r.comprador || r.compradorDicho) datos.push(`compra ${r.comprador?.nombre ?? r.compradorDicho}`);
+  if (r.proveedor || r.proveedorDicho) datos.push(`proveedor ${r.proveedor?.nombre ?? r.proveedorDicho}`);
+  if (r.precio != null) datos.push(`${soles(r.precio)} c/u`);
+  if (r.medioPago) datos.push(nombreMedio(r.medioPago));
 
   return (
     <li className={avisos.length ? 'con-duda' : ''}>
@@ -408,7 +412,7 @@ export function ModalLoteVoz() {
       // el nombre que entendio la IA se busca entre los registrados (con su dosis: 100 mg no es 50 mg)
       const productos = todosLosProductos();
       // el dictado local sirve para revisar la cantidad ("5 sacos de 50 kg" no son 50 sacos)
-      const local = interpretarDictado(textoDictado, productos, { donadores: estado.donadores, actividades: opcionesActividad() });
+      const local = interpretarDictado(textoDictado, productos, extraDictado());
       const mapeados = (Array.isArray(json) ? json : [])
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
         .map(i => {
@@ -422,6 +426,10 @@ export function ModalLoteVoz() {
             producto,
             dudas,
             presentacion: suyo?.presentacion ?? null,
+            compradorDicho: i.comprador || suyo?.compradorDicho || suyo?.comprador?.nombre || '',
+            proveedorDicho: i.proveedor || suyo?.proveedorDicho || suyo?.proveedor?.nombre || '',
+            precio: cantidadDicha(i.precio) ?? suyo?.precio ?? null,
+            medioPago: i.medio_pago || suyo?.medioPago || '',
           };
         });
       // sin respuesta de la IA (no configurada o caida): se usa la interpretacion local
@@ -431,10 +439,7 @@ export function ModalLoteVoz() {
       if (numero !== consulta.current) return;
       // Fallback: Si OmniRoute da error, usamos la interpretación local nativa
       if (typeof interpretarDictado === 'function') {
-        const local = interpretarDictado(textoDictado, todosLosProductos(), {
-          donadores: estado.donadores,
-          actividades: opcionesActividad()
-        });
+        const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado());
         // igual que al agregar a la lista (agregarDictado)
         setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
       } else {
@@ -576,7 +581,7 @@ export function ModalLoteVoz() {
                 clearTimeout(espera.current);
                 espera.current = setTimeout(() => procesarConOmni(escrito), ESPERA_AL_ESCRIBIR);
               }}
-              placeholder='Ej. "ingreso de dos kilos de arroz" o "salida de tres latas de leche"'
+              placeholder='Ej. "ingreso de dos kilos de arroz", "salida de tres latas de leche" o "venta de 2 panetones a Rosa Quispe, pagó con Yape"'
             />
             {falta && <small id="voz-falta">{falta}</small>}
           </div>
@@ -612,15 +617,26 @@ function textoDonador(x) {
   return `Donó ${nombre}${x.donador === 'nuevo' ? ' (nuevo)' : ''}${x.actividad ? ` · ${x.actividad}` : ''}`;
 }
 
+function textoMerchFila(x, tipo) {
+  const esIngreso = tipo === 'Ingreso';
+  const nombre = campo => personaDeItem(x, campo) || x[`${campo}Dicho`] || '';
+  return textoFilaMerch({
+    esIngreso, proveedor: nombre('proveedor'), comprador: nombre('comprador'), costo: x.costo, precio: x.precio,
+    cantidad: x.cantidad, medio: nombreMedio(x.medioPago), taller: x.taller,
+  });
+}
+
 function FilaLote({ x, tipo }) {
   const producto = productoDeItem(x);
   const problemas = problemasItem(x);
   const nombre = nombreItem(x);
 
   const detalles = [];
+  const merch = producto && esMerch(producto.categoria);
   if (producto) detalles.push(presentacion(producto.item));
-  if (tipo === 'Ingreso' && x.vence !== undefined) detalles.push(x.vence ? `Vence ${fechaVence(x.vence)}` : 'Sin fecha de vencimiento');
-  if (tipo === 'Ingreso' && textoDonador(x)) detalles.push(textoDonador(x));
+  if (tipo === 'Ingreso' && x.vence !== undefined && (!merch || x.vence)) detalles.push(x.vence ? `Vence ${fechaVence(x.vence)}` : 'Sin fecha de vencimiento');
+  if (merch && textoMerchFila(x, tipo)) detalles.push(textoMerchFila(x, tipo));
+  else if (tipo === 'Ingreso' && !merch && textoDonador(x)) detalles.push(textoDonador(x));
   if (x.para.length) detalles.push(`Para ${textoPara(x)}`);
   if (x.observaciones) detalles.push(x.observaciones);
   if (x.origen === 'voz' && producto) detalles.push(`Dijiste "${x.dicho}"`);
@@ -702,19 +718,20 @@ function ConfirmarLote({ modal, onVolver }) {
   // stock que va quedando: dos filas del mismo producto se suman
   const quedan = new Map();
   const filas = items.map(x => {
-    const { item, nuevo } = productoDeItem(x);
+    const { item, nuevo, categoria } = productoDeItem(x);
     const antes = quedan.get(item) ?? item.cantidad;
     const despues = redondear(antes + (esIngreso ? x.cantidad : -x.cantidad));
     quedan.set(item, despues);
-    return { x, item, nuevo, antes, despues };
+    return { x, item, nuevo, antes, despues, merch: esMerch(categoria) };
   });
 
-  const detalle = x => [
-    esIngreso ? (x.vence ? `Vence ${fechaVence(x.vence)}` : 'Sin fecha') : '',
-    esIngreso ? textoDonador(x) : '',
+  const detalle = (x, merch) => [
+    esIngreso && (!merch || x.vence) ? (x.vence ? `Vence ${fechaVence(x.vence)}` : 'Sin fecha') : '',
+    merch ? textoMerchFila(x, tipo) : esIngreso ? textoDonador(x) : '',
     x.para.length ? `Para ${textoPara(x)}` : '',
     x.observaciones,
   ].filter(Boolean).join(' · ');
+  const ventas = esIngreso ? 0 : redondear(items.reduce((s, x) => s + (x.precio != null && x.cantidad ? totalVenta(x.precio, x.cantidad) : 0), 0));
 
   return (
     <form className="modal modal-lote" id="form-lote-confirmar" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, () => confirmarLote(modal))}>
@@ -722,12 +739,12 @@ function ConfirmarLote({ modal, onVolver }) {
 
       <div className="modal-cuerpo">
         <ul className="lote-resumen">
-          {filas.map(({ x, item, nuevo, antes, despues }) => (
+          {filas.map(({ x, item, nuevo, antes, despues, merch }) => (
             <li key={x.id}>
               <div>
                 <b>{item.nombre}{nuevo ? ' (producto nuevo)' : ''}</b>
                 <small>{presentacion(item)}</small>
-                {detalle(x) && <small>{detalle(x)}</small>}
+                {detalle(x, merch) && <small>{detalle(x, merch)}</small>}
                 {!esIngreso && despues < item.minimo && <span className="lote-problema">Quedará bajo el mínimo ({item.minimo} {item.unidad})</span>}
               </div>
               <div className={`lote-cambio ${esIngreso ? 'ingreso' : 'salida'}`}>
@@ -737,6 +754,7 @@ function ConfirmarLote({ modal, onVolver }) {
             </li>
           ))}
         </ul>
+        {ventas > 0 && <p className="lote-total-ventas">Total de ventas: <b>{soles(ventas)}</b></p>}
         <MensajeError texto={f.error} />
       </div>
 
@@ -759,6 +777,19 @@ function donadorInicial(x, actividades) {
   };
 }
 
+function merchInicial(x) {
+  const persona = tipo => ({
+    valor: x[tipo] || (x[`${tipo}Dicho`] ? 'nuevo' : ''),
+    nombre: x[`${tipo}Nuevo`]?.nombre ?? x[`${tipo}Dicho`] ?? '',
+    telefono: x[`${tipo}Nuevo`]?.telefono ?? '',
+  });
+  return {
+    vence: x.vence, loteCodigo: x.loteCodigo, costo: x.costo, taller: x.taller, costoMateriales: x.costoMateriales,
+    precio: x.precio, medioPago: x.medioPago, comprobanteTipo: x.comprobanteTipo, comprobanteNumero: x.comprobanteNumero,
+    proveedor: persona('proveedor'), comprador: persona('comprador'),
+  };
+}
+
 export function ModalLoteItem({ modal }) {
   const f = useFormulario();
   const x = estado.lote?.items.find(i => i.id === modal.itemId);
@@ -768,6 +799,8 @@ export function ModalLoteItem({ modal }) {
   });
   const elegido = clave === 'nuevo' && x?.productoNuevo ? { item: x.productoNuevo, categoria: x.categoria, nuevo: true } : productoPorClave(clave);
   const decimales = elegido ? decimalesDe(elegido.item.unidad) : 2;
+  const merch = Boolean(elegido && esMerch(elegido.categoria));
+  const [cantidad, setCantidad] = useState(x?.cantidad != null ? String(x.cantidad) : '');
 
   // al cambiar de producto, corrige los decimales de lo escrito
   useEffect(() => {
@@ -782,7 +815,8 @@ export function ModalLoteItem({ modal }) {
   // el nombre con su presentacion: hay varios tamaños del mismo producto
   const opciones = [['', 'Elige el producto']];
   if (x.productoNuevo) opciones.push([null, 'Nuevo'], ['nuevo', `${x.productoNuevo.nombre} · ${presentacion(x.productoNuevo)}`]);
-  for (const categoria of ['Alimentos', 'Salud']) {
+  for (const categoria of categorias) {
+    if (!todosLosProductos().some(p => p.categoria === categoria)) continue;
     opciones.push([null, nombreCategoria(categoria)]);
     for (const p of todosLosProductos().filter(p => p.categoria === categoria)) opciones.push([claveProducto(categoria, p.item.id), `${p.item.nombre} · ${presentacion(p.item)}`]);
   }
@@ -831,13 +865,16 @@ export function ModalLoteItem({ modal }) {
           <div className="dos-columnas">
             <div className="campo">
               <label htmlFor="cantidad">CANTIDAD{elegido ? ` (${elegido.item.unidad.toUpperCase()})` : ''}</label>
-              <CampoNumero id="cantidad" decimales={decimales} placeholder="0" defaultValue={x.cantidad ?? ''} autoFocus={Boolean(elegido)} onAviso={f.setError} />
+              <CampoNumero id="cantidad" decimales={decimales} placeholder="0" defaultValue={x.cantidad ?? ''} autoFocus={Boolean(elegido)} onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
               {elegido && !esIngreso && <small>Se pueden usar {disponible(elegido.item)}</small>}
             </div>
-            {esIngreso && <CampoVencimiento inicial={x.vence} />}
+            {esIngreso && !merch && <CampoVencimiento inicial={x.vence} />}
+            {esIngreso && merch && <CampoVenceMerch key={clave} item={elegido.item} inicial={x.vence} />}
           </div>
 
-          {esIngreso && (
+          {merch && esIngreso && <CamposIngresoMerch key={clave} item={elegido.item} inicial={merchInicial(x)} onAviso={f.setError} />}
+          {merch && !esIngreso && <CamposSalidaMerch key={clave} item={elegido.item} cantidad={cantidad} inicial={merchInicial(x)} onAviso={f.setError} />}
+          {esIngreso && !merch && (
             <>
               <CampoDonador donadores={estado.donadores} actividades={actividades} inicial={donadorInicial(x, actividades)} />
             </>

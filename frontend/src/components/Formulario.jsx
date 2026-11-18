@@ -4,6 +4,7 @@ import { largos } from '../validacion.js';
 import { estado } from '../estado.js';
 import { cerrarModal, intentar, Invalido } from '../acciones.js';
 import { textoPresentacion } from '../logica/comunes.js';
+import { textoMerch, textoTipo } from '../logica/merch.js';
 import { Desplegable } from './Desplegable.jsx';
 import { IconoOjo } from '../assets/iconos.jsx';
 
@@ -173,7 +174,8 @@ export function MensajeError({ texto }) {
 
 // subtitulo con la presentacion del producto
 export function sobreProducto(item, antes = '') {
-  return [antes, textoPresentacion(item) || `suelto, en ${item.unidad}`].filter(Boolean).join(' · ');
+  const texto = item.tipoMerch ? textoMerch(item) || textoTipo(item) : textoPresentacion(item) || `suelto, en ${item.unidad}`;
+  return [antes, texto].filter(Boolean).join(' · ');
 }
 
 // fecha de vencimiento o "No tiene fecha"
