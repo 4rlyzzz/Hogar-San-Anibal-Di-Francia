@@ -35,11 +35,10 @@ export function nombreMerch(p) {
   const limpio = t => String(t ?? '').trim().replace(/\s+/g, ' ');
   const base = limpio(p.nombreBase);
   const partes = [base];
+  // la presentacion ("caja 900 g") no va en el nombre: se muestra aparte. Solo se agrega si hay otro
+  // con el mismo nombre y otra presentacion (nombreMerchDisponible), como en Alimentos y Salud
   if (p.tipoMerch === 'paneton') {
     if (!base.toLowerCase().includes(limpio(p.marca).toLowerCase())) partes.push(limpio(p.marca));
-    partes.push(limpio(p.presentacion));
-  } else if (p.tipoMerch === 'hogar' && p.subcategoria === 'alimentos') {
-    partes.push(limpio(p.presentacion));
   } else if (p.tipoMerch === 'hogar' && p.variante) {
     partes.push(limpio(p.variante));
   } else if (p.tipoMerch === 'promocional' && p.subcategoria === 'prendas') {
@@ -79,6 +78,33 @@ export function llevaLote(item) {
 export const llevaProveedor = item => item.tipoMerch === 'paneton' || item.tipoMerch === 'promocional';
 export const pideProveedor = item => item.tipoMerch === 'promocional';
 export const llevaCosto = item => item.tipoMerch === 'paneton' || item.tipoMerch === 'promocional';
+
+const comparable = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean).join(' ');
+
+// el nombre sin su presentacion al final ("Panetón Clásico D'Onofrio caja 500 g" -> "Panetón Clásico D'Onofrio")
+export function baseMerch(item) {
+  const nombre = String(item.nombre ?? '');
+  const pres = String(item.presentacion ?? '').trim();
+  return pres && nombre.toLowerCase().endsWith(` ${pres.toLowerCase()}`) ? nombre.slice(0, -pres.length - 1) : nombre;
+}
+
+// con que nombre queda un producto nuevo de merchandising (p: lo que se lleno, con p.nombre de nombreMerch)
+// otros: [{ item, nuevo }] los que ya hay (y los nuevos de la lista)
+// -> { nombre, renombrar: [{ item, nuevo, nombre }] } o { repetido } si ya existe con esa misma presentacion
+export function nombreMerchDisponible(p, otros) {
+  const hermanos = otros.filter(h => comparable(baseMerch(h.item)) === comparable(p.nombre));
+  if (!hermanos.length) return { nombre: p.nombre, renombrar: [] };
+  const repetido = hermanos.find(h => comparable(h.item.presentacion) === comparable(p.presentacion));
+  if (repetido || !p.presentacion) return { repetido: repetido ?? hermanos[0] };
+  // otro tamaño del mismo: los dos llevan su presentacion en el nombre
+  const conPresentacion = h => `${baseMerch(h.item)} ${h.item.presentacion}`;
+  return {
+    nombre: `${p.nombre} ${p.presentacion}`,
+    renombrar: hermanos
+      .filter(h => h.item.presentacion && comparable(h.item.nombre) !== comparable(conPresentacion(h)))
+      .map(h => ({ ...h, nombre: conPresentacion(h) })),
+  };
+}
 
 export function textoMerch(item) {
   const partes = [];

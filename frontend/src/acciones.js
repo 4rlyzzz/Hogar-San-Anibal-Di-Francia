@@ -34,7 +34,7 @@ import { filtrarHistorial, filtrosHistorialVacios } from './logica/historial.js'
 import { listaDonadores, actividadesDe, nombreDonador } from './logica/donadores.js';
 import { descargarHistorial, nombreArchivoHistorial, descargarDonadores, nombreArchivoDonadores, descargarPersonas, nombreArchivoPersonas } from './logica/exportar.js';
 import {
-  CATEGORIA as MERCH, esMerch, tiposMerch, ordenTipos, unidadesVenta, articulosDe, tallas, comprobantes, mediosPago, nombreMerch,
+  CATEGORIA as MERCH, esMerch, tiposMerch, ordenTipos, unidadesVenta, articulosDe, tallas, comprobantes, mediosPago, nombreMerch, nombreMerchDisponible, baseMerch,
   precioSugerido, pideVence, puedeVence, llevaLote, llevaProveedor, pideProveedor, llevaCosto, merchVacio, textoTipoMovimiento,
 } from './logica/merch.js';
 import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
@@ -1229,15 +1229,33 @@ export function leerProductoMerch(v) {
   return p;
 }
 
+// los de merchandising que ya hay y los nuevos de la lista (menos la fila que se esta editando)
+function hermanosMerch(exceptoItem) {
+  return [
+    ...estado.merch.map(item => ({ item, categoria: MERCH, nuevo: false })),
+    ...(estado.lote?.items ?? []).filter(x => x.id !== exceptoItem && x.productoNuevo && esMerch(x.categoria))
+      .map(x => ({ item: x.productoNuevo, categoria: MERCH, nuevo: true })),
+  ];
+}
+
 function guardarProductoMerch(modal, v) {
   const lote = estado.lote;
   const p = leerProductoMerch(v);
-  const igual = otro => palabras(otro).join(' ') === palabras(p.nombre).join(' ');
-  const existente = estado.merch.find(i => igual(i.nombre));
-  if (existente) falla(`Ya existe "${existente.nombre}" en Merchandising: elígelo en vez de crearlo otra vez.`, 'nombre');
-  if (lote.items.some(x => x.id !== modal.itemId && x.productoNuevo && esMerch(x.categoria) && igual(x.productoNuevo.nombre))) {
-    falla(`"${p.nombre}" ya se está creando en esta lista.`, 'nombre');
+  // otro tamaño del mismo ("Panetón Clásico D'Onofrio" de 900 g y de 500 g): los dos llevan su presentacion
+  const libre = nombreMerchDisponible(p, hermanosMerch(modal.itemId));
+  if (libre.repetido) {
+    const { item, nuevo } = libre.repetido;
+    falla(nuevo
+      ? `"${item.nombre}" ya se está creando en esta lista.`
+      : `Ya existe "${item.nombre}"${item.presentacion ? ` (${item.presentacion})` : ''} en Merchandising: elígelo en vez de crearlo otra vez.`, 'nombre');
   }
+  p.nombre = libre.nombre;
+  for (const r of libre.renombrar) {
+    if (!reglas.nombreProducto(r.nombre).ok) falla(`Con su presentación, "${r.item.nombre}" quedaría "${r.nombre}", que es muy largo: escribe un nombre más corto.`, 'nombre');
+  }
+  if (!reglas.nombreProducto(p.nombre).ok) falla(`Con su presentación el nombre quedaría "${p.nombre}", que es muy largo: acórtalo.`, 'nombre');
+  // los nuevos de esta lista se renombran ya; los que existen, al confirmar (despues de crear este)
+  for (const r of libre.renombrar) if (r.nuevo) r.item.nombre = r.nombre;
   const codigoBarras = leerCodigoBarras(v, 'codigo-barras', { opcional: true });
   const otros = lote.items.filter(x => x.id !== modal.itemId && x.productoNuevo);
   if (codigoBarras && otros.some(x => x.productoNuevo.codigosBarras?.includes(codigoBarras))) falla('Ese código ya es de otro producto nuevo de esta lista.', 'codigo-barras');
@@ -2159,9 +2177,17 @@ export async function confirmarLote(modal) {
       if (nuevo) {
         if (!productosNuevos.has(x.productoNuevo)) {
           // los otros tamaños que todavia no lo tienen reciben su presentacion en el nombre
-          const { renombrar = [] } = nombreDisponible(x.productoNuevo.nombre, x.productoNuevo, x.id);
-          for (const r of renombrar) if (!r.nuevo) await renombrarProducto(r.item, r.categoria, r.nombre);
-          productosNuevos.set(x.productoNuevo, await crearProductoBD(x.productoNuevo, categoria));
+          if (esMerch(categoria)) {
+            // en merchandising el servidor arma el nombre: si el otro ya tiene el nombre sin presentacion,
+            // le pone la suya al nuevo; por eso el otro se renombra despues de crear este
+            const { renombrar = [] } = nombreMerchDisponible({ ...x.productoNuevo, nombre: baseMerch(x.productoNuevo) }, hermanosMerch(x.id));
+            productosNuevos.set(x.productoNuevo, await crearProductoBD(x.productoNuevo, categoria));
+            for (const r of renombrar) if (!r.nuevo) await renombrarProducto(r.item, r.categoria, r.nombre);
+          } else {
+            const { renombrar = [] } = nombreDisponible(x.productoNuevo.nombre, x.productoNuevo, x.id);
+            for (const r of renombrar) if (!r.nuevo) await renombrarProducto(r.item, r.categoria, r.nombre);
+            productosNuevos.set(x.productoNuevo, await crearProductoBD(x.productoNuevo, categoria));
+          }
         }
         item = productosNuevos.get(x.productoNuevo);
       }

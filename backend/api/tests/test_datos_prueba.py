@@ -109,6 +109,29 @@ class DatosPruebaTests(PruebaAPI):
             self.cargar()
         self.assertEqual((add.call_count, poner.call_count), (0, 0))
 
+    def test_nombres_merch_quita_la_presentacion_de_los_viejos(self):
+        viejo = {'categoria': 'merchandising', 'tipoMerch': 'paneton', 'subcategoria': None, 'nombreBase': 'Panetón Clásico',
+                 'marca': "D'Onofrio", 'presentacion': 'caja 900 g', 'unidad': 'unidades', 'cantidad': 5, 'lotes': [], 'unidos': []}
+        uno = self.couch.poner('producto', {**viejo, 'nombre': "Panetón Clásico D'Onofrio caja 900 g"})
+        # dos tamaños del mismo: se quedan con su presentacion
+        self.couch.poner('producto', {**viejo, 'nombreBase': 'Panetón', 'marca': 'Todinno', 'nombre': 'Panetón Todinno caja 900 g'})
+        self.couch.poner('producto', {**viejo, 'nombreBase': 'Panetón', 'marca': 'Todinno', 'presentacion': 'bolsa 500 g', 'nombre': 'Panetón Todinno bolsa 500 g'})
+
+        salida = StringIO()
+        call_command('nombres_merch', stdout=salida)
+        self.assertIn('1 por cambiar', salida.getvalue())
+        self.assertEqual(self.couch.leer('producto', uno['_id'])['nombre'], "Panetón Clásico D'Onofrio caja 900 g")
+
+        call_command('nombres_merch', '--si', stdout=StringIO())
+        doc = self.couch.leer('producto', uno['_id'])
+        self.assertEqual((doc['nombre'], doc['unidos']), ("Panetón Clásico D'Onofrio", ["Panetón Clásico D'Onofrio caja 900 g"]))
+        self.assertEqual(sorted(p['nombre'] for p in self.couch.todos('producto') if 'Todinno' in p['nombre']),
+                         ['Panetón Todinno bolsa 500 g', 'Panetón Todinno caja 900 g'])
+        # otra vez: ya no hay nada
+        salida = StringIO()
+        call_command('nombres_merch', '--si', stdout=salida)
+        self.assertIn('No hay nombres que acortar', salida.getvalue())
+
     def test_pide_un_administrador(self):
         for c in self.couch.todos('usuario'):
             self.couch.base('usuario').pop(c['_id'])
