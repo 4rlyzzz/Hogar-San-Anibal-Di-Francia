@@ -2,6 +2,7 @@
 from collections import Counter
 from datetime import date
 from io import StringIO
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -101,6 +102,12 @@ class DatosPruebaTests(PruebaAPI):
         self.assertEqual(errores, '')
         self.assertEqual(len(self.couch.todos('movimiento')), antes)
         self.assertIn('ya existe, se salta', salida)
+
+    def test_no_toca_la_cache(self):
+        # en Railway corre como root: si dejara archivos en la cache, la app no podria leerlos
+        with mock.patch('django.core.cache.cache.add') as add, mock.patch('django.core.cache.cache.set') as poner:
+            self.cargar()
+        self.assertEqual((add.call_count, poner.call_count), (0, 0))
 
     def test_pide_un_administrador(self):
         for c in self.couch.todos('usuario'):
