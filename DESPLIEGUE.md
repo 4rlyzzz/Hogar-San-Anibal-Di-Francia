@@ -135,6 +135,14 @@ python manage.py crear_usuario
 
 (El comando `railway ssh` exacto también aparece en el panel: clic derecho sobre el servicio backend → *Copy SSH Command*.)
 
+**(Opcional, solo para probar) Datos de prueba.** Con la base vacía y el Administrador ya creado:
+
+```bash
+python manage.py datos_prueba --si --clave <contraseña para el equipo de prueba>
+```
+
+Crea donadores, proveedores, compradores, unos 50 productos (Alimentos, Salud e higiene y Merchandising), un equipo de usuarios de prueba (`rosario`, `secretaria`, `salud`, `cocina`, `terapia`) y sus movimientos de las últimas 8 semanas. Algunos productos quedan a propósito bajo el mínimo, por vencer o con un lote vencido. No corre si la base ya tiene productos. **No lo uses cuando la app ya esté en uso real.**
+
 ### 3.5 (Recomendado) Quitar la clave de administrador del backend
 Cuando `setup_couch` ya corrió, puedes borrar `COUCHDB_ADMIN_PASSWORD` de las variables del **backend**. (Mientras falten las bases de proveedores y compradores, esas listas salen vacías y al agregar uno se avisa que falta correr `setup_couch`.) Django sigue funcionando solo con `casa_app`, y si alguien llegara a vulnerar el backend no tendría la clave de administrador. Vuelve a agregarla cuando necesites correr `setup_couch` o rotar la contraseña de `casa_app`.
 
