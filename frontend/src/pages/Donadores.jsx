@@ -2,7 +2,8 @@ import { useEstado } from '../estado.js';
 import { verDonador, descargarExcelDonadores } from '../acciones.js';
 import { fechaDe } from '../logica/comunes.js';
 import { listaDonadores, actividadesDe, chipsDonadores, textoAgregado } from '../logica/donadores.js';
-import { Encabezado, SinResultados } from '../components/Comunes.jsx';
+import { Encabezado, SinResultados, usePaginacion, Paginacion } from '../components/Comunes.jsx';
+import { tamanosTabla } from '../logica/paginas.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips, opcionesCon } from '../components/Filtros.jsx';
 import { BotonExcel } from './Historial.jsx';
 
@@ -24,6 +25,7 @@ export function Donadores() {
   const totalDonaciones = lista.reduce((suma, x) => suma + x.donaciones.length, 0);
   const chips = chipsDonadores(f);
   const abierto = estado.filtrosAbiertos === 'donadoresFiltros';
+  const pagina = usePaginacion('donadores', lista, tamanosTabla, JSON.stringify([f, estado.busqueda]));
 
   // opciones de los filtros
   const todas = estado.historial.filter(x => x.movimiento === 'Ingreso' && x.donador);
@@ -49,7 +51,7 @@ export function Donadores() {
             <span>NOMBRE</span><span>CONTACTO</span><span>ACTIVIDADES QUE APOYÓ</span><span>DONACIONES</span><span>ÚLTIMA</span>
           </div>
 
-          {lista.map(({ donador: d, donaciones }) => {
+          {pagina.visibles.map(({ donador: d, donaciones }) => {
             const n = donaciones.length;
             const ultima = donaciones[0];
             return (
@@ -67,6 +69,7 @@ export function Donadores() {
           })}
 
           {lista.length === 0 && <SinResultados texto={chips.length ? 'Ningún donador coincide con los filtros' : 'Todavía no hay donadores registrados'} />}
+          <Paginacion control={pagina.control} nombre="donadores" />
         </div>
 
         {abierto && (

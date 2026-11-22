@@ -3,7 +3,8 @@ import { usuario } from '../data/datos.js';
 import { verActividad, cambiarRol, cambiarActivo, sePuedeAdministrar, roles } from '../acciones.js';
 import { iniciales, fechaLarga, textoFecha, tiempoRelativo, mismoId } from '../logica/comunes.js';
 import { actividadDe, movimientoDe } from '../logica/actividad.js';
-import { Encabezado, SinResultados, TituloOrden } from '../components/Comunes.jsx';
+import { Encabezado, SinResultados, TituloOrden, usePaginacion, Paginacion } from '../components/Comunes.jsx';
+import { tamanosTabla } from '../logica/paginas.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips } from '../components/Filtros.jsx';
 import { Desplegable } from '../components/Desplegable.jsx';
 
@@ -104,6 +105,8 @@ export function Usuarios() {
   const hayFiltros = chips.length || texto;
   const abierto = estado.filtrosAbiertos === 'usuarios';
   const activos = estado.cuentas.filter(c => c.activo).length;
+  // el orden tambien cuenta: al reordenar se vuelve a la pagina 1
+  const pagina = usePaginacion('usuarios', lista, tamanosTabla, JSON.stringify([filtros, texto]));
 
   return (
     <>
@@ -128,9 +131,10 @@ export function Usuarios() {
             <span><TituloOrden texto="AGREGADO" orden="agregado" filtros={filtros} grupo="usuarios" /></span><span />
           </div>
 
-          {lista.map(f => <FilaUsuario key={f.cuenta.id} c={f.cuenta} registros={f.registros} ultima={f.ultima} />)}
+          {pagina.visibles.map(f => <FilaUsuario key={f.cuenta.id} c={f.cuenta} registros={f.registros} ultima={f.ultima} />)}
 
           {lista.length === 0 && <SinResultados texto={hayFiltros ? 'Ningún usuario coincide con los filtros' : 'Todavía no hay usuarios'} />}
+          <Paginacion control={pagina.control} nombre="usuarios" />
         </div>
 
         {abierto && (

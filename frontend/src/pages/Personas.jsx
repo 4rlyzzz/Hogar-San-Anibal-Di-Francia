@@ -4,7 +4,8 @@ import { fechaDe } from '../logica/comunes.js';
 import { personas, listaPersonas, montoDe, tiposDe, chipsPersonas } from '../logica/personas.js';
 import { tiposMerch, ordenTipos, soles } from '../logica/merch.js';
 import { textoAgregado } from '../logica/donadores.js';
-import { Encabezado, SinResultados } from '../components/Comunes.jsx';
+import { Encabezado, SinResultados, usePaginacion, Paginacion } from '../components/Comunes.jsx';
+import { tamanosTabla } from '../logica/paginas.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips, opcionesCon } from '../components/Filtros.jsx';
 import { BotonExcel } from './Historial.jsx';
 
@@ -29,6 +30,7 @@ export function Personas({ tipo }) {
   const operaciones = lista.reduce((suma, x) => suma + x.movimientos.length, 0);
   const chips = chipsPersonas(f, nombresTipo);
   const abierto = estado.filtrosAbiertos === p.filtros;
+  const pagina = usePaginacion(p.lista, lista, tamanosTabla, JSON.stringify([tipo, f, estado.busqueda]));
 
   const todas = estado.historial.filter(x => x.movimiento === p.movimiento && x[p.campo]);
   const anios = [...new Set(todas.map(x => String(fechaDe(x.fecha).getFullYear())))].sort().reverse();
@@ -53,7 +55,7 @@ export function Personas({ tipo }) {
             <span>NOMBRE</span><span>CONTACTO</span><span>{tipo === 'proveedor' ? 'LE COMPRAMOS' : 'COMPRÓ'}</span><span>TOTAL</span><span>ÚLTIMA</span>
           </div>
 
-          {lista.map(({ persona: d, movimientos }) => {
+          {pagina.visibles.map(({ persona: d, movimientos }) => {
             const ultima = movimientos[0];
             const monto = montoDe(movimientos, tipo);
             return (
@@ -74,6 +76,7 @@ export function Personas({ tipo }) {
           })}
 
           {lista.length === 0 && <SinResultados texto={chips.length ? `Ningún ${p.singular} coincide con los filtros` : `Todavía no hay ${p.plural} registrados`} />}
+          <Paginacion control={pagina.control} nombre={p.plural} />
         </div>
 
         {abierto && (

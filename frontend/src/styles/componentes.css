@@ -1390,6 +1390,98 @@
   background: #fbeceb;
 }
 
+/* paginas: debajo de una tabla o de la grilla de tarjetas */
+.paginacion {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 12px 20px;
+  border-top: 1px solid #edf1f0;
+  font-size: 13px;
+  color: #6f7e79;
+}
+
+/* debajo de las tarjetas no hay tabla: va como una tarjeta mas */
+.grilla + .paginacion {
+  margin: -20px 0 38px;
+  background: #fff;
+  border: 1px solid #e5eae8;
+  border-radius: 18px;
+}
+
+.paginacion-tamano {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paginacion-tamano .filtros {
+  padding: 3px;
+}
+
+.paginacion-tamano .filtros button {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+.paginacion-rango {
+  margin-left: auto;
+}
+
+.paginacion-rango b {
+  color: #17211f;
+}
+
+.paginacion-flechas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.paginacion-flecha {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e0e7e4;
+  border-radius: 10px;
+  background: #fff;
+  color: #17211f;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.paginacion-flecha:hover:not(:disabled) {
+  background: #f7faf9;
+  border-color: #c9d4d0;
+}
+
+.paginacion-flecha:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.paginacion-pagina {
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 767px) {
+  .paginacion {
+    padding: 12px 14px;
+  }
+
+  .paginacion-rango {
+    margin-left: 0;
+  }
+
+  .paginacion-flechas {
+    margin-left: auto;
+  }
+}
+
 /* barra de la tabla: resumen, filtros y orden en una sola fila */
 .barra-tabla {
   display: flex;
@@ -3011,6 +3103,37 @@ button.uf-usuario:hover b {
 
 .lote-producto small {
   font-size: 11px;
+  color: #7c8b86;
+}
+
+/* editar una fila: elegir el producto escribiendo */
+.lote-productos-elegir {
+  max-height: 260px;
+  margin-top: 8px;
+}
+
+.lote-producto.activo {
+  border-color: #a9dcc6;
+  background: #f1faf6;
+}
+
+.lote-elegido {
+  background: #f9fbfa;
+}
+
+.lote-elegido > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.lote-elegido .link {
+  flex: none;
+  font-size: 13px;
+}
+
+.lote-elegir-nota {
+  margin: 2px 2px 0;
+  font-size: 12px;
   color: #7c8b86;
 }
 
