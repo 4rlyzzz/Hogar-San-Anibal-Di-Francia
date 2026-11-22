@@ -79,6 +79,8 @@ python manage.py crear_usuario
 
 Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**.
 
+> **Datos de prueba (opcional):** si tu base no tiene productos y quieres probar con algo realista, ejecuta `python manage.py datos_prueba --clave <contraseña>`. Crea productos, donadores, proveedores, compradores, un equipo de usuarios de prueba (todos con esa contraseña) y movimientos de las últimas 8 semanas.
+
 Para inicializar el servicio Django ejecutar (**1ra terminal**):
 
 ```powershell
