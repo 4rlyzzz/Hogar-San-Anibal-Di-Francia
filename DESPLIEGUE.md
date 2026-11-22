@@ -4,7 +4,7 @@ Guía para publicar el sistema en [Railway](https://railway.com) (plan Hobby). P
 
 ## 1. Cómo queda armado
 
-Un **proyecto** de Railway con 3 servicios (4 si después agregas OmniRoute), todos desde este mismo repositorio:
+Un **proyecto** de Railway con 3 servicios, todos desde este mismo repositorio:
 
 ```
  Navegador ──HTTPS──▶ frontend (Caddy, archivos de Vite)        carpeta: frontend/
@@ -12,11 +12,11 @@ Un **proyecto** de Railway con 3 servicios (4 si después agregas OmniRoute), to
      └──HTTPS──▶ backend (Django + gunicorn)  /api/...          carpeta: backend/
                      │  red privada de Railway (no sale a internet)
                      ├──▶ couchdb  (con Volume /opt/couchdb/data) carpeta: couchDB/
-                     └──▶ omniroute (opcional, dictado con IA)
+                     └──HTTPS──▶ Groq / Gemini (opcional, dictado con IA; fuera de Railway)
 ```
 
 - **CouchDB no tiene dominio público.** Solo el backend la ve, por la red privada (`couchdb.railway.internal`).
-- El navegador **nunca** habla con CouchDB ni con OmniRoute: todo pasa por Django.
+- El navegador **nunca** habla con CouchDB ni con la IA: todo pasa por Django (las claves de la IA quedan en el servidor).
 - Railway **no usa** `docker-compose.yml`; ese archivo es solo para probar en tu PC lo mismo que corre en Railway.
 
 ## 1.1 Probar en tu PC con Docker (antes de Railway)
@@ -52,7 +52,7 @@ Si cambias código, vuelve a correr el paso 2 (`--build` reconstruye solo lo que
 | 3 | **SECRET_KEY** de Django | servicio **backend** → Variables | Firma los tokens de sesión. | Cambiar la variable y redeploy. **Cierra la sesión de todos** (tienen que volver a entrar) |
 | 4 | **Cuenta principal de la app** (primer Administrador) | dentro de CouchDB (`casa_usuarios`) | Entrar a la app y crear los demás usuarios. | Desde la misma app: menú de la cuenta → cambiar contraseña |
 | 5 | Demás usuarios de la app | dentro de CouchDB (`casa_usuarios`) | Personal del hogar. | Un Administrador, en la pestaña **Usuarios** |
-| 6 | **OmniRoute**: contraseña del panel + API key (opcional) | servicio **omniroute** / backend `OMNIROUTE_API_KEY` | Dictado con IA. | En el panel de OmniRoute; copiar la key nueva al backend |
+| 6 | **Claves de la IA** (opcional): Groq y Gemini | servicio **backend** → `IA_1_KEY`, `IA_2_KEY` | Dictado con IA. | Crear una nueva en la página del proveedor, pegarla en la variable y borrar la vieja allá |
 | 7 | Tu cuenta de Railway y de GitHub | — | Acceso a todo lo anterior. | Activa la verificación en dos pasos en ambas |
 
 Para generar contraseñas y la `SECRET_KEY` (en tu PC, con el venv activo):
@@ -146,25 +146,28 @@ Cuando `setup_couch` ya corrió, puedes borrar `COUCHDB_ADMIN_PASSWORD` de las v
 - [ ] Si fallas el login 6 veces seguidas, te bloquea a ti pero otra persona desde otra red puede entrar. Si bloquea a todos, revisa `NUM_PROXIES` (por defecto 1).
 - [ ] La cámara (lector de códigos) y el micrófono funcionan: necesitan HTTPS, y Railway lo da.
 
-## 5. OmniRoute (dictado con IA): se puede dejar para después
+## 5. Dictado con IA: se puede dejar para después
 
-**Sin OmniRoute la app funciona completa.** El dictado usa el reconocimiento de voz del navegador y el intérprete local (`logica/dictado.js`). Lo que suma la IA es entender mejor las frases desordenadas.
+**Sin IA la app funciona completa.** El dictado usa el reconocimiento de voz del navegador y el intérprete local (`logica/dictado.js`). Lo que suma la IA es entender mejor las frases desordenadas.
 
-**Qué es:** OmniRoute es un "enrutador" de IA que se instala por separado. En su panel se conectan cuentas de proveedores de IA (por eso pide crear cuentas y vincularlas) y se arma un *combo* con varios modelos de respaldo; en este proyecto se llama `inventario-fallback`. Expone una API compatible con la de OpenAI.
+**Cómo funciona:** Django le manda lo dictado directamente a los proveedores (Groq y Gemini, con sus planes gratuitos). No hace falta otro servicio en Railway. Los modelos se prueban en orden: si uno llegó a su límite del día, está caído o tarda más de 10 segundos, pasa al siguiente; si ninguno responde, se usa el reconocimiento local.
 
-**Qué necesita la app** (solo esto, en el servicio **backend**):
+**Qué necesita la app** (en el servicio **backend** → Variables; 3 por proveedor):
 ```
-OMNIROUTE_URL=http://${{omniroute.RAILWAY_PRIVATE_DOMAIN}}:20128
-OMNIROUTE_API_KEY=<API key creada en el panel de OmniRoute>
-OMNIROUTE_MODEL=inventario-fallback
+IA_1_URL=https://api.groq.com/openai
+IA_1_KEY=<clave de Groq, empieza con gsk_>
+IA_1_MODELOS=openai/gpt-oss-20b,openai/gpt-oss-120b
+IA_2_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+IA_2_KEY=<clave de Google AI Studio>
+IA_2_MODELOS=gemini-3.1-flash-lite,gemini-2.5-flash
 ```
 
-**Se puede cambiar cuando quieras.** Como la app solo usa esas 3 variables, puedes:
-- agregarlo más adelante como otro servicio del proyecto (revisa su documentación para la imagen Docker, el volumen y la contraseña del panel; no le generes dominio público salvo para configurarlo, y protégelo con contraseña),
-- correrlo en otra máquina,
-- o reemplazarlo por cualquier API compatible con OpenAI (Groq, OpenRouter, la de OpenAI, etc.), cambiando `OMNIROUTE_URL`, la key y el modelo.
+- El número es el orden: primero los modelos de `IA_1`, en el orden escrito, después los de `IA_2`.
+- Para agregar otro proveedor compatible con la API de OpenAI (OpenRouter, Cerebras…), `IA_3_URL`, `IA_3_KEY` e `IA_3_MODELOS`. Para quitar uno, borra sus 3 variables.
+- Opcionales: `IA_N_REASONING=` vacío si un proveedor rechaza `reasoning_effort` (error 400 en los logs); `IA_MAX_TOKENS` (1500) e `IA_ESPERA` (10 segundos por modelo).
+- Cambiar las variables y hacer redeploy del backend basta; el frontend no se toca.
 
-Cambiar las variables y hacer redeploy del backend basta; el frontend no se toca.
+**Para saber qué modelo responde:** en **Deploy Logs** del backend, cada dictado deja `Dictado con IA: respondio IA_1 openai/gpt-oss-20b`; si uno falla aparece el motivo (`respondio 429` = llegó a su límite, `revisa IA_1_KEY` = clave mal copiada).
 
 **Privacidad:** lo que se dicta se envía al proveedor de IA. Pide al personal que no dicte nombres de residentes (el campo "para" se completa a mano).
 
@@ -188,7 +191,7 @@ railway ssh --service backend -- python manage.py exportar_couch > respaldo-AAAA
 El archivo incluye los usuarios con el hash de su contraseña: guárdalo en un lugar privado. Para restaurar en una CouchDB vacía: `python manage.py setup_couch --datos respaldo.json`.
 
 ### 6.3 Costos (plan Hobby)
-El plan incluye un monto de uso al mes; si el consumo lo supera, se cobra la diferencia. Revisa **Usage** en Railway la primera semana. Para gastar menos: `WEB_CONCURRENCY=1` en el backend (un solo proceso de gunicorn alcanza para el personal de un hogar) y no despliegues OmniRoute hasta que lo necesites.
+El plan incluye un monto de uso al mes; si el consumo lo supera, se cobra la diferencia. Revisa **Usage** en Railway la primera semana. Para gastar menos: `WEB_CONCURRENCY=1` en el backend (un solo proceso de gunicorn alcanza para el personal de un hogar). El dictado con IA no suma servicios: Groq y Gemini se usan con sus planes gratuitos.
 
 ### 6.4 Antes de cada despliegue
 ```powershell
