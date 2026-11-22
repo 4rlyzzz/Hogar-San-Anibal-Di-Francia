@@ -62,11 +62,12 @@ export function Paginacion({ control, nombre = 'resultados' }) {
           ))}
         </div>
       </div>
-      <span className="paginacion-rango"><b>{desde}–{hasta}</b> de {total}</span>
+      {/* a la izquierda, junto a "Ver": a la derecha queda debajo del boton flotante del microfono */}
       <div className="paginacion-flechas">
         <button type="button" className="paginacion-flecha" data-accion="pagina-anterior" aria-label="Página anterior" disabled={pagina <= 1} onClick={() => ir(pagina - 1)}>‹</button>
         <span className="paginacion-pagina">{pagina} / {paginas}</span>
         <button type="button" className="paginacion-flecha" data-accion="pagina-siguiente" aria-label="Página siguiente" disabled={pagina >= paginas} onClick={() => ir(pagina + 1)}>›</button>
+        <span className="paginacion-rango"><b>{desde}–{hasta}</b> de {total}</span>
       </div>
     </nav>
   );

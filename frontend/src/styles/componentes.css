@@ -1425,8 +1425,9 @@
   font-size: 12px;
 }
 
+/* todo a la izquierda: a la derecha esta el boton flotante del microfono */
 .paginacion-rango {
-  margin-left: auto;
+  margin-left: 6px;
 }
 
 .paginacion-rango b {
@@ -1468,17 +1469,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* en celular: "Ver" arriba y las flechas debajo, con aire entre los dos */
 @media (max-width: 767px) {
   .paginacion {
-    padding: 12px 14px;
-  }
-
-  .paginacion-rango {
-    margin-left: 0;
-  }
-
-  .paginacion-flechas {
-    margin-left: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
   }
 }
 
