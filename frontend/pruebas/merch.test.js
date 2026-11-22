@@ -7,7 +7,7 @@ import {
 import { listaPersonas, personasVacio, montoDe, tiposDe, movimientosDePersona } from '../src/logica/personas.js';
 import { textoDetalle, colorCategoria, nombreCategoria } from '../src/logica/comunes.js';
 import { filtrarHistorial, filtrosHistorialVacios, chipsHistorial, subcategoriasDe } from '../src/logica/historial.js';
-import { interpretarDictado, tipoDictado } from '../src/logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, escribirTallas, compartirVentaIA, preprocesarTextoVoz } from '../src/logica/dictado.js';
 import { calcularAlertas } from '../src/logica/alertas.js';
 import { reglas } from '../src/validacion.js';
 import { enDias, lote } from './ayuda.js';
@@ -141,7 +141,8 @@ const productos = [
 const extra = { donadores: [], actividades: [], compradores: [{ id: 'c1', nombre: 'Rosa Quispe' }], proveedores: [{ id: 'v1', nombre: 'Textiles Sur' }] };
 const dictar = texto => {
   const { tipo, resto } = tipoDictado(texto);
-  return { tipo, items: interpretarDictado(resto, productos, extra) };
+  // como en la app: el tipo dicho ayuda a saber quien es "a María López"
+  return { tipo, items: interpretarDictado(resto, productos, { ...extra, tipo }) };
 };
 
 test('venta dicha: comprador, medio de pago y precio', () => {
@@ -162,6 +163,131 @@ test('compra dicha: proveedor y costo', () => {
 test('lo de antes se dicta igual', () => {
   const { items: [r] } = dictar('salida de 3 kilos de arroz para Mateo');
   assert.deepEqual([r.producto.item.nombre, r.cantidad, r.comprador, r.medioPago], ['Arroz', 3, null, '']);
+  // aunque haya una compradora Rosa, una salida de arroz no es una venta
+  const { items: [a] } = dictar('salida de 3 kilos de arroz para Rosa');
+  assert.deepEqual([a.producto.item.nombre, a.comprador, a.compradorDicho], ['Arroz', null, '']);
+  const { items: [c] } = dictar('salida de 3 kilos de arroz a la cocina');
+  assert.deepEqual([c.producto.item.nombre, c.compradorDicho], ['Arroz', '']);
+});
+
+const conTallas = [
+  ...['M', 'L', 'S', 'XL'].map(t => ({ item: { ...polo, id: `polo-${t}`, nombre: `Polo Hogar talla ${t} Azul`, talla: t }, categoria: 'Merchandising' })),
+  { item: { nombre: 'Arroz', unidad: 'kg' }, categoria: 'Alimentos' },
+];
+
+test('la talla dicha por su nombre dice cual prenda es', () => {
+  assert.equal(escribirTallas('dos polos talla eme azul'), 'dos polos talla M azul');
+  assert.equal(escribirTallas('polo talla equis ele'), 'polo talla XL');
+  assert.equal(escribirTallas('polo talla doble equis ele rojo'), 'polo talla XXL rojo');
+  assert.equal(escribirTallas('polo talla única'), 'polo talla única');
+  for (const [dicho, id] of [['eme', 'polo-M'], ['ese', 'polo-S'], ['ele', 'polo-L'], ['L', 'polo-L'], ['equis ele', 'polo-XL']]) {
+    const { resto } = tipoDictado(`venta de 2 polos talla ${dicho} azul`);
+    const [r] = interpretarDictado(resto, conTallas, { tipo: 'Salida' });
+    assert.deepEqual([dicho, r.producto?.item.id, r.cantidad], [dicho, id, 2]);
+  }
+  // lo que escribe la IA tambien
+  assert.equal(productoDeNombre('Polo talla eme azul', conTallas).producto?.item.id, 'polo-M');
+  // "talla S 3 tazas": esa S no es "S/ 3"
+  const { resto } = tipoDictado('vendimos 2 polos talla S 3 panetones');
+  const items = interpretarDictado(resto, [...conTallas, ...productos], { tipo: 'Salida' });
+  assert.deepEqual(items.map(r => [r.producto?.item.id, r.cantidad, r.precio]), [['polo-S', 2, null], ['p1', 3, null]]);
+});
+
+test('vendido es una venta', () => {
+  const { tipo, items: [r] } = dictar('vendido a Rosa Quispe 2 panetones');
+  assert.deepEqual([tipo, r.producto?.item.id, r.cantidad, r.comprador?.id], ['Salida', 'p1', 2, 'c1']);
+});
+
+test('comprador o proveedor nuevo dicho solo con "a"', () => {
+  const { items: [v] } = dictar('venta de 3 panetones a la señora María de la Cruz a 25 soles');
+  assert.deepEqual([v.cantidad, v.comprador, v.compradorDicho, v.precio], [3, null, 'María de la Cruz', 25]);
+  const { items: [c] } = dictar('compramos 20 panetones a Distribuidora Lima a 18 soles que vencen el 15 de enero');
+  assert.deepEqual([c.cantidad, c.proveedorDicho, c.compradorDicho, c.precio], [20, 'Distribuidora Lima', '', 18]);
+});
+
+test('pausas al dictar: "venta de 5. Rosario de madera"', () => {
+  const rosarioP = { item: rosario, categoria: 'Merchandising' };
+  const lista = [rosarioP, ...productos];
+  const leer = texto => {
+    const { tipo, resto } = tipoDictado(texto);
+    return interpretarDictado(resto, lista, { ...extra, tipo });
+  };
+  // el reconocedor puso un punto tras el 5 y oyo "arroz a Quispe" por "a Rosa Quispe"
+  const [r, ...otros] = leer('Venta de 5. Rosario marrón a 6 soles cada una arroz a Quispe. Pagado con yape.');
+  assert.deepEqual([r.producto?.item.id, r.cantidad, r.precio, r.comprador?.id, r.medioPago, otros.length], ['p4', 5, 6, 'c1', 'yape-plin', 0]);
+  assert.deepEqual(leer('venta de cinco, rosario marrón').map(x => [x.producto?.item.id, x.cantidad]), [['p4', 5]]);
+  // el precio no es otro producto, y el comprador dicho aparte vale para todos
+  const venta = leer('venta de 5 panetones a 30 soles cada uno, dos polos talla M azul a 15 soles cada uno. Rosa Quispe con yape');
+  assert.deepEqual(venta.map(x => [x.producto?.item.id, x.cantidad, x.precio, x.comprador?.id, x.medioPago]),
+    [['p1', 5, 30, 'c1', 'yape-plin'], ['p2', 2, 15, 'c1', 'yape-plin']]);
+  // lo de antes sigue igual
+  assert.deepEqual(leer('salida de 10 kilos de arroz. 5 latas de leche').map(x => x.cantidad), [10, 5]);
+});
+
+test('palabras de merchandising que chocaban con el dictado', () => {
+  const m = (id, nombre, x = {}) => ({ item: { id, nombre, unidad: 'unidades', tipoMerch: 'hogar', cantidad: 50, lotes: [], ...x }, categoria: 'Merchandising' });
+  const lista = [
+    { item: paneton, categoria: 'Merchandising' },
+    m('me', 'Mermelada de fresa frasco 300 g'), m('bo', 'Bolsa ecológica'), m('ga', 'Galletas de avena', { unidad: 'docenas' }),
+    m('tp', 'Taza Mejor Papá'), m('pr', 'Polo Hogar talla M Rosa'), m('ro', 'Rosario de madera'), m('st', 'Stickers', { unidad: 'packs' }),
+    m('en', 'Entrada para la kermés'),
+    { item: { id: 'pa2', nombre: 'Paracetamol 500mg', unidad: 'cajas', contenido: 10, medida: 'unidades' }, categoria: 'Salud' },
+  ];
+  const personas = { compradores: [{ id: 'c1', nombre: 'Rosa Quispe' }, { id: 'c2', nombre: 'Rosario Mendoza' }], proveedores: [{ id: 'v1', nombre: 'Algodones Perú' }] };
+  const leer = texto => {
+    const { tipo, resto } = tipoDictado(texto);
+    return { tipo, items: interpretarDictado(resto, lista, { ...personas, tipo }) };
+  };
+  const uno = texto => {
+    const { tipo, items: [r] } = leer(texto);
+    return [tipo, r?.producto?.item.id, r?.cantidad, r?.presentacion?.texto ?? null];
+  };
+  // el envase o el tamaño que esta en su nombre no es "otra presentacion"
+  assert.deepEqual(uno('venta de 3 cajas de panetón'), ['Salida', 'p1', 3, null]);
+  assert.deepEqual(uno('venta de 3 panetones de 900 gramos'), ['Salida', 'p1', 3, null]);
+  assert.deepEqual(uno('venta de 2 frascos de mermelada'), ['Salida', 'me', 2, null]);
+  assert.deepEqual(uno('venta de 3 bolsas ecológicas'), ['Salida', 'bo', 3, null]);
+  // ...y lo de antes sigue igual: cajas de un medicamento y sus unidades
+  assert.deepEqual(uno('salida de 2 cajas de paracetamol 500 mg'), ['Salida', 'pa2', 2, null]);
+  assert.deepEqual(uno('salida de 30 unidades de paracetamol 500 mg'), ['Salida', 'pa2', 3, null]);
+  // lo que se vende por docenas o packs no se multiplica
+  assert.deepEqual(uno('venta de 2 docenas de galletas de avena'), ['Salida', 'ga', 2, null]);
+  assert.deepEqual(uno('venta de 1 docena de rosarios'), ['Salida', 'ro', 12, null]);
+  assert.deepEqual(uno('venta de 3 packs de stickers'), ['Salida', 'st', 3, null]);
+  // "entradas" para una actividad es un producto, no un ingreso
+  assert.deepEqual(uno('venta de 3 entradas para la kermés'), ['Salida', 'en', 3, null]);
+  assert.deepEqual(uno('ingreso de 50 entradas para la kermés'), ['Ingreso', 'en', 50, null]);
+  // "nuevos" solo es precio en "nuevos soles"
+  assert.equal(leer('venta de 3 nuevos polos').items[0].precio, null);
+  assert.equal(leer('venta de 2 rosarios a 25 nuevos soles').items[0].precio, 25);
+  // nombres de personas que se parecen a productos o colores
+  const quien = texto => leer(texto).items.map(r => r.comprador?.nombre ?? r.compradorDicho ?? '');
+  assert.deepEqual(quien('venta de 2 polos rosa a Rosa Quispe'), ['Rosa Quispe']);
+  assert.deepEqual(quien('venta de 3 rosarios a Rosario Mendoza'), ['Rosario Mendoza']);
+  assert.deepEqual(quien('venta de 3 rosarios a Carmen Rosario'), ['Carmen Rosario']);
+  const ingreso = leer('ingreso de 10 polos rosa de algodón').items[0];
+  assert.deepEqual([ingreso.proveedor, ingreso.proveedorDicho], [null, '']);
+});
+
+test('lo que se manda a la IA no pierde palabras del nombre', () => {
+  assert.equal(preprocesarTextoVoz('venta de 2 tazas mejor papá.'), 'venta de 2 tazas mejor papá');
+  assert.equal(preprocesarTextoVoz('venta de 3 polos no te rindas'), 'venta de 3 polos no te rindas');
+  assert.equal(preprocesarTextoVoz('ingreso de 2.5 kilos de arroz. Vence en enero'), 'ingreso de 2.5 kilos de arroz Vence en enero');
+});
+
+test('un comprador y un medio de pago para toda la venta', () => {
+  const { items } = dictar('vendimos 4 panetones, 2 polos talla M azul a Rosa Quispe con yape');
+  assert.deepEqual(items.map(r => [r.producto?.item.id, r.cantidad, r.comprador?.id, r.medioPago]), [['p1', 4, 'c1', 'yape-plin'], ['p2', 2, 'c1', 'yape-plin']]);
+  const { items: nuevos } = dictar('vendimos 4 panetones y 2 polos talla M azul a María López');
+  assert.deepEqual(nuevos.map(r => r.compradorDicho), ['María López', 'María López']);
+  // dos compradores distintos: cada uno con el suyo
+  const { items: dos } = dictar('vendimos 4 panetones a Rosa Quispe y 2 polos talla M azul a María López');
+  assert.deepEqual(dos.map(r => r.comprador?.nombre ?? r.compradorDicho), ['Rosa Quispe', 'María López']);
+
+  const ia = compartirVentaIA([{ producto: 'Panetón', cantidad: 4 }, { producto: 'Taza', cantidad: 2, comprador: 'Rosa Quispe', medio_pago: 'efectivo' }]);
+  assert.deepEqual(ia.map(i => [i.comprador, i.medio_pago]), [['Rosa Quispe', 'efectivo'], ['Rosa Quispe', 'efectivo']]);
+  const iaDos = compartirVentaIA([{ producto: 'Panetón', comprador: 'Rosa' }, { producto: 'Taza', comprador: 'Ana' }, { producto: 'Polo' }]);
+  assert.deepEqual(iaDos.map(i => i.comprador), ['Rosa', 'Ana', undefined]);
 });
 
 test('reglas de merchandising', () => {
