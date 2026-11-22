@@ -2,13 +2,16 @@
 import { useEffect, useState } from 'react';
 import { usuario } from '../data/datos.js';
 import { largos, decimalesDe, cantidadDe } from '../validacion.js';
-import { IconoDonadores, IconoUsuarios, IconoIngreso, IconoSalida } from '../assets/iconos.jsx';
+import { IconoDonadores, IconoUsuarios, IconoIngreso, IconoSalida, IconoProveedores, IconoCompradores } from '../assets/iconos.jsx';
 import { estado } from '../estado.js';
 import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
   guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
+  categorias, abrirPersona,
 } from '../acciones.js';
+import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
+import { CamposIngresoMerch, CamposSalidaMerch, CamposProductoMerch, CampoVenceMerch } from './Merch.jsx';
 import {
   nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, pluralizar, redondear, fechaActual, textoPara, formatoNombre,
 } from '../logica/comunes.js';
@@ -21,6 +24,7 @@ import { LotesSalida } from './Lotes.jsx';
 // cuanto se puede sacar
 function textoDisponible(item) {
   const vencida = cantidadVencida(item);
+  if (item.tipoMerch && !puedeVence(item)) return `En stock: ${item.cantidad} ${item.unidad}`;
   if (!vencida) return `En stock: ${item.cantidad} ${item.unidad} · sale primero lo que vence antes`;
   return `Se pueden usar ${disponible(item)} ${item.unidad} · ${vencida} vencidos no cuentan`;
 }
@@ -60,10 +64,12 @@ export function ModalMovimiento({ modal }) {
   const { item, categoria, movimiento: tipo } = modal;
   const esIngreso = tipo === 'Ingreso';
   const esSalud = categoria === 'Salud';
+  const merch = esMerch(categoria);
   const decimales = decimalesDe(item.unidad);
   const f = useFormulario();
   // resumen del paso 2 (null mientras se llena el formulario)
   const [datos, setDatos] = useState(null);
+  const [cantidad, setCantidad] = useState('');
 
   function revisar(e) {
     let resumen;
@@ -74,15 +80,31 @@ export function ModalMovimiento({ modal }) {
     <Fondo>
       {/* al revisar, el formulario se esconde sin perder lo escrito */}
       <form className="modal" id="form-movimiento" ref={f.formulario} hidden={Boolean(datos)} noValidate onSubmit={revisar}>
-        <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item)} />
+        <Cabecera codigo={item.codigo} color={merch && !puedeVence(item) ? 'morado' : colorVencimiento(item)} titulo={item.nombre} subtitulo={sobreProducto(item)} />
 
         <div className="modal-cuerpo">
           <div className="campo">
             <label>TIPO DE MOVIMIENTO</label>
-            <div className={`tipo-movimiento ${esIngreso ? 'tipo-ingreso' : ''}`}>{esIngreso ? 'Ingreso / donación' : 'Salida / consumo'}</div>
+            <div className={`tipo-movimiento ${esIngreso ? 'tipo-ingreso' : ''}`}>
+              {merch ? (esIngreso ? 'Ingreso / compra' : 'Salida / venta') : esIngreso ? 'Ingreso / donación' : 'Salida / consumo'}
+            </div>
           </div>
 
-          {esIngreso ? (
+          {merch ? (
+            <>
+              <div className={esIngreso && puedeVence(item) ? 'dos-columnas' : ''}>
+                <div className="campo">
+                  <label htmlFor="cantidad">CANTIDAD ({item.unidad.toUpperCase()})</label>
+                  <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
+                  <small>{esIngreso ? `En stock: ${item.cantidad} ${item.unidad}` : textoDisponible(item)}</small>
+                </div>
+                {esIngreso && <CampoVenceMerch item={item} />}
+              </div>
+              {esIngreso
+                ? <CamposIngresoMerch item={item} onAviso={f.setError} />
+                : <CamposSalidaMerch item={item} cantidad={cantidad} onAviso={f.setError} />}
+            </>
+          ) : esIngreso ? (
             <div className="dos-columnas">
               <div className="campo">
                 <label htmlFor="cantidad">CANTIDAD</label>
@@ -99,9 +121,9 @@ export function ModalMovimiento({ modal }) {
             </div>
           )}
 
-          {esIngreso && <CampoDonador donadores={estado.donadores} actividades={opcionesActividad()} />}
+          {esIngreso && !merch && <CampoDonador donadores={estado.donadores} actividades={opcionesActividad()} />}
           {esSalud && !esIngreso && <CampoPara ninos={opcionesNinos()} />}
-          <CampoObservaciones ejemplo={esIngreso ? 'Ej. llegó en cajas abolladas, falta la boleta' : 'Ej. se usó para la fiesta del sábado'} />
+          <CampoObservaciones ejemplo={merch ? (esIngreso ? 'Ej. llegaron 2 cajas golpeadas' : 'Ej. vendido en la kermés') : esIngreso ? 'Ej. llegó en cajas abolladas, falta la boleta' : 'Ej. se usó para la fiesta del sábado'} />
 
           <MensajeError texto={f.error} />
         </div>
@@ -112,6 +134,37 @@ export function ModalMovimiento({ modal }) {
       {datos && <ConfirmarMovimiento modal={modal} datos={datos} onVolver={() => setDatos(null)} />}
     </Fondo>
   );
+}
+
+function notaPrecio(precio, item, cantidad) {
+  if (precio === Number(item.precio)) return '';
+  if (precio === precioSugerido(item, cantidad)) return ' (con descuento por cantidad)';
+  return ` (precio de venta ${soles(item.precio)})`;
+}
+
+function filasMerch(datos, esIngreso, item) {
+  const m = datos.merch;
+  const persona = p => (p?.nombre ? p.nombre + (p.nuevo ? ' (nuevo)' : '') : '');
+  const comprobante = [nombreComprobante(m.comprobanteTipo), m.comprobanteNumero].filter(Boolean).join(' ');
+  return (esIngreso ? [
+    ['Vence', datos.vence ? fechaVence(datos.vence) : ''],
+    ['Lote', m.loteCodigo],
+    ['Proveedor', persona(m.proveedor)],
+    ['Costo unitario', m.costo != null ? soles(m.costo) : ''],
+    ['Costo total', m.costo != null ? soles(totalVenta(m.costo, datos.cantidad)) : ''],
+    ['Elaborado por', m.taller],
+    ['Costo de materiales', m.costoMateriales != null ? soles(m.costoMateriales) : ''],
+  ] : [
+    ['Precio unitario', soles(m.precio) + notaPrecio(m.precio, item, datos.cantidad)],
+    ['Total', soles(totalVenta(m.precio, datos.cantidad))],
+    ['Comprador', persona(m.comprador)],
+    ['Medio de pago', nombreMedio(m.medioPago)],
+  ]).concat([
+    ['Comprobante', comprobante],
+    ['Nota', datos.observaciones],
+    ['Responsable', usuario.nombre],
+    ['Fecha y hora', fechaActual()],
+  ]).filter(([, valor]) => valor);
 }
 
 // paso 2 de un ingreso o salida
@@ -125,7 +178,7 @@ function ConfirmarMovimiento({ modal, datos, onVolver }) {
   // otra persona saco mientras se revisaba: lo de abajo ya no vale, hay que volver a poner la cantidad
   const yaNoAlcanza = !esIngreso && datos.cantidad > disponible(item);
 
-  const filas = [
+  const filas = datos.merch ? filasMerch(datos, esIngreso, item) : [
     ['Vence', esIngreso ? (datos.vence ? fechaVence(datos.vence) : 'No tiene fecha') : ''],
     ['Donado por', datos.donador.nombre ? datos.donador.nombre + (datos.donador.nuevo ? ' (nuevo donador)' : '') : (esIngreso ? 'Compra del hogar' : '')],
     ['Actividad', datos.actividad],
@@ -168,6 +221,49 @@ function ConfirmarMovimiento({ modal, datos, onVolver }) {
 // ---------- producto nuevo (dentro de un ingreso) ----------
 // solo se define el producto; cuanto entra, vence y donador se ponen en su fila de la lista
 export function ModalProducto({ modal }) {
+  if (esMerch(modal.categoria)) return <ModalProductoMerch modal={modal} />;
+  return <ModalProductoInventario modal={modal} />;
+}
+
+function SelectorCategoria({ modal }) {
+  // al cambiar de categoria se conserva de donde vino
+  const desde = { itemId: modal.itemId, nombre: modal.nombre, codigoBarras: modal.codigoBarras, presentacion: modal.presentacion, volver: modal.volver, alCerrar: modal.alCerrar };
+  return (
+    <div className="campo">
+      <label>CATEGORÍA</label>
+      <div className="filtros selector-categoria">
+        {categorias.map(c => (
+          <button key={c} type="button" className={c === modal.categoria ? 'activo' : ''} data-accion="categoria-producto" onClick={() => abrirProducto(c, desde)}>{nombreCategoria(c)}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ModalProductoMerch({ modal }) {
+  const f = useFormulario();
+  const [parecidos, setParecidos] = useState(() => (modal.nombre ? productosParecidos(modal.nombre) : []));
+  return (
+    <Fondo>
+      <form className="modal" id="form-producto" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarProducto(modal, v))}>
+        <Cabecera codigo="+" color="morado" titulo="Producto nuevo" subtitulo="Se guarda junto con el ingreso" />
+        <div className="modal-cuerpo">
+          <SelectorCategoria modal={modal} />
+          <CamposProductoMerch modal={modal} onAviso={f.setError} onNombre={texto => setParecidos(productosParecidos(texto))} />
+          <div id="coincidencias"><Coincidencias parecidos={parecidos} onElegir={(cat, id) => usarExistente(modal, cat, id)} /></div>
+          <div className="campo">
+            <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
+            <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="7751271010016" />
+          </div>
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar="Crear y seguir" enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
+function ModalProductoInventario({ modal }) {
   const { categoria } = modal;
   const esSalud = categoria === 'Salud';
   const f = useFormulario();
@@ -224,23 +320,13 @@ export function ModalProducto({ modal }) {
     } else if (libre.nombre !== escrito) avisoNombre = `Se guardará como "${libre.nombre}".`;
   } else if (escrito && formatoNombre(escrito) !== escrito) avisoNombre = `Se guardará como "${formatoNombre(escrito)}".`;
 
-  // al cambiar de categoria se conserva de donde vino
-  const desde = { itemId: modal.itemId, nombre: modal.nombre, codigoBarras: modal.codigoBarras, presentacion: modal.presentacion, volver: modal.volver, alCerrar: modal.alCerrar };
-
   return (
     <Fondo>
       <form className="modal" id="form-producto" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarProducto(modal, v))}>
         <Cabecera codigo="+" color={esSalud ? 'azul' : 'verde'} titulo="Producto nuevo" subtitulo="Se guarda junto con el ingreso" />
 
         <div className="modal-cuerpo">
-          <div className="campo">
-            <label>CATEGORÍA</label>
-            <div className="filtros selector-categoria">
-              {['Alimentos', 'Salud'].map(c => (
-                <button key={c} type="button" className={c === categoria ? 'activo' : ''} data-accion="categoria-producto" onClick={() => abrirProducto(c, desde)}>{nombreCategoria(c)}</button>
-              ))}
-            </div>
-          </div>
+          <SelectorCategoria modal={modal} />
 
           <div className="campo">
             <label htmlFor="nombre">NOMBRE</label>
@@ -329,7 +415,7 @@ function Coincidencias({ parecidos, onElegir }) {
         <button key={`${categoria}-${item.id}`} type="button" className="coincidencia" data-accion="usar-existente" onClick={() => onElegir(categoria, item.id)}>
           <span>
             <b>{item.nombre}</b>
-            <small>{nombreCategoria(categoria)} · {textoPresentacion(item) || `suelto, en ${item.unidad}`} · {item.cantidad} {item.unidad}</small>
+            <small>{nombreCategoria(categoria)} · {esMerch(categoria) ? textoTipo(item) : textoPresentacion(item) || `suelto, en ${item.unidad}`} · {item.cantidad} {item.unidad}</small>
           </span>
           <em>Usar este →</em>
         </button>
@@ -593,7 +679,7 @@ export function ModalElegir() {
   const lote = estado.lote;
   const registrar = [
     { accion: 'registrar-ingreso', color: 'verde', Icono: IconoIngreso, titulo: 'Registrar ingreso', detalle: 'Lo que entra: donaciones o compras. Si un producto es nuevo, lo creas ahí', abrir: () => empezarLote('Ingreso') },
-    { accion: 'registrar-salida', color: 'naranja', Icono: IconoSalida, titulo: 'Registrar salida', detalle: 'Lo que se usa o se entrega', abrir: () => empezarLote('Salida') },
+    { accion: 'registrar-salida', color: 'naranja', Icono: IconoSalida, titulo: 'Registrar salida', detalle: 'Lo que se usa, se entrega o se vende', abrir: () => empezarLote('Salida') },
   ];
   // una lista que se cerro sin guardar
   if (lote?.items.length) {
@@ -603,6 +689,8 @@ export function ModalElegir() {
   // los productos nuevos se crean al registrar su ingreso
   const opciones = [
     { accion: 'agregar-donador', color: 'naranja', Icono: IconoDonadores, titulo: 'Donador', detalle: 'Persona o institución', abrir: () => abrirModal({ tipo: 'donador' }) },
+    { accion: 'agregar-proveedor', color: 'azul', Icono: IconoProveedores, titulo: 'Proveedor', detalle: 'A quién se le compra merchandising', abrir: () => abrirPersona('proveedor') },
+    { accion: 'agregar-comprador', color: 'morado', Icono: IconoCompradores, titulo: 'Comprador', detalle: 'A quién se le vende merchandising', abrir: () => abrirPersona('comprador') },
   ];
   if (esAdmin()) {
     opciones.push({ accion: 'agregar-usuario', color: 'gris', Icono: IconoUsuarios, titulo: 'Usuario', detalle: 'Cuenta para entrar al inventario', abrir: abrirUsuario });

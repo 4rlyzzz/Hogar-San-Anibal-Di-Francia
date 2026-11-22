@@ -10,6 +10,8 @@ from .views import (
     InventarioDetailView, 
     HistorialListCreateView, 
     DonadoresListCreateView,
+    ProveedoresListCreateView,
+    CompradoresListCreateView,
     UsuariosListCreateView,
     UsuarioDetailView
 )
@@ -27,6 +29,8 @@ urlpatterns = [
     path('movimientos/', RegistrarMovimientoView.as_view(), name='registrar-movimiento'),
     path('productos/unir/', UnirProductosView.as_view(), name='unir-productos'),
     path('donadores/', DonadoresListCreateView.as_view(), name='donadores-list-create'),
+    path('proveedores/', ProveedoresListCreateView.as_view(), name='proveedores-list-create'),
+    path('compradores/', CompradoresListCreateView.as_view(), name='compradores-list-create'),
     path('usuarios/', UsuariosListCreateView.as_view(), name='usuarios-list-create'),
     path('usuarios/<str:doc_id>/', UsuarioDetailView.as_view(), name='usuario-detail'),
-]
+]

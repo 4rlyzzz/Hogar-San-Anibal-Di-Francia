@@ -22,6 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from . import merch
 from .authentication import IsAdminRole
 from .couchdb_service import (
     actualizar_con_reintento,
@@ -191,7 +192,16 @@ def _fecha_vence(valor):
 
 
 def _categoria(producto):
+    if merch.es_merch(producto):
+        return merch.NOMBRE_CATEGORIA
     return 'Salud' if str(producto.get('categoria', '')).lower() in ('salud', 'medicinas', 'higiene') else 'Alimentos'
+
+
+def _merch(funcion, *args):
+    try:
+        return funcion(*args)
+    except merch.DatoInvalido as e:
+        raise Rechazo(str(e))
 
 
 # ---------- cada tipo de movimiento ----------
@@ -199,18 +209,26 @@ def _categoria(producto):
 
 def _ingreso(producto, datos):
     cantidad = _cantidad(datos.get('cantidad'), producto.get('unidad'))
-    lote = _nuevo_lote(producto, cantidad, _fecha_vence(datos.get('vence')))
+    vence = _fecha_vence(datos.get('vence'))
+    extra = {}
+    if merch.es_merch(producto):
+        vence = _merch(merch.vence_ingreso, producto, vence)
+        extra = _merch(merch.extra_ingreso, producto, datos, cantidad)
+    lote = _nuevo_lote(producto, cantidad, vence)
+    if extra.get('loteCodigo'):
+        lote['codigo'] = extra['loteCodigo']
     producto['cantidad'] = _redondear(float(producto.get('cantidad') or 0) + cantidad)
     # el codigo escaneado queda en el producto (la proxima vez se reconoce)
     codigo = _texto(datos.get('codigo_barras'), 32)
     if codigo and re.fullmatch(r'[0-9A-Za-z-]{4,32}', codigo) and codigo not in (producto.get('codigosBarras') or []):
         producto['codigosBarras'] = [*(producto.get('codigosBarras') or []), codigo]
-    donador = _texto(datos.get('donador'), 60)
+    donador = '' if extra else _texto(datos.get('donador'), 60)
     movimiento = {
         'movimiento': 'Ingreso', 'cantidad': cantidad,
         'donador': donador, 'actividad': _texto(datos.get('actividad'), 40) if donador else '',
         'loteId': lote['id'], 'vence': lote['vence'],
         **({'inicial': True} if datos.get('inicial') is True else {}),
+        **extra,
     }
     return movimiento, {'delta': cantidad, 'usados': [], 'lote_nuevo': lote['id']}
 
@@ -224,10 +242,11 @@ def _salida(producto, datos):
             f"Solo quedan {_num(hay)} {producto.get('unidad')} de \"{producto.get('nombre')}\""
             + (f' ({_num(vencida)} vencidos no cuentan)' if vencida else '')
             + ' (otra persona pudo registrar una salida al mismo tiempo)', producto)
+    extra = _merch(merch.extra_salida, producto, datos, cantidad) if merch.es_merch(producto) else {}
     usados = _descontar(_plan(producto, cantidad))
     producto['cantidad'] = _redondear(float(producto.get('cantidad') or 0) - cantidad)
-    para = [_texto(n, 30) for n in (datos.get('para') or []) if isinstance(n, str) and n.strip()][:20]
-    movimiento = {'movimiento': 'Salida', 'cantidad': cantidad, 'para': para, 'lotes': usados}
+    para = [] if extra else [_texto(n, 30) for n in (datos.get('para') or []) if isinstance(n, str) and n.strip()][:20]
+    movimiento = {'movimiento': 'Salida', 'cantidad': cantidad, 'para': para, 'lotes': usados, **extra}
     return movimiento, {'delta': -cantidad, 'usados': usados, 'lote_nuevo': None}
 
 
@@ -304,6 +323,7 @@ def _documento_movimiento(producto, movimiento, datos, request, momento):
         'donador': '', 'actividad': '', 'para': [],
         'observaciones': _texto(datos.get('observaciones'), 200),
         'saldo': producto['cantidad'],
+        **({'tipoMerch': producto.get('tipoMerch'), 'subcategoria': producto.get('subcategoria')} if merch.es_merch(producto) else {}),
         **movimiento,
     }
 
@@ -358,7 +378,8 @@ class RegistrarMovimientoView(APIView):
 
 def _misma_presentacion(a, b):
     igual = lambda x, y: str(x if x is not None else '').lower() == str(y if y is not None else '').lower()
-    return all(igual(a.get(c), b.get(c)) for c in ('unidad', 'contenido', 'medida')) and _categoria(a) == _categoria(b)
+    campos = ('unidad', 'contenido', 'medida') + (('tipoMerch', 'subcategoria', 'talla') if merch.es_merch(a) else ())
+    return all(igual(a.get(c), b.get(c)) for c in campos) and _categoria(a) == _categoria(b)
 
 
 class UnirProductosView(APIView):

@@ -47,13 +47,28 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
 6. OTROS DATOS:
    - vence: "YYYY-MM-DD" si se menciona fecha explícita. Si es dudosa o incoherente, pon null.
    - correcciones: si el usuario corrige una cifra o fecha, usa SIEMPRE la última opción.
+7. VENTAS Y COMPRAS (panetones, polos, tazas y otros artículos que el hogar vende):
+   - "vender", "vendí", "venta", "vendido" es "salida"; "compramos", "nos llegó del proveedor" es "ingreso".
+   - comprador: a quién se le vendió ("vendido a Juan Pérez", "le vendí a la señora Rosa", "venta de 3 panetones a María López"). Si no se dijo, null.
+   - proveedor: a quién se le compró ("comprado a Distribuidora Lima", "del proveedor Textiles Sur", "compramos 20 polos a Textiles Sur"). Si no se dijo, null.
+   - Si el comprador, el proveedor o el medio de pago se dijo UNA vez para varios productos ("vendimos 4 panetones y 2 tazas a Rosa Quispe con Yape"), ponlo en TODOS esos productos.
+   - precio: el precio de UNA unidad en soles, solo si se dijo ("a 25 soles cada uno" -> 25). Si dijeron el total, null.
+   - medio_pago: "efectivo", "yape-plin" (Yape o Plin) o "transferencia", solo si se dijo. Si no, null.
+   - La talla y el color de una prenda SON PARTE DEL PRODUCTO: "dos polos talla M azules" -> producto "Polo talla M azul", cantidad 2.
+   - La talla se escribe con sus letras aunque se diga por su nombre: "talla eme" -> "talla M", "talla ese" -> "talla S", "talla ele" -> "talla L", "talla equis ele" -> "talla XL", "talla doble equis ele" -> "talla XXL".
 
 Responde SOLO el JSON plano, sin markdown:
-[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null"}]"""
+[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null","comprador":"nombre|null","proveedor":"nombre|null","precio":"número|null","medio_pago":"efectivo|yape-plin|transferencia|null"}]"""
+
+MEDIOS_PAGO = ('efectivo', 'yape-plin', 'transferencia')
 
 
 def _texto(valor, maximo):
     return ' '.join(valor.split())[:maximo] if isinstance(valor, str) else ''
+
+
+def _precio_valido(precio):
+    return isinstance(precio, (int, float)) and not isinstance(precio, bool) and 0 < precio <= 100000
 
 
 def limpiar_items(contenido):
@@ -80,6 +95,7 @@ def limpiar_items(contenido):
             continue
         cantidad = d.get('cantidad')
         vence = d.get('vence')
+        precio = d.get('precio')
         items.append({
             'tipo': d.get('tipo') if d.get('tipo') in ('ingreso', 'salida') else None,
             'producto': producto,
@@ -87,6 +103,12 @@ def limpiar_items(contenido):
             'cantidad': cantidad if isinstance(cantidad, (int, float)) and not isinstance(cantidad, bool) else None,
             'unidad': _texto(d.get('unidad'), 30),
             'vence': vence if isinstance(vence, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', vence) else None,
+            **{k: v for k, v in {
+                'comprador': _texto(d.get('comprador'), 60),
+                'proveedor': _texto(d.get('proveedor'), 60),
+                'precio': precio if _precio_valido(precio) else None,
+                'medio_pago': d.get('medio_pago') if d.get('medio_pago') in MEDIOS_PAGO else None,
+            }.items() if v},
         })
     return items
 

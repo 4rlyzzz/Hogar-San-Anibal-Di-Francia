@@ -86,7 +86,7 @@ function alertasDe(lista, categoria) {
 // todas las alertas ordenadas por prioridad
 // en Inicio va sin sobrestock porque tiene su recuadro
 export function calcularAlertas(estado, conSobrestock = true) {
-  let filas = [...alertasDe(estado.alimentos, 'Alimentos'), ...alertasDe(estado.salud, 'Salud')];
+  let filas = [...alertasDe(estado.alimentos, 'Alimentos'), ...alertasDe(estado.salud, 'Salud'), ...alertasDe(estado.merch ?? [], 'Merchandising')];
 
   // el sobrestock reemplaza la fila de ese producto
   const sobra = conSobrestock ? itemSobrestock(estado) : null;

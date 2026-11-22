@@ -19,7 +19,7 @@ Programas necesarios:
 3. Ejecutar en una terminal:
 
    ```powershell
-   cd couchdb
+   cd couchDB
    .\setup.ps1
    ```
 
@@ -30,10 +30,9 @@ Programas necesarios:
    .\setup.ps1
    ```
 
-4. Entrar a Fauxton: <http://127.0.0.1:5984/_utils/>. Buscar **Configuración → CORS**, activar CORS y agregar los origenes de ejecutación: `http://localhost:5173` `http://localhost:8000`.
+   El script pide la cuenta de administrador de CouchDB y una contraseña nueva para `casa_app` (la cuenta con la que Django usa la base). Anota esa contraseña: se pone en el `.env` del backend. También crea las bases y carga los datos de `datos_actuales.json`.
 
-
-> **Nota:** La configuración de CORS debe permitir el origen real del frontend. Si el frontend se abre desde otra dirección o puerto, agrega ese origen en CouchDB.
+> **Nota:** No hace falta activar CORS en CouchDB. El navegador nunca habla con CouchDB, solo Django.
 
 ## 3. Configurar backend (Django)
 
@@ -46,20 +45,31 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+Antes de la migración hay que crear el `.env`, porque sin él Django no arranca. Dentro de **backend** copiar `.env.example` como `.env` y llenarlo:
+
+- `SECRET_KEY`: cualquier clave larga. Para generar una:
+
+  ```powershell
+  python -c "import secrets; print(secrets.token_urlsafe(50))"
+  ```
+
+- `DEBUG=True` (ya viene así en el ejemplo).
+- `COUCHDB_PASSWORD`: la contraseña de `casa_app` que pusiste en `setup.ps1`.
+
+Igual en frontend: copiar `frontend/.env.example` como `frontend/.env` (ya trae la dirección del backend local).
+
+> **Nota:**  No compartas ni subas el archivo `.env` al repositorio, son credenciales reales y datos críticos.
+
+> **Error de SECRET_KEY:** si el backend dice que falta la variable SECRET_KEY, agrégala a tu `backend/.env`
+
+> **Publicar en internet:** ver [DESPLIEGUE.md](DESPLIEGUE.md) (Railway).
+
 Entrar a la carpeta **backend** y hacer la migracion:
 
 ```powershell
 cd backend
 python manage.py migrate
 ```
-
-Dentro de backend copiar `.env.example` como `.env` y llenarlo (la contraseña de `casa_app` es la que pusiste en `setup.ps1`). Igual en frontend: copiar `frontend/.env.example` como `frontend/.env`.
-
-> **Nota:**  No compartas ni subas el archivo `.env` al repositorio, son credenciales reales y datos críticos.
-
-> **Dictado con IA (opcional):** si corres OmniRoute en tu PC, pon `OMNIROUTE_URL=http://localhost:20128` (y su API key) en `backend/.env`. Sin eso el dictado usa el reconocimiento local.
-
-> **Publicar en internet:** ver [DESPLIEGUE.md](DESPLIEGUE.md) (Railway).
 
 Crear el primer administrador (pide usuario, nombre y contraseña; solo se hace una vez):
 
@@ -103,19 +113,56 @@ npm run dev
 
 Abrir la dirección que indique Vite; por defecto es <http://localhost:5173/>.
 
-Dejar ambas terminales abiertas: una ejecuta Django y la otra el servidor de desarrollo del frontend.
+Dejar ambas terminales abiertas: una ejecuta Django y la otra el servidor de desarrollo del frontend. Si usas el dictado con IA, también la de OmniRoute (sección 5).
 
-## 5. Actualizar después de un pull
+## 5. Dictado con IA: OmniRoute (opcional)
 
-Si alguien agregó dependencias, volver a instalarlas antes de ejecutar:
+Sin OmniRoute la app funciona igual: el dictado usa el reconocimiento local, que entiende menos frases. Con OmniRoute, Django le pasa lo dictado a un modelo de IA (Groq, Gemini, etc.).
+
+Para inicializar OmniRoute ejecutar (**3ra terminal**):
+
+```bash
+npx omniroute
+```
+
+Por defecto abre su panel en <http://localhost:20128/>. Ahí, la primera vez:
+
+1. Conectar un proveedor (por ejemplo Groq) con su API key, creada en la página de ese proveedor.
+2. Crear un **combo** con los modelos a usar (por ejemplo `inventario-fallback`).
+3. Crear una **API key** de OmniRoute para que Django pueda usarlo.
+
+Luego poner en `backend/.env`:
+
+- `OMNIROUTE_URL=http://localhost:20128`
+- `OMNIROUTE_API_KEY`: la API key creada en OmniRoute (el paso 3).
+- `OMNIROUTE_MODEL`: el nombre **exacto** del combo (el paso 2). Si no coincide, la IA falla y el dictado usa el reconocimiento local sin avisar.
+
+Reiniciar Django (`Ctrl + C` y `python manage.py runserver`) para que lea los cambios del `.env`.
+
+> **Nota:** si el modelo rechaza el parámetro `reasoning_effort`, pon `OMNIROUTE_REASONING_EFFORT=` vacío en `backend/.env`.
+
+## 6. Actualizar después de un pull
+
+Si alguien agregó dependencias, volver a instalarlas antes de ejecutar (con el entorno virtual activado):
 
 ```powershell
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cd frontend
 npm install
 ```
 
-## 6. Pruebas de regresión
+Revisa también si `backend/.env.example` o `frontend/.env.example` tienen variables nuevas y agrégalas a tu `.env` (así apareció `SECRET_KEY`).
+
+Si el cambio agregó bases nuevas en CouchDB (así llegaron `casa_proveedores` y `casa_compradores` con Merchandising), prepáralas una vez. En **backend**, con `COUCHDB_ADMIN_USER` y `COUCHDB_ADMIN_PASSWORD` en tu `.env`:
+
+```powershell
+python manage.py setup_couch
+```
+
+Lo que ya existe se deja como está: solo crea lo que falta (bases, permisos e índices). También sirve volver a correr `couchDB\setup.ps1`.
+
+## 7. Pruebas de regresión
 
 Antes de subir cambios (o después de un pull), revisa que todo lo que ya funcionaba siga funcionando. En una terminal en la raíz ejecutar:
 
@@ -126,16 +173,29 @@ Antes de subir cambios (o después de un pull), revisa que todo lo que ya funcio
 Ejecuta, en orden: la revisión de Django, las pruebas del backend (login, sesiones, inventario, movimientos de stock, donadores, usuarios y comandos), las pruebas de la lógica del frontend (validaciones, lotes, alertas, filtros, historial y dictado), el lint y el build. Al final muestra un resumen; si algo falla, termina con error y dice qué paso falló.
 
 - No necesita CouchDB encendido ni toca la base real: el backend se prueba con una CouchDB falsa en memoria.
+- Sí necesita el `backend/.env` con `SECRET_KEY` (sección 3); sin él falla en el primer paso.
 - `.\pruebas.ps1 -Rapido` corre solo las pruebas (sin lint ni build).
 - Por separado: `python manage.py test api` (en **backend**) o `npm test` (en **frontend**).
 - Las pruebas están en `backend/api/tests/` y `frontend/pruebas/`. Al agregar una funcionalidad nueva, agrega también su prueba.
 
 
-## 7. Detener o iniciar CouchDB
+## 8. Merchandising, proveedores y compradores
+
+Además de Alimentos y Salud e higiene, la sección **Merchandising** lleva lo que el hogar vende:
+
+- **Panetón**: marca, presentación, precio y descuento por cantidad (por ejemplo, desde 6 unidades). Sus ingresos piden fecha de vencimiento y costo unitario.
+- **Hecho en el hogar**: lo elaboran los chicos. *General* (rosarios, tazas, llaveros…) o *Alimentos* (con presentación y si es perecible). No tiene proveedor: el ingreso anota el taller y, si se quiere, el costo de materiales.
+- **Promocionales**: lo que se manda a hacer con un proveedor. *General* o *Prendas*: cada talla y color es un producto distinto.
+
+En Merchandising la salida es una **venta**: el precio se autocompleta (con el descuento si llega a la cantidad mínima) y se puede cambiar. Además se anota el comprador, el medio de pago y el comprobante. Proveedores y compradores tienen sus pestañas, como Donadores. Todo queda en el Historial, se filtra y se descarga en Excel.
+
+Los productos nuevos de Merchandising se crean igual que los demás: **+ → Registrar ingreso → Crear producto nuevo → Merchandising**. El precio se cambia después desde el detalle del producto (**Editar precio y datos**).
+
+## 9. Detener o iniciar CouchDB
 
 Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como administrador y ejecutar, según corresponda:
 
 ```powershell
 net stop "Apache CouchDB"
 net start "Apache CouchDB"
-```
+```

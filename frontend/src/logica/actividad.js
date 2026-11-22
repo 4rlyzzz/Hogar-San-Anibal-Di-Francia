@@ -25,12 +25,17 @@ export function actividadDe(estado, cuenta) {
       fecha: momento(f),
       accion: f.movimiento.toLowerCase(),
       texto: `${f.movimiento} · ${f.insumo}`,
-      detalle: textoCambio(f) + (f.donador ? ' · donado por ' + f.donador : '') + (f.motivo ? ' · ' + f.motivo : ''),
+      detalle: textoCambio(f) + (f.donador ? ' · donado por ' + f.donador : '') + (f.proveedor ? ' · de ' + f.proveedor : '')
+        + (f.comprador ? ' · a ' + f.comprador : '') + (f.motivo ? ' · ' + f.motivo : ''),
     }));
 
   const donadores = estado.donadores
     .filter(d => d.creado && creadoPor(d, cuenta))
     .map(d => ({ fecha: d.creado, accion: 'donador', texto: `Agregó donador · ${d.nombre}`, detalle: '' }));
+
+  const personas = [['proveedores', 'proveedor'], ['compradores', 'comprador']].flatMap(([lista, nombre]) => (estado[lista] ?? [])
+    .filter(d => d.creado && creadoPor(d, cuenta))
+    .map(d => ({ fecha: d.creado, accion: 'donador', texto: `Agregó ${nombre} · ${d.nombre}`, detalle: '' })));
 
   const usuarios = estado.cuentas
     .filter(c => c.creado && c.creadoPorId && mismoId(c.creadoPorId, cuenta.id))
@@ -48,7 +53,7 @@ export function actividadDe(estado, cuenta) {
       detalle: x.accion === 'rol' ? `Ahora es ${x.valor}` : '',
     })));
 
-  return [...movimientos, ...donadores, ...usuarios, ...cambios]
+  return [...movimientos, ...donadores, ...personas, ...usuarios, ...cambios]
     .filter(a => !Number.isNaN(a.fecha.getTime()))
     .sort((a, b) => b.fecha - a.fecha);
 }

@@ -1,11 +1,14 @@
 // paneles que salen por la derecha (en celular, desde abajo): producto, movimiento, donador, actividad y alertas
 import { useEstado } from '../estado.js';
 import { usuario } from '../data/datos.js';
-import { IconoAjustar, IconoSalida, IconoIngreso } from '../assets/iconos.jsx';
+import { IconoAjustar, IconoSalida, IconoIngreso, IconoEditar } from '../assets/iconos.jsx';
 import {
   cerrarModal, abrirMovimiento, abrirAjuste, abrirUnir, historialProducto, movimientosDe, verMovimiento, corregirAjuste,
   filtrarProducto, historialDonador, verProducto, cambiarRol, cambiarActivo, esAdmin, sePuedeAdministrar, abrirClave, roles,
+  abrirEditarMerch, historialPersona,
 } from '../acciones.js';
+import { esMerch, textoTipo, textoPrecio, soles, nombreMedio, nombreComprobante, mayuscula } from '../logica/merch.js';
+import { personas, movimientosDePersona, montoDe, tiposDe } from '../logica/personas.js';
 import {
   nombreCategoria, colorVencimiento, textoCambio, textoStock, textoPresentacion, textoTotal, disponible, stockAntes,
   movimientosEntre, iniciales, fechaDe, fechaLarga, textoFecha, tiempoRelativo, mismoId, textoPara,
@@ -79,9 +82,36 @@ function DatosProducto({ item }) {
   );
 }
 
+function DatosMerch({ item }) {
+  const filas = [
+    ['Tipo', textoTipo(item)],
+    ['Precio de venta', textoPrecio(item)],
+    ['Marca', item.marca],
+    ['Presentación', item.presentacion],
+    ['Artículo', mayuscula(item.articulo)],
+    ['Variante', item.variante],
+    ['Perecible', item.subcategoria === 'alimentos' ? (item.perecible ? 'Sí' : 'No') : ''],
+    ['Talla', item.talla],
+    ['Color', item.color],
+    ['Material', item.material],
+    ['Diseño', item.diseno],
+    ['Se vende por', { packs: 'Pack', docenas: 'Docena' }[item.unidad] ?? 'Unidad'],
+    ['Stock mínimo', `${item.minimo} ${item.unidad}`],
+    ['Descripción', item.descripcion],
+    ['Se le unió', (item.unidos || []).join(', ')],
+    ['Códigos de barras', (item.codigosBarras || []).join(', ')],
+  ].filter(([, valor]) => valor);
+  return (
+    <dl className="mov-datos">
+      {filas.map(([etiqueta, valor]) => <div key={etiqueta}><dt>{etiqueta}</dt><dd>{valor}</dd></div>)}
+    </dl>
+  );
+}
+
 export function PanelProducto({ modal }) {
   useEstado();
   const { item, categoria } = modal;
+  const merch = esMerch(categoria);
   const estadoProducto = estadoStock(item);
   const problemas = problemasDe(item);
   const movimientos = movimientosDe(item, categoria);
@@ -94,7 +124,7 @@ export function PanelProducto({ modal }) {
           <span className={`tarjeta-codigo ${colorVencimiento(item)}`}>{item.codigo}</span>
           <div>
             <div className="modal-titulo">{item.nombre}</div>
-            <div className="modal-sub">{nombreCategoria(categoria)}</div>
+            <div className="modal-sub">{merch ? `${nombreCategoria(categoria)} · ${textoTipo(item)}` : nombreCategoria(categoria)}</div>
           </div>
           <Cerrar />
         </div>
@@ -103,7 +133,8 @@ export function PanelProducto({ modal }) {
           <div className="producto-stock">
             <div>
               <b>{item.cantidad} <small>{item.unidad}</small></b>
-              {textoPresentacion(item) && <span className="producto-total">{textoPresentacion(item)} · {textoTotal(item)}</span>}
+              {merch && <span className="producto-total">{textoPrecio(item)}{item.cantidad ? ` · en stock vale ${soles(item.cantidad * (item.precio ?? 0))}` : ''}</span>}
+              {!merch && textoPresentacion(item) && <span className="producto-total">{textoPresentacion(item)} · {textoTotal(item)}</span>}
             </div>
             {problemas.length === 0 && <span className={`texto-${estadoProducto.color}`}>● {estadoProducto.texto}</span>}
           </div>
@@ -111,14 +142,19 @@ export function PanelProducto({ modal }) {
           {problemas.length > 0 && <div className="producto-alertas"><ListaProblemas problemas={problemas} /></div>}
 
           <div className="botones producto-botones">
-            <button className="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" onClick={() => abrirMovimiento(categoria, item.id, 'Salida')}><IconoSalida /> Registrar salida</button>
+            <button className="btn btn-registrar btn-salida" data-accion="registrar" data-tipo="Salida" onClick={() => abrirMovimiento(categoria, item.id, 'Salida')}><IconoSalida /> {merch ? 'Registrar venta' : 'Registrar salida'}</button>
             <button className="btn btn-registrar btn-ingreso" data-accion="registrar" data-tipo="Ingreso" onClick={() => abrirMovimiento(categoria, item.id, 'Ingreso')}><IconoIngreso /> Registrar ingreso</button>
           </div>
           <button className="btn btn-blanco btn-contar" data-accion="ajustar" onClick={() => abrirAjuste(categoria, item.id)}>
             <IconoAjustar /> Contar y corregir stock
           </button>
+          {merch && (
+            <button className="btn btn-blanco btn-contar" data-accion="editar-merch" onClick={() => abrirEditarMerch(item.id)}>
+              <IconoEditar /> Editar precio y datos
+            </button>
+          )}
 
-          <DatosProducto item={item} />
+          {merch ? <DatosMerch item={item} /> : <DatosProducto item={item} />}
 
           <TablaLotes item={item} categoria={categoria} />
 
@@ -155,11 +191,18 @@ export function PanelProducto({ modal }) {
 // nombre visible de cada campo
 const etiquetasMovimiento = {
   responsable: 'Responsable', donador: 'Donado por', actividad: 'Actividad', para: 'Para (niño/a)', motivo: 'Motivo', nota: 'Detalle',
+  proveedor: 'Proveedor', taller: 'Elaborado por', comprador: 'Comprador', costoUnitario: 'Costo unitario', costoTotal: 'Costo total',
+  costoMateriales: 'Costo de materiales', precioUnitario: 'Precio unitario', total: 'Total', medioPago: 'Medio de pago',
+  comprobanteTipo: 'Comprobante', loteCodigo: 'Lote del fabricante',
   observaciones: 'Observaciones', lote: 'Lote', vence: 'Vence', lotes: 'Salió de', insumoOriginal: 'Se registró como',
 };
+const enSoles = new Set(['costoUnitario', 'costoTotal', 'costoMateriales', 'precioUnitario', 'total']);
 
 // campos que necesitan formato
 function textoCampo(campo, valor, fila) {
+  if (enSoles.has(campo)) return soles(valor);
+  if (campo === 'medioPago') return nombreMedio(valor);
+  if (campo === 'comprobanteTipo') return [nombreComprobante(valor), fila.comprobanteNumero].filter(Boolean).join(' ');
   if (campo === 'lotes') return valor.map(l => `Lote del ${l.ingreso}: ${l.cantidad} ${fila.unidad}`).join(' · ');
   if (campo === 'vence') return fechaVence(valor);
   if (campo === 'para') return textoPara(fila);
@@ -348,6 +391,85 @@ export function PanelDonador({ modal }) {
         {donaciones.length > 0 && (
           <div className="panel-donador-pie">
             <button className="link" data-accion="historial-donador" onClick={() => historialDonador(d)}>Ver sus donaciones en el historial →</button>
+          </div>
+        )}
+      </aside>
+    </Fondo>
+  );
+}
+
+export function PanelPersona({ modal }) {
+  const estado = useEstado();
+  const tipo = modal.persona;
+  const p = personas[tipo];
+  const d = estado[p.lista].find(x => mismoId(x.id, modal.personaId));
+  if (!d) return null;
+  const movimientos = movimientosDePersona(estado, tipo, d.nombre);
+  const monto = montoDe(movimientos, tipo);
+  const tipos = tiposDe(movimientos, estado.merch);
+  const telefono = (d.telefono || '').replace(/[^\d+]/g, '');
+  const esProveedor = tipo === 'proveedor';
+
+  return (
+    <Fondo panel>
+      <aside className="panel-actividad" aria-label={`${p.titulo}: ${d.nombre}`}>
+        <div className="panel-actividad-cabecera">
+          <BotonVolver />
+          <span className={`avatar ${esProveedor ? '' : 'avatar-morado'}`}>{iniciales(d.nombre)}</span>
+          <div>
+            <div className="modal-titulo">{d.nombre}</div>
+            <div className="modal-sub">
+              {d.telefono ? <a href={`tel:${telefono}`} className="link-telefono">{d.telefono}</a> : 'Sin teléfono'}
+              {d.ruc && ` · RUC ${d.ruc}`}
+              {d.creadoPor && ` · agregado por ${d.creadoPor}`}
+            </div>
+          </div>
+          <Cerrar />
+        </div>
+
+        <div className="panel-actividad-resumen tres">
+          <div><b>{movimientos.length}</b><span>{esProveedor ? 'compras' : 'compras hechas'}</span></div>
+          <div><b>{soles(monto)}</b><span>{esProveedor ? 'total comprado' : 'total vendido'}</span></div>
+          <div><b>{movimientos[0] ? fechaLarga(fechaDe(movimientos[0].fecha)) : '—'}</b><span>la última</span></div>
+        </div>
+
+        {d.observaciones && (
+          <div className="donador-apoyo">
+            <span>OBSERVACIONES</span>
+            <p className="donador-observaciones">{d.observaciones}</p>
+          </div>
+        )}
+
+        {tipos.length > 0 && (
+          <div className="donador-apoyo">
+            <span>{esProveedor ? 'LE COMPRAMOS' : 'COMPRÓ'}</span>
+            <div>{tipos.map(([t, n]) => <span key={t} className="pastilla-actividad">{t} <b>×{n}</b></span>)}</div>
+          </div>
+        )}
+
+        <ul className="panel-actividad-lista">
+          {movimientos.map((x, i) => {
+            const anio = String(fechaDe(x.fecha).getFullYear());
+            const anioAnterior = i > 0 ? String(fechaDe(movimientos[i - 1].fecha).getFullYear()) : '';
+            const montoFila = esProveedor ? x.costoTotal : x.total;
+            return [
+              anio !== anioAnterior && <li key={'a' + i} className="actividad-dia">{anio}</li>,
+              <li key={i} className="actividad-item">
+                <span className={`actividad-punto ${esProveedor ? 'verde' : 'naranja'}`} />
+                <div>
+                  <b>{x.insumo} · {esProveedor ? '+' : '−'}{x.cantidad} {x.unidad}</b>
+                  <small>{[montoFila != null ? soles(montoFila) : '', nombreMedio(x.medioPago), `registró ${x.responsable}`].filter(Boolean).join(' · ')}</small>
+                </div>
+                <span className="actividad-hora">{x.fecha.split(' ').slice(0, 2).join(' ')}</span>
+              </li>,
+            ];
+          })}
+          {movimientos.length === 0 && <li className="vacio">{esProveedor ? 'Todavía no se le compró nada' : 'Todavía no registra compras'}</li>}
+        </ul>
+
+        {movimientos.length > 0 && (
+          <div className="panel-donador-pie">
+            <button className="link" data-accion="historial-persona" onClick={() => historialPersona(tipo, d)}>Ver en el historial →</button>
           </div>
         )}
       </aside>
