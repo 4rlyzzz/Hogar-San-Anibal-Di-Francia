@@ -7,7 +7,7 @@ import { estado } from '../estado.js';
 import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
-  guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
+  guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasSueltoSalud, medidasAlimentos, medidasSalud, medidaEntera,
   categorias, abrirPersona, guardarMinimo,
 } from '../acciones.js';
 import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
@@ -281,7 +281,7 @@ function ModalProductoInventario({ modal }) {
   const suelto = envase.startsWith('suelto:');
   // decimales segun lo elegido
   const decimalesCantidad = suelto ? decimalesDe(envase.slice(7)) : envase ? 0 : 2;
-  const decimalesContenido = medida === 'unidades' ? 0 : 2;
+  const decimalesContenido = medidaEntera(medida) ? 0 : 2;
 
   // al cambiar los decimales, corrige lo que ya estaba escrito
   useEffect(() => {
@@ -363,7 +363,7 @@ function ModalProductoInventario({ modal }) {
                   ...(esSalud ? envasesSalud : envasesAlimentos).map(e => [e, e]),
                   ['otro', '+ otro envase…'],
                   [null, 'Suelto (a granel)'],
-                  ...medidasSuelto.map(m => [`suelto:${m}`, m]),
+                  ...(esSalud ? medidasSueltoSalud : medidasSuelto).map(m => [`suelto:${m}`, m]),
                 ]}
               />
               <span className="fila-presentacion-de">de</span>

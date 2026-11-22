@@ -147,7 +147,7 @@ export function buscarFecha(tokens, hoy = new Date()) {
 }
 
 // pasar de una medida a otra
-const factores = { kg: { g: 1000 }, g: { kg: 0.001 }, L: { ml: 1000 }, ml: { L: 0.001 } };
+const factores = { kg: { g: 1000 }, g: { kg: 0.001, mg: 1000 }, mg: { g: 0.001 }, L: { ml: 1000 }, ml: { L: 0.001 } };
 
 function convertir(valor, de, a) {
   if (de === a) return valor;
@@ -450,7 +450,7 @@ function palabrasConMedida(texto) {
 }
 
 const esMedidaDicha = p => /^\d/.test(p);
-const medidaRegistrada = { mg: null, mcg: null, g: 'g', kg: 'kg', ml: 'ml', l: 'L' };
+const medidaRegistrada = { mg: 'mg', mcg: null, g: 'g', kg: 'kg', ml: 'ml', l: 'L' };
 
 // el producto sin la dosis en el nombre pero con su tamaño registrado (Leche Gloria, latas de 400 g)
 function contradiceTamano(item, medida) {

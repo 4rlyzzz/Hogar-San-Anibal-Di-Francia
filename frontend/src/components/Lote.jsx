@@ -331,8 +331,9 @@ export function ModalLoteCodigo() {
 }
 
 // ---------- 1c. voz (se abre con el microfono junto al "+") ----------
-// cuanto esperar (ms) despues de la ultima tecla para consultar a la IA
-const ESPERA_AL_ESCRIBIR = 900;
+// cuanto esperar (ms) despues de la ultima tecla para actualizar "Entendí"
+// al escribir no se consulta a la IA (cada consulta cuesta): eso pasa al soltar el microfono o al agregar
+const ESPERA_AL_ESCRIBIR = 300;
 
 // una linea de "Entendí": arriba cuanto y que; abajo, en pequeño, lo que hay que saber
 function LineaEntendida({ r }) {
@@ -391,6 +392,22 @@ export function ModalLoteVoz() {
   const consulta = useRef(0);
   // el temporizador de "dejo de escribir"
   const espera = useRef(null);
+
+  // lo escrito a mano se entiende con el reconocimiento local, sin gastar en la IA
+  // (al agregar a la lista, agregarDictado si consulta a la IA una vez)
+  const vistaLocal = (textoCompleto) => {
+    // una respuesta de la IA que venga en camino ya no corresponde a lo escrito
+    ++consulta.current;
+    setCargandoIA(false);
+    setAviso('');
+    const dichoTipo = tipoDictado(textoCompleto);
+    const textoDictado = dichoTipo.resto;
+    // igual que procesarConOmni: con el tipo se sabe si "a María López" compra o vende
+    const tipoVoz = dichoTipo.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null);
+    if (!textoDictado.trim()) return setItemsEntendidos([]);
+    const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
+    setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
+  };
 
   // Procesa con la IA y obtiene la lista visual para el bloque "ENTENDÍ"
   const procesarConOmni = async (textoCompleto) => {
@@ -579,9 +596,9 @@ export function ModalLoteVoz() {
               onChange={e => {
                 const escrito = e.target.value;
                 setTexto(escrito);
-                // se consulta cuando deja de escribir, no con cada tecla
+                // se actualiza cuando deja de escribir, no con cada tecla
                 clearTimeout(espera.current);
-                espera.current = setTimeout(() => procesarConOmni(escrito), ESPERA_AL_ESCRIBIR);
+                espera.current = setTimeout(() => vistaLocal(escrito), ESPERA_AL_ESCRIBIR);
               }}
               placeholder='Ej. "ingreso de dos kilos de arroz", "salida de tres latas de leche" o "venta de 2 panetones a Rosa Quispe, pagó con Yape"'
             />

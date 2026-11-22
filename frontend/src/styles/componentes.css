@@ -707,10 +707,11 @@
 
 /* recuadros de arriba */
 .texto-azul { color: #2f7fb5; }
+.texto-morado { color: #6b4fc0; }
 
 .panel-recuadros {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 18px;
   margin-bottom: 18px;
 }

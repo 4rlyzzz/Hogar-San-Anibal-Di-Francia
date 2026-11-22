@@ -46,9 +46,13 @@ export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes'
 export const envasesSalud = ['cajas', 'blísters', 'frascos', 'sobres', 'ampollas', 'tubos', 'paquetes', 'botellas'];
 // suelto o a granel
 export const medidasSuelto = ['kg', 'g', 'L', 'unidades'];
-// medidas del contenido
+// medicinas sueltas: tabletas de un blíster cortado, jarabe a granel
+export const medidasSueltoSalud = ['unidades', 'tabletas', 'cápsulas', 'ml', 'g'];
+// medidas del contenido ("caja de 10 tabletas", "frasco de 120 ml", "sobre de 500 mg")
 export const medidasAlimentos = ['kg', 'g', 'L', 'ml', 'unidades'];
-export const medidasSalud = ['unidades', 'ml', 'L', 'g'];
+export const medidasSalud = ['unidades', 'tabletas', 'cápsulas', 'mg', 'g', 'ml', 'L'];
+// lo que se cuenta de a uno: no lleva decimales
+export const medidaEntera = medida => ['unidades', 'tabletas', 'cápsulas'].includes(medida);
 
 // roles validos
 export const roles = ['Usuario', 'Administrador'];
@@ -1038,7 +1042,8 @@ function leerCodigoBarras(v, campo, { opcional = false, delProducto = null } = {
 // { unidad, envase, contenido, medida }
 function leerPresentacion(v, categoria) {
   const envase = v.envase ?? '';
-  const envasesPermitidos = [...(categoria === 'Salud' ? envasesSalud : envasesAlimentos), 'otro', ...medidasSuelto.map(m => 'suelto:' + m)];
+  const esSalud = categoria === 'Salud';
+  const envasesPermitidos = [...(esSalud ? envasesSalud : envasesAlimentos), 'otro', ...(esSalud ? medidasSueltoSalud : medidasSuelto).map(m => 'suelto:' + m)];
   if (!permitido(envase, envasesPermitidos)) falla('Elige en qué viene el producto.', 'envase');
   // suelto: se cuenta en la medida
   if (envase.startsWith('suelto:')) return { unidad: envase.slice(7), envase: null, contenido: null, medida: null };
@@ -1047,10 +1052,10 @@ function leerPresentacion(v, categoria) {
   const unidad = envase === 'otro' ? pluralizar(singular) : envase;
 
   const medida = v.medida ?? '';
-  if (!permitido(medida, categoria === 'Salud' ? medidasSalud : medidasAlimentos)) falla('Elige la medida de la lista.', 'medida');
-  // 'unidades' va entero; las demas medidas, 2 decimales
+  if (!permitido(medida, esSalud ? medidasSalud : medidasAlimentos)) falla('Elige la medida de la lista.', 'medida');
+  // unidades, tabletas y capsulas van enteras; las demas medidas, 2 decimales
   const reglaContenido = reglaNumero({
-    min: 0, max: 10000, decimales: medida === 'unidades' ? 0 : 2, minimoExcluido: true,
+    min: 0, max: 10000, decimales: medidaEntera(medida) ? 0 : 2, minimoExcluido: true,
     que: `cuánto trae cada ${singular.toLowerCase()}`,
   });
   const contenido = leer(v, 'contenido-envase', reglaContenido);
