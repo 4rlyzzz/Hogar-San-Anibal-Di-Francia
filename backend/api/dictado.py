@@ -1,12 +1,14 @@
-"""Dictado con IA: el navegador manda el texto dictado y Django se lo pasa a OmniRoute.
+"""Dictado con IA: el navegador manda el texto dictado y Django se lo pasa a un modelo de IA.
 
-Asi la clave de OmniRoute queda en el servidor, solo quien inicio sesion puede usarlo
-y lo que responde la IA se limpia antes de llegar a la pantalla.
-Si OmniRoute no esta configurado o falla, responde 503 y la pantalla usa el reconocimiento local.
+Asi las claves de la IA quedan en el servidor, solo quien inicio sesion puede usarla
+y lo que responde se limpia antes de llegar a la pantalla.
+Los proveedores y modelos salen de IA_1_*, IA_2_*... (ver settings.py) y se prueban en orden.
+Si no hay ninguno configurado o ninguno responde, responde 503 y la pantalla usa el reconocimiento local.
 """
 import json
 import logging
 import re
+import time
 
 import requests
 from django.conf import settings
@@ -17,7 +19,8 @@ from rest_framework.views import APIView
 
 logger = logging.getLogger(__name__)
 
-TIMEOUT = 20
+# entre todos los intentos: gunicorn corta a los 60 s
+ESPERA_TOTAL = 40
 MAX_TEXTO = 600
 MAX_ITEMS = 20
 
@@ -116,13 +119,52 @@ def limpiar_items(contenido):
 def url_chat(base):
     """La direccion a la que se manda el dictado.
 
-    OmniRoute y Groq reciben la base y se les agrega /v1/chat/completions
-    (http://localhost:20128, https://api.groq.com/openai). Gemini usa otra ruta, asi que su
+    Groq y OmniRoute reciben la base y se les agrega /v1/chat/completions
+    (https://api.groq.com/openai, http://localhost:20128). Gemini usa otra ruta, asi que su
     direccion se pone completa y se usa tal cual:
     https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
     """
     base = base.rstrip('/')
     return base if base.endswith('/chat/completions') else f'{base}/v1/chat/completions'
+
+
+class SinRespuesta(Exception):
+    """Un modelo no respondio bien: se prueba el siguiente."""
+
+
+def _preguntar(proveedor, modelo, texto):
+    """Lo que respondio ese modelo (el texto), o SinRespuesta con el motivo."""
+    cabeceras = {'Content-Type': 'application/json'}
+    if proveedor['clave']:
+        cabeceras['Authorization'] = f"Bearer {proveedor['clave']}"
+    cuerpo = {
+        'model': modelo,
+        # los modelos que "piensan" (GPT OSS, Gemini) gastan parte de este limite
+        # razonando antes de responder: con poco margen la respuesta llega vacia
+        'max_tokens': settings.IA_MAX_TOKENS,
+        'temperature': 0.0,
+        'messages': [
+            {'role': 'system', 'content': INSTRUCCIONES},
+            {'role': 'user', 'content': texto},
+        ],
+    }
+    if proveedor['reasoning']:
+        cuerpo['reasoning_effort'] = proveedor['reasoning']
+    try:
+        r = requests.post(url_chat(proveedor['url']), headers=cabeceras, timeout=settings.IA_ESPERA, json=cuerpo)
+    except requests.exceptions.Timeout:
+        raise SinRespuesta(f'no respondio en {settings.IA_ESPERA} s')
+    except requests.exceptions.RequestException as e:
+        raise SinRespuesta(f'no se pudo conectar ({type(e).__name__})')
+    if r.status_code >= 400:
+        raise SinRespuesta(f'respondio {r.status_code}', r.status_code)
+    try:
+        contenido = r.json()['choices'][0]['message']['content']
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise SinRespuesta('respondio algo que no se entiende')
+    if not str(contenido or '').strip():
+        raise SinRespuesta('respondio vacio (sube IA_MAX_TOKENS si pasa seguido)')
+    return contenido
 
 
 class DictadoView(APIView):
@@ -131,38 +173,34 @@ class DictadoView(APIView):
     throttle_scope = 'dictado'
 
     def post(self, request):
-        if not settings.OMNIROUTE_URL:
+        if not settings.IA_PROVEEDORES:
             return Response({'error': 'El dictado con IA no está configurado'}, status=503)
 
         texto = _texto(request.data.get('texto'), MAX_TEXTO)
         if not texto:
             return Response({'items': []}, status=200)
 
-        cabeceras = {'Content-Type': 'application/json'}
-        if settings.OMNIROUTE_API_KEY:
-            cabeceras['Authorization'] = f'Bearer {settings.OMNIROUTE_API_KEY}'
-        try:
-            cuerpo = {
-                'model': settings.OMNIROUTE_MODEL,
-                # los modelos que "piensan" (GPT OSS, Gemini 2.5) gastan parte de este limite
-                # razonando antes de responder: con poco margen la respuesta llega vacia
-                'max_tokens': settings.OMNIROUTE_MAX_TOKENS,
-                'temperature': 0.0,
-                'messages': [
-                    {'role': 'system', 'content': INSTRUCCIONES},
-                    {'role': 'user', 'content': texto},
-                ],
-            }
-            if settings.OMNIROUTE_REASONING_EFFORT:
-                cuerpo['reasoning_effort'] = settings.OMNIROUTE_REASONING_EFFORT
-            r = requests.post(url_chat(settings.OMNIROUTE_URL), headers=cabeceras, timeout=TIMEOUT, json=cuerpo)
-            r.raise_for_status()
-            contenido = r.json()['choices'][0]['message']['content']
-        except (requests.exceptions.RequestException, ValueError, KeyError, IndexError, TypeError):
-            logger.exception('La IA del dictado no respondio bien (%s, modelo %s)', settings.OMNIROUTE_URL, settings.OMNIROUTE_MODEL)
-            return Response({'error': 'El dictado con IA no está disponible'}, status=503)
+        # en orden: IA_1 con sus modelos, despues IA_2...; si uno falla (limite, caido, lento) va el siguiente
+        inicio = time.monotonic()
+        for proveedor in settings.IA_PROVEEDORES:
+            for modelo in proveedor['modelos']:
+                if time.monotonic() - inicio > ESPERA_TOTAL:
+                    logger.warning('Dictado con IA: se acabo el tiempo, se usa el reconocimiento local')
+                    return Response({'error': 'El dictado con IA no está disponible'}, status=503)
+                try:
+                    contenido = _preguntar(proveedor, modelo, texto)
+                except SinRespuesta as e:
+                    logger.warning('Dictado con IA: %s %s %s', proveedor['nombre'], modelo, e.args[0])
+                    # clave mal puesta: los otros modelos de ese proveedor usan la misma, se salta al siguiente
+                    if len(e.args) > 1 and e.args[1] in (401, 403):
+                        logger.error('Dictado con IA: revisa %s_KEY (la rechazo)', proveedor['nombre'])
+                        break
+                    continue
+                logger.info('Dictado con IA: respondio %s %s', proveedor['nombre'], modelo)
+                return Response({'items': limpiar_items(contenido)}, status=200)
 
-        return Response({'items': limpiar_items(contenido)}, status=200)
+        logger.warning('Dictado con IA: ningun modelo respondio, se usa el reconocimiento local')
+        return Response({'error': 'El dictado con IA no está disponible'}, status=503)
 
 
 class SaludView(APIView):
