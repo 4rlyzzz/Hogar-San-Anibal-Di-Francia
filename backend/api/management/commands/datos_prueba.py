@@ -23,6 +23,7 @@ from unittest import mock
 
 from django.core.management.base import BaseCommand, CommandError
 from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.views import APIView
 
 from api import movimientos
 from api.couchdb_service import COUCHDB_URL, get_documents_by_type
@@ -282,7 +283,11 @@ class Command(BaseCommand):
     def _post(self, vista, ruta, datos, saltar_repetido=False, usuario=None):
         req = self.fabrica.post(ruta, datos, format='json')
         force_authenticate(req, user=usuario or self.usuario)
-        r = vista.as_view()(req)
+        # sin el limite de peticiones: no es una persona, y su contador va en la cache de archivos.
+        # Con "railway ssh" esto corre como root: los archivos de cache que creara serian de root
+        # y la app (que corre como otro usuario) no podria leerlos (error 500 en todo)
+        with mock.patch.object(APIView, 'get_throttles', return_value=[]):
+            r = vista.as_view()(req)
         if r.status_code in (200, 201):
             return r.data
         if not (saltar_repetido and r.status_code == 409):
