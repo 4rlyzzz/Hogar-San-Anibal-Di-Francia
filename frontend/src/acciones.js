@@ -38,7 +38,7 @@ import {
   precioSugerido, pideVence, puedeVence, llevaLote, llevaProveedor, pideProveedor, llevaCosto, merchVacio, textoTipoMovimiento,
 } from './logica/merch.js';
 import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto } from './logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from './logica/dictado.js';
 import { procesarTextoConOmniroute } from './servicios/Omniroute.js';
 
 // envases (en plural)
@@ -1856,8 +1856,9 @@ export function agregarCodigo(texto) {
   return encontrado ? encontrado.item.nombre : null;
 }
 
-export function extraDictado() {
-  return { donadores: estado.donadores, actividades: opcionesActividad(), compradores: estado.compradores, proveedores: estado.proveedores };
+// tipo: 'Ingreso' o 'Salida' si ya se sabe ("venta de 3 panetones a María López": María es quien compra)
+export function extraDictado(tipo = null) {
+  return { donadores: estado.donadores, actividades: opcionesActividad(), compradores: estado.compradores, proveedores: estado.proveedores, tipo };
 }
 
 // cantidad entendida de lo que se dijo: un numero mayor que 0 y dentro del tope, o null
@@ -1874,7 +1875,7 @@ export async function agregarDictado(v) {
   const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
 
   // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
-  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado());
+  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? abierta));
 
   // 3. OmniRoute (LLM): Parsing de alta precisión para productos, cantidades y fechas ISO
   // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
@@ -1892,6 +1893,8 @@ export async function agregarDictado(v) {
 
     return true;
   });
+  // el comprador (o proveedor) y el medio de pago dichos una vez valen para toda la venta
+  compartirVentaIA(itemsValidos);
 
   // Determinar la operación dominante (Ingreso vs Salida)
   if (dicho.ambos) {

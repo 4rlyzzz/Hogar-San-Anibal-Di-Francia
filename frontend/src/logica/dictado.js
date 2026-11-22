@@ -55,6 +55,7 @@ const unidadesDichas = {
   caja: 'cajas', cajas: 'cajas', paquete: 'paquetes', paquetes: 'paquetes', botella: 'botellas', botellas: 'botellas',
   frasco: 'frascos', frascos: 'frascos', sobre: 'sobres', sobres: 'sobres', blister: 'blísters', blisters: 'blísters',
   ampolla: 'ampollas', ampollas: 'ampollas', tubo: 'tubos', tubos: 'tubos', unidad: 'unidades', unidades: 'unidades',
+  pack: 'packs', packs: 'packs',
 };
 const docenas = { docena: 12, docenas: 12 };
 
@@ -63,6 +64,26 @@ const medidas = new Set(['kg', 'g', 'L', 'ml']);
 
 // la dosis ("100 miligramos") es parte del nombre: ni cantidad ni una palabra que diga otro producto
 const dosis = new Set(['mg', 'mcg', 'miligramo', 'miligramos', 'microgramo', 'microgramos']);
+
+// ---------- tallas dichas ----------
+// el reconocedor escribe la talla como suena: "talla eme", "talla equis ele" -> "talla M", "talla XL"
+// (sin esto "talla eme" no dice cual polo es, y la "l" de "talla L" se tomaba por litros)
+const letrasTalla = { doble: 'X', equis: 'X', x: 'X', ese: 'S', s: 'S', eme: 'M', m: 'M', ele: 'L', l: 'L', xs: 'XS', xl: 'XL', xxl: 'XXL' };
+const tallasValidas = new Set(['XS', 'S', 'M', 'L', 'XL', 'XXL']);
+const tallaDicha = new RegExp(`\\b(tallas?)((?:\\s+(?:${Object.keys(letrasTalla).join('|')}))+)\\b`, 'gi');
+const esPalabraTalla = t => t === 'talla' || t === 'tallas';
+
+export function escribirTallas(texto) {
+  return String(texto ?? '').replace(tallaDicha, (todo, palabra, letras) => {
+    const lista = letras.trim().split(/\s+/);
+    // la talla mas larga que forman las primeras letras ("talla ese azul" -> S; "talla equis ele" -> XL)
+    for (let n = Math.min(lista.length, 3); n > 0; n--) {
+      const talla = lista.slice(0, n).map(l => letrasTalla[l.toLowerCase()]).join('');
+      if (tallasValidas.has(talla)) return [palabra, talla, ...lista.slice(n)].join(' ');
+    }
+    return todo;
+  });
+}
 
 // "de 400 gramos", "cajas de 10 unidades": lo que trae cada envase, no cuantos entran
 function esTamanoDicho(tokens, inicio, unidad) {
@@ -227,7 +248,9 @@ export function dividirPorCantidades(parte, productos = []) {
     // tambien "de 150" (un tamaño dicho sin la unidad)
     const sigue = ((tokens[i] === 'medio' || tokens[i] === 'media') && anterior === 'y') || anterior === 'cada'
       || (anterior === 'de' && (!unidad || medidas.has(unidad)) && !(tokens[n.fin] in docenas))
-      || esTamanoDicho(tokens, i, unidad);
+      || esTamanoDicho(tokens, i, unidad)
+      // "a 6 soles cada una", "S/ 6": es el precio, no otro producto
+      || esSoles(tokens, n.fin) || (anterior === 's' && !esPalabraTalla(tokens[i - 2]));
     const conUnidad = Boolean(unidad) || tokens[n.fin] in docenas;
     // un numero sin unidad despues del nombre es parte del nombre ("avena 3 ositos"),
     // salvo que ese producto ya tenga su cantidad: "10 latas de leche 10 pollos"
@@ -255,7 +278,8 @@ export function dividirPorCantidades(parte, productos = []) {
 // 'saco' no va: tambien es un envase ("un saco de arroz")
 const palabrasTipo = {
   Ingreso: ['ingreso', 'ingresos', 'ingresa', 'ingresan', 'ingresar', 'ingresamos', 'ingresaron', 'entrada', 'entradas', 'entra', 'entran', 'entro', 'entraron', 'llego', 'llegaron', 'recibimos', 'compramos'],
-  Salida: ['salida', 'salidas', 'sale', 'salen', 'salio', 'salieron', 'saca', 'sacan', 'sacar', 'sacamos', 'sacaron', 'venta', 'ventas', 'vendi', 'vendimos', 'vendieron', 'vender', 'vendemos'],
+  Salida: ['salida', 'salidas', 'sale', 'salen', 'salio', 'salieron', 'saca', 'sacan', 'sacar', 'sacamos', 'sacaron', 'venta', 'ventas', 'vendi', 'vendimos', 'vendieron', 'vender', 'vendemos',
+    'vendido', 'vendida', 'vendidos', 'vendidas'],
 };
 const tipoDePalabra = new Map(Object.entries(palabrasTipo).flatMap(([tipo, lista]) => lista.map(p => [p, tipo])));
 // tambien lo que la acompaña: "registrar un ingreso de ..." (ese "un" no es una cantidad)
@@ -269,7 +293,12 @@ export function tipoDictado(texto) {
   let resto = '';
   let desde = 0;
   
-  for (const m of plano(original).matchAll(avisoTipo)) {
+  const guia = plano(original);
+  for (const m of guia.matchAll(avisoTipo)) {
+    // "venta de 3 entradas para la kermés", "una entrada": tras un numero o "de" es un producto, no el tipo
+    // (solo si ya se dijo el tipo; "una entrada de arroz" al empezar si es un ingreso)
+    const antes = guia.slice(0, m.index + m[0].search(new RegExp(`\\b${m[1]}\\b`))).match(/([a-z0-9ñ]+)\s*$/)?.[1];
+    if (dichos.length && antes && (/^\d/.test(antes) || esNumeroPalabra(antes) || ['de', 'del', 'las', 'los', 'unas', 'unos'].includes(antes))) continue;
     const tipoEncontrado = tipoDePalabra.get(m[1]);
     if (tipoEncontrado && !dichos.includes(tipoEncontrado)) {
       dichos.push(tipoEncontrado);
@@ -301,7 +330,24 @@ export function separarDictado(texto) {
   }
   partes.push(sinComaDecimal.slice(desde));
   // ", y además" deja una "y" suelta
-  return partes.map(p => p.trim().replace(/^(?:y|e)(?:\s+|$)/i, '')).filter(Boolean);
+  const limpias = partes.map(p => p.trim().replace(/^(?:y|e)(?:\s+|$)/i, '')).filter(Boolean);
+  // una parte que es solo un numero es una pausa al dictar ("venta de 5. Rosario de madera"): va con lo que sigue
+  const juntas = [];
+  for (let i = 0; i < limpias.length; i++) {
+    if (i < limpias.length - 1 && soloNumero(limpias[i])) {
+      limpias[i + 1] = `${limpias[i]} ${limpias[i + 1]}`;
+      continue;
+    }
+    juntas.push(limpias[i]);
+  }
+  return juntas;
+}
+
+function soloNumero(parte) {
+  const tokens = plano(parte).match(/[a-z0-9ñ]+/g) ?? [];
+  const sinRelleno = tokens.filter(t => t !== 'de' && t !== 'del');
+  const n = sinRelleno.length ? leerNumero(sinRelleno, 0) : null;
+  return Boolean(n && n.fin === sinRelleno.length);
 }
 
 // ---------- parecido entre palabras ----------
@@ -338,10 +384,20 @@ function puntaje(dichas, nombre) {
 // ---------- buscar el producto ----------
 // tamano: { valor, medida } dicho ("de un litro"); ayuda a elegir la presentacion
 function tieneTamano(item, tamano) {
-  const base = item.medida && item.contenido ? { valor: item.contenido, medida: item.medida } : null;
+  const base = tamanoDeItem(item);
   if (!base) return false;
   const enSuMedida = convertir(tamano.valor, tamano.medida, base.medida);
   return enSuMedida != null && Math.abs(enSuMedida - base.valor) < 0.001;
+}
+
+// el tamaño registrado; en merchandising va en el nombre ("Panetón ... caja 900 g", "Mermelada frasco 300 g")
+function tamanoDeItem(item) {
+  if (item.medida && item.contenido) return { valor: item.contenido, medida: item.medida };
+  for (const m of plano(String(item.nombre ?? '')).matchAll(medidaSuelta)) {
+    const medida = medidaRegistrada[abreviatura(m[2])];
+    if (medida) return { valor: Number(m[1].replace(',', '.')), medida };
+  }
+  return null;
 }
 
 // productos: [{ item, categoria }]
@@ -406,7 +462,7 @@ function contradiceTamano(item, medida) {
 // productos: [{ item, categoria }]; devuelve { producto, dudas } como buscarProducto
 export function productoDeNombre(nombre, productos) {
   const nada = { producto: null, dudas: [] };
-  const dichas = palabrasConMedida(nombre).filter(p => !relleno.has(p));
+  const dichas = palabrasConMedida(escribirTallas(nombre)).filter(p => !relleno.has(p));
   if (!dichas.some(p => !esMedidaDicha(p))) return nada;
   const medidasDichas = dichas.filter(esMedidaDicha);
 
@@ -518,9 +574,11 @@ function buscarActividad(tokens, actividades) {
 const avisosComprador = [['vendido', 'a'], ['vendida', 'a'], ['vendidos', 'a'], ['vendidas', 'a'], ['le', 'vendi', 'a'], ['a', 'nombre', 'de'],
   ['comprador'], ['compradora'], ['cliente'], ['compro'], ['compraron']];
 const avisosProveedor = [['comprado', 'a'], ['comprada', 'a'], ['comprados', 'a'], ['compradas', 'a'], ['proveedor'], ['proveedora'], ['distribuidor']];
-const mediosDichos = { yape: 'yape-plin', plin: 'yape-plin', efectivo: 'efectivo', cash: 'efectivo', transferencia: 'transferencia', deposito: 'transferencia', transfirio: 'transferencia' };
+const mediosDichos = { yape: 'yape-plin', llape: 'yape-plin', yapeo: 'yape-plin', plin: 'yape-plin', plim: 'yape-plin', efectivo: 'efectivo', cash: 'efectivo', transferencia: 'transferencia', deposito: 'transferencia', transfirio: 'transferencia' };
 const palabrasPago = new Set(['pago', 'pagaron', 'pagado', 'pagada', 'pagan', 'paga']);
-const palabrasSoles = new Set(['soles', 'sol', 'nuevos']);
+const palabrasSoles = new Set(['soles', 'sol']);
+// "a 25 soles", "a 25 nuevos soles" ("3 nuevos polos" no es un precio)
+const esSoles = (tokens, k) => palabrasSoles.has(tokens[k]) || (tokens[k] === 'nuevos' && palabrasSoles.has(tokens[k + 1]));
 
 function buscarAvisoDe(avisos, tokens, usados) {
   for (let i = 0; i < tokens.length; i++) {
@@ -546,8 +604,9 @@ function buscarPago(tokens, usados) {
     if (usados.has(i)) continue;
     const n = leerNumero(tokens, i);
     if (!n) continue;
-    const conSoles = palabrasSoles.has(tokens[n.fin]);
-    const conSigno = tokens[i - 1] === 's';
+    const conSoles = esSoles(tokens, n.fin);
+    // "S/ 25" es un precio, pero "talla S 3 tazas" no
+    const conSigno = tokens[i - 1] === 's' && !esPalabraTalla(tokens[i - 2]);
     if (!conSoles && !conSigno) {
       i = n.fin - 1;
       continue;
@@ -556,7 +615,7 @@ function buscarPago(tokens, usados) {
     for (let k = i; k < n.fin; k++) usados.add(k);
     if (conSigno) usados.add(i - 1);
     let k = n.fin;
-    while (palabrasSoles.has(tokens[k])) usados.add(k++);
+    while (esSoles(tokens, k)) usados.add(k++);
     if (tokens[k] === 'con' && /^\d{1,2}$/.test(tokens[k + 1] ?? '')) {
       precio += Number(tokens[k + 1]) / 100;
       usados.add(k).add(k + 1);
@@ -573,16 +632,29 @@ function buscarPago(tokens, usados) {
 function personaRegistrada(previas, tokens, usados, lista) {
   for (let i = 0; i < tokens.length; i++) {
     if (usados.has(i) || !previas.includes(tokens[i])) continue;
+    // el nombre termina en un numero ("a Rosa Quispe 2 panetones": el 2 y lo que sigue no son del nombre)
     const posiciones = [];
-    for (let k = i + 1; k < tokens.length && posiciones.length < 5 && !usados.has(k); k++) {
-      if (!relleno.has(tokens[k]) && !['sra', 'senora', 'senor', 'sr', 'don', 'dona'].includes(tokens[k])) posiciones.push(k);
+    for (let k = i + 1; k < tokens.length && posiciones.length < 5 && !usados.has(k) && !leerNumero(tokens, k); k++) {
+      if (!relleno.has(tokens[k]) && !titulos.has(tokens[k])) posiciones.push(k);
     }
-    for (let n = posiciones.length; n > 0; n--) {
-      const persona = buscarDonador(posiciones.slice(0, n).map(k => tokens[k]), lista);
-      if (persona && puntaje(posiciones.slice(0, n).map(k => tokens[k]), persona.nombre) >= 0.75) {
-        for (let k = i; k <= posiciones[n - 1]; k++) usados.add(k);
-        return persona;
-      }
+    // las palabras que mejor dicen el nombre (con el mismo puntaje, las menos)
+    // todas las dichas tienen que ser de su nombre ("a Carmen Rosario" no es Rosario Mendoza); tras "de" o "del"
+    // ademas se dice el nombre completo ("polos de algodón" no es el proveedor Algodones Perú; "de Textiles Sur" si)
+    let mejor = null;
+    for (let n = 1; n <= posiciones.length; n++) {
+      const dichas = posiciones.slice(0, n).map(k => tokens[k]);
+      const persona = buscarDonador(dichas, lista);
+      if (!persona) continue;
+      const suyas = palabras(persona.nombre);
+      const todasSuyas = dichas.every(d => mejorParecido(d, suyas) > 0);
+      const completo = suyas.every(s => dichas.some(d => parecido(d, s) > 0));
+      const puntos = puntaje(dichas, persona.nombre);
+      if (todasSuyas && (completo || (tokens[i] !== 'de' && tokens[i] !== 'del'))
+        && puntos >= 0.75 && puntos > (mejor?.puntos ?? 0)) mejor = { persona, puntos, hasta: posiciones[n - 1] };
+    }
+    if (mejor) {
+      for (let k = i; k <= mejor.hasta; k++) usados.add(k);
+      return mejor.persona;
     }
   }
   return null;
@@ -595,7 +667,7 @@ function buscarPersona(avisos, tokens, originales, usados, lista, previas = []) 
   const posiciones = [];
   for (let k = aviso.inicio; k < tokens.length; k++) {
     if (usados.has(k)) continue;
-    if (k >= aviso.fin && !relleno.has(tokens[k]) && !['es', 'el', 'la', 'sra', 'senora', 'senor', 'sr', 'don', 'dona'].includes(tokens[k])) {
+    if (k >= aviso.fin && !relleno.has(tokens[k]) && tokens[k] !== 'es' && !titulos.has(tokens[k])) {
       resto.push(tokens[k]);
       posiciones.push(k);
     }
@@ -605,9 +677,45 @@ function buscarPersona(avisos, tokens, originales, usados, lista, previas = []) 
   return { persona, dicho: persona ? '' : posiciones.map(k => originales[k]).join(' ') };
 }
 
+// "venta de 3 panetones a María López" (o "compramos 20 panetones a Distribuidora Lima"): una persona que aun
+// no esta registrada, dicha solo con "a". Se toma lo que sigue a la ultima "a" hasta un numero o algo ya usado,
+// si ninguna de esas palabras es de un producto. Marca esas palabras como usadas (no son del producto).
+const titulos = new Set(['sr', 'sra', 'senor', 'senora', 'señor', 'señora', 'srta', 'senorita', 'señorita', 'don', 'dona', 'doña', 'el', 'la']);
+// "María de la Cruz": van dentro del nombre, no lo cortan
+const conectores = new Set(['de', 'del', 'la', 'las', 'los']);
+
+function personaConA(tokens, originales, usados, palabrasProductos) {
+  for (let i = tokens.length - 1; i > 0; i--) {
+    if (usados.has(i) || (tokens[i] !== 'a' && tokens[i] !== 'al')) continue;
+    const posiciones = [];
+    let pendientes = [];
+    for (let k = i + 1; k < tokens.length && !usados.has(k) && !leerNumero(tokens, k) && !(tokens[k] in unidadesDichas); k++) {
+      const t = tokens[k];
+      if (!posiciones.length && titulos.has(t)) continue;
+      if (conectores.has(t)) {
+        if (posiciones.length) pendientes.push(k);
+        continue;
+      }
+      if (relleno.has(t)) break;
+      posiciones.push(...pendientes, k);
+      pendientes = [];
+    }
+    const delNombre = posiciones.filter(k => !conectores.has(tokens[k]));
+    if (!delNombre.length || delNombre.length > 5) return '';
+    // "a la cocina", "a rosa" (el color) no son personas; "a Rosario Mendoza" si, aunque haya un producto Rosario
+    if (delNombre.every(k => palabrasProductos.some(p => palabraCoincide(tokens[k], p)))) return '';
+    for (let k = i; k <= posiciones.at(-1); k++) usados.add(k);
+    return posiciones.map(k => originales[k]).join(' ');
+  }
+  return '';
+}
+
+const esDeMerch = r => Boolean(r.producto ? r.producto.item.tipoMerch : r.dudas.length && r.dudas.every(d => d.item.tipoMerch));
+
 // ---------- una parte: cantidad, unidad, tamaño, producto y donador ----------
 // extra: { donadores, actividades } para reconocer quien dono
-export function interpretarParte(parte, productos, { donadores = [], actividades = [], compradores = [], proveedores = [] } = {}) {
+// tipo ('Ingreso' | 'Salida'): con el, "a María López" es quien compra (salida) o a quien se le compro (ingreso)
+export function interpretarParte(parte, productos, { donadores = [], actividades = [], compradores = [], proveedores = [], tipo = null } = {}) {
   // las mismas palabras normalizadas y como se escribieron (plano no cambia el largo)
   const trozos = [...plano(parte).replace(/[^a-z0-9ñ.\s]/g, ' ').matchAll(/\S+/g)];
   const tokens = trozos.map(m => m[0]);
@@ -650,6 +758,23 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
   const fecha = buscarFecha(tokens);
   if (fecha) for (let k = fecha.inicio; k < fecha.fin; k++) usados.add(k);
 
+  // la persona nueva dicha con "a" (la registrada ya la encontro buscarPersona)
+  const rol = { Salida: comprador, Ingreso: proveedor }[tipo];
+  // "... Rosa Quispe con Yape": una parte sin numeros que solo nombra a alguien registrado es esa persona
+  // (todas sus palabras son del nombre; si no, "Rosa" seria parte de "Rosario")
+  if (rol && !rol.persona && !rol.dicho) {
+    const libres = tokens.map((t, k) => k).filter(k => !usados.has(k) && !relleno.has(tokens[k]) && !titulos.has(tokens[k]));
+    const dichas = libres.map(k => tokens[k]);
+    const persona = libres.length && !libres.some(k => leerNumero(tokens, k)) ? buscarDonador(dichas, tipo === 'Salida' ? compradores : proveedores) : null;
+    if (persona && dichas.every(d => mejorParecido(d, palabras(persona.nombre)) === 1)) {
+      rol.persona = persona;
+      libres.forEach(k => usados.add(k));
+    }
+  }
+  const personaNueva = rol && !rol.persona && !rol.dicho
+    ? personaConA(tokens, originales, usados, productos.flatMap(p => palabras(p.item.nombre)))
+    : '';
+
   // numeros; los que son parte de un nombre ("3 Ositos") no son cantidad
   const vecinos = numerosEnNombres(productos);
   const primeroUtil = tokens.findIndex((t, k) => !usados.has(k) && !relleno.has(t));
@@ -684,6 +809,8 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
   for (const n of numeros) if (!n.deNombre) for (let k = n.inicio; k < n.fin; k++) deNumeros.add(k);
   const deProducto = tokens.map((t, k) => k).filter(k => {
     const t = tokens[k];
+    // la talla es parte del nombre aunque sea una letra de medida ("talla L" no son litros)
+    if (!usados.has(k) && esPalabraTalla(tokens[k - 1]) && tallasValidas.has(t.toUpperCase())) return true;
     return !usados.has(k) && !deNumeros.has(k) && !relleno.has(t) && !(t in unidadesDichas) && !dosis.has(t) && !(t in docenas) && !esNumeroPalabra(t) && t !== 'medio' && t !== 'media';
   });
   const dichas = deProducto.map(k => tokens[k]);
@@ -706,11 +833,18 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     cantidad = elegido.valor;
     let k = elegido.fin;
     if (tokens[k] in docenas) {
-      cantidad *= docenas[tokens[k]];
+      // lo que se vende por docenas ("2 docenas de galletas") no se multiplica
+      if (item?.unidad !== 'docenas') cantidad *= docenas[tokens[k]];
       k++;
       if (tokens[k] === 'de') k++;
     }
-    if (tokens[k] in unidadesDichas) unidadDicha = unidadesDichas[tokens[k++]];
+    // "3 cajas de panetón" (caja 900 g), "3 bolsas ecológicas": si el envase esta en su nombre son unidades de ese producto
+    // (solo si se cuenta por unidades y sin contenido registrado: "2 cajas de paracetamol" de 10 unidades se convierte aparte)
+    const envaseDelNombre = item && item.unidad === 'unidades' && !item.contenido
+      && tokens[k] in unidadesDichas && !medidas.has(unidadesDichas[tokens[k]])
+      && mejorParecido(tokens[k], palabras(item.nombre)) === 1;
+    if (envaseDelNombre) k++;
+    else if (tokens[k] in unidadesDichas) unidadDicha = unidadesDichas[tokens[k++]];
     // "un kilo y medio"
     if (tokens[k] === 'y' && (tokens[k + 1] === 'medio' || tokens[k + 1] === 'media')) cantidad += 0.5;
   }
@@ -736,6 +870,17 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     }
   }
   if (cantidad != null) cantidad = redondear(cantidad);
+
+  // solo en merchandising hay comprador o proveedor ("salida de arroz para Rosa" no es una venta, aunque
+  // haya una compradora Rosa). Sin producto se deja: puede ser el final de lo anterior ("... a Rosa Quispe")
+  const esVenta = esDeMerch({ producto, dudas }) || (!producto && !dudas.length);
+  if (!esVenta) {
+    Object.assign(comprador, { persona: null, dicho: '' });
+    Object.assign(proveedor, { persona: null, dicho: '' });
+  } else if (personaNueva) {
+    if (tipo === 'Salida') comprador.dicho = personaNueva;
+    else proveedor.dicho = personaNueva;
+  }
 
   return {
     dicho: parte,
@@ -829,14 +974,16 @@ export function corregirNombres(texto, productos) {
 export function interpretarDictado(texto, productos, extra = {}) {
   const resultado = [];
   let paraTodos = null;
-  for (const parte of separarDictado(corregirNombres(String(texto ?? ''), productos)).flatMap(p => dividirPorCantidades(p, productos))) {
+  for (const parte of separarDictado(corregirNombres(escribirTallas(texto), productos)).flatMap(p => dividirPorCantidades(p, productos))) {
     let r = interpretarParte(parte, productos, extra);
     // "10 kg de avena. En 10 bolsas. Donado por la parroquia. Vence en octubre.": el reconocedor pone un punto
     // en cada pausa; lo que no nombra un producto es del anterior (salvo "todo esto lo donó...", que es para todos)
     const anterior = resultado.at(-1);
     const sinProducto = !r.producto && !r.dudas.length && !r.nombreDicho;
     const paraTodosSolo = r.paraTodos && (r.donador || r.donadorDicho || r.actividad);
-    if (anterior && sinProducto && !paraTodosSolo) {
+    // "... Rosa Quispe con Yape" ya dice quien compro: no se vuelve a leer junto con lo anterior
+    const soloPersona = r.comprador || r.proveedor;
+    if (anterior && sinProducto && !paraTodosSolo && !soloPersona) {
       r = interpretarParte(`${anterior.dicho} ${parte}`, productos, extra);
       resultado.pop();
     }
@@ -866,18 +1013,42 @@ export function interpretarDictado(texto, productos, extra = {}) {
       if (!r.actividad) r.actividad = paraTodos.actividad;
     }
   }
+  compartirVenta(resultado.filter(esDeMerch), [['comprador', 'compradorDicho'], ['proveedor', 'proveedorDicho'], ['medioPago']]);
   return resultado;
+}
+
+// "vendimos 4 panetones, 2 tazas y 1 polo a Rosa Quispe, con Yape": quien compro (o a quien se le compro) y como
+// se pago se dicen una vez y valen para toda la venta. Solo si se dijo uno solo; con dos distintos no se adivina.
+// campos: grupos que van juntos ([persona registrada, como se dijo]); el primero dice cual es
+function compartirVenta(items, grupos) {
+  for (const campos of grupos) {
+    const tienen = items.filter(r => campos.some(c => r[c]));
+    const cual = r => {
+      const v = r[campos[0]];
+      return v && typeof v === 'object' ? `id:${v.id}` : plano(String(v || r[campos[1]] || '')).trim();
+    };
+    if (!tienen.length || new Set(tienen.map(cual)).size !== 1) continue;
+    for (const r of items) {
+      if (!campos.some(c => r[c])) for (const c of campos) r[c] = tienen[0][c];
+    }
+  }
+}
+
+// lo mismo con lo que entendio la IA: [{ producto, comprador, proveedor, medio_pago, ... }]
+export function compartirVentaIA(items) {
+  compartirVenta(items, [['comprador'], ['proveedor'], ['medio_pago']]);
+  return items;
 }
 
 export function preprocesarTextoVoz(texto) {
   if (!texto) return '';
 
   let limpio = String(texto)
-    // 1. Reemplazar puntos, comas y signos causados por silencios del micro por espacios
-    .replace(/[.;:!?]+/g, ' ')
-    // 2. Normalizar autocorrecciones humanas inmediatas ("X nooo de Y" -> "de Y")
-    .replace(/\b(\w+)\s+(?:no+|o\s+sea|perdón|digo|mejor)\s+(?:de\s+)?(\w+)\b/gi, '$2')
-    // 3. Quitar espacios múltiples
+    // 1. Reemplazar puntos y signos causados por silencios del micro por espacios ("2.5 kilos" se queda: es un decimal)
+    .replace(/(?:\.(?!\d)|[;:!?])+/g, ' ')
+    // las autocorrecciones ("dos no, tres") las resuelve la IA (el prompt dice "usa la ultima"): quitarlas aqui
+    // rompia nombres como "Taza Mejor Papá" o "Polo No te rindas"
+    // 2. Quitar espacios múltiples
     .replace(/\s+/g, ' ')
     .trim();
 

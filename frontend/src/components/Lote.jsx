@@ -14,7 +14,7 @@ import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coi
 import { esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto } from '../logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -397,7 +397,10 @@ export function ModalLoteVoz() {
   const procesarConOmni = async (textoCompleto) => {
     const numero = ++consulta.current;
     // "ingreso" o "salida" no son productos
-    const textoDictado = tipoDictado(textoCompleto).resto;
+    const dichoTipo = tipoDictado(textoCompleto);
+    const textoDictado = dichoTipo.resto;
+    // con el tipo, "a María López" es quien compra (venta) o a quien se le compro (ingreso)
+    const tipoVoz = dichoTipo.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null);
     if (!textoDictado.trim()) return setItemsEntendidos([]);
     setCargandoIA(true);
     setAviso('');
@@ -412,8 +415,8 @@ export function ModalLoteVoz() {
       // el nombre que entendio la IA se busca entre los registrados (con su dosis: 100 mg no es 50 mg)
       const productos = todosLosProductos();
       // el dictado local sirve para revisar la cantidad ("5 sacos de 50 kg" no son 50 sacos)
-      const local = interpretarDictado(textoDictado, productos, extraDictado());
-      const mapeados = (Array.isArray(json) ? json : [])
+      const local = interpretarDictado(textoDictado, productos, extraDictado(tipoVoz));
+      const mapeados = compartirVentaIA(Array.isArray(json) ? json.filter(i => i && typeof i === 'object') : [])
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
         .map(i => {
           // si empatan varios, vale el que entendio el local por el tamaño dicho ("cajas de 20 unidades")
@@ -439,7 +442,7 @@ export function ModalLoteVoz() {
       if (numero !== consulta.current) return;
       // Fallback: Si OmniRoute da error, usamos la interpretación local nativa
       if (typeof interpretarDictado === 'function') {
-        const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado());
+        const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
         // igual que al agregar a la lista (agregarDictado)
         setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
       } else {
