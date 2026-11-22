@@ -113,6 +113,18 @@ def limpiar_items(contenido):
     return items
 
 
+def url_chat(base):
+    """La direccion a la que se manda el dictado.
+
+    OmniRoute y Groq reciben la base y se les agrega /v1/chat/completions
+    (http://localhost:20128, https://api.groq.com/openai). Gemini usa otra ruta, asi que su
+    direccion se pone completa y se usa tal cual:
+    https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+    """
+    base = base.rstrip('/')
+    return base if base.endswith('/chat/completions') else f'{base}/v1/chat/completions'
+
+
 class DictadoView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
@@ -143,12 +155,11 @@ class DictadoView(APIView):
             }
             if settings.OMNIROUTE_REASONING_EFFORT:
                 cuerpo['reasoning_effort'] = settings.OMNIROUTE_REASONING_EFFORT
-            r = requests.post(f'{settings.OMNIROUTE_URL}/v1/chat/completions', headers=cabeceras,
-                              timeout=TIMEOUT, json=cuerpo)
+            r = requests.post(url_chat(settings.OMNIROUTE_URL), headers=cabeceras, timeout=TIMEOUT, json=cuerpo)
             r.raise_for_status()
             contenido = r.json()['choices'][0]['message']['content']
         except (requests.exceptions.RequestException, ValueError, KeyError, IndexError, TypeError):
-            logger.exception('OmniRoute no respondio bien')
+            logger.exception('La IA del dictado no respondio bien (%s, modelo %s)', settings.OMNIROUTE_URL, settings.OMNIROUTE_MODEL)
             return Response({'error': 'El dictado con IA no está disponible'}, status=503)
 
         return Response({'items': limpiar_items(contenido)}, status=200)
