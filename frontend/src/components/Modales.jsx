@@ -8,7 +8,7 @@ import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
   guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
-  categorias, abrirPersona,
+  categorias, abrirPersona, guardarMinimo,
 } from '../acciones.js';
 import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CamposProductoMerch, CampoVenceMerch } from './Merch.jsx';
@@ -625,6 +625,28 @@ export function ModalUnir({ modal }) {
 }
 
 // ---------- dar de baja lo vencido ----------
+// Alimentos y Salud: solo se edita el stock minimo (el nombre y la presentacion quedan fijos por el historial)
+export function ModalEditarMinimo({ modal }) {
+  const { item, categoria } = modal;
+  const f = useFormulario();
+  return (
+    <Fondo>
+      <form className="modal" id="form-editar-minimo" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarMinimo(modal, v))}>
+        <Cabecera codigo={item.codigo} color={colorVencimiento(item)} titulo={item.nombre} subtitulo={`${nombreCategoria(categoria)} · Editar stock mínimo`} />
+        <div className="modal-cuerpo">
+          <div className="campo">
+            <label htmlFor="minimo">STOCK MÍNIMO ({item.unidad.toUpperCase()})</label>
+            <CampoNumero id="minimo" decimales={decimalesDe(item.unidad)} placeholder="0" defaultValue={item.minimo ?? ''} autoFocus onAviso={f.setError} />
+            <small>Hay {item.cantidad} {item.unidad}. Si baja de este número, aparece en "Stock bajo" y en las alertas.</small>
+          </div>
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar="Guardar" enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
 export function ModalBaja({ modal }) {
   const { item } = modal;
   const f = useFormulario();

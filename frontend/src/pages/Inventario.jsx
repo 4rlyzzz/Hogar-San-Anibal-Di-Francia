@@ -1,7 +1,8 @@
 import { useEstado } from '../estado.js';
 import { filtrarInsumos, porVencer, bajoMinimo, nombreCategoria } from '../logica/comunes.js';
 import { filtrarInventario, chipsInventario, opcionesVence, opcionesLleva, opcionesStock, ordenesInventario } from '../logica/inventario.js';
-import { Encabezado, SinResultados } from '../components/Comunes.jsx';
+import { Encabezado, SinResultados, usePaginacion, Paginacion } from '../components/Comunes.jsx';
+import { tamanosTarjetas } from '../logica/paginas.js';
 import { BotonFiltros, Chips, PanelFiltros, CampoSelect, opcionesCon } from '../components/Filtros.jsx';
 import { Tarjeta } from '../components/Tarjeta.jsx';
 
@@ -18,6 +19,7 @@ export function Inventario({ categoria }) {
     'Por vencer': productos.filter(porVencer).length,
     'Stock bajo': productos.filter(bajoMinimo).length,
   };
+  const pagina = usePaginacion('inventario', lista, tamanosTarjetas, JSON.stringify([categoria, f, estado.filtro, estado.busqueda]));
 
   return (
     <div className="con-filtros con-filtros-inventario">
@@ -30,8 +32,9 @@ export function Inventario({ categoria }) {
       />
       {chips.length > 0 && <div className="chips-inventario"><Chips grupo="inventarioFiltros" chips={chips} /></div>}
       {lista.length
-        ? <div className="grilla">{lista.map(item => <Tarjeta key={item.id} item={item} categoria={categoria} />)}</div>
+        ? <div className="grilla">{pagina.visibles.map(item => <Tarjeta key={item.id} item={item} categoria={categoria} />)}</div>
         : <SinResultados />}
+      <Paginacion control={pagina.control} nombre="productos" />
 
       {abierto && (
         <PanelFiltros grupo="inventarioFiltros" resultados={lista.length}>

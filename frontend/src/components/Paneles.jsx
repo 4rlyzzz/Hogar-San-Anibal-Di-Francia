@@ -5,7 +5,7 @@ import { IconoAjustar, IconoSalida, IconoIngreso, IconoEditar } from '../assets/
 import {
   cerrarModal, abrirMovimiento, abrirAjuste, abrirUnir, historialProducto, movimientosDe, verMovimiento, corregirAjuste,
   filtrarProducto, historialDonador, verProducto, cambiarRol, cambiarActivo, esAdmin, sePuedeAdministrar, abrirClave, roles,
-  abrirEditarMerch, historialPersona,
+  abrirEditarMerch, abrirEditarMinimo, historialPersona,
 } from '../acciones.js';
 import { esMerch, textoTipo, textoPrecio, soles, nombreMedio, nombreComprobante, mayuscula } from '../logica/merch.js';
 import { personas, movimientosDePersona, montoDe, tiposDe } from '../logica/personas.js';
@@ -148,9 +148,13 @@ export function PanelProducto({ modal }) {
           <button className="btn btn-blanco btn-contar" data-accion="ajustar" onClick={() => abrirAjuste(categoria, item.id)}>
             <IconoAjustar /> Contar y corregir stock
           </button>
-          {merch && (
+          {merch ? (
             <button className="btn btn-blanco btn-contar" data-accion="editar-merch" onClick={() => abrirEditarMerch(item.id)}>
               <IconoEditar /> Editar precio y datos
+            </button>
+          ) : (
+            <button className="btn btn-blanco btn-contar" data-accion="editar-minimo" onClick={() => abrirEditarMinimo(categoria, item.id)}>
+              <IconoEditar /> Editar stock mínimo
             </button>
           )}
 
