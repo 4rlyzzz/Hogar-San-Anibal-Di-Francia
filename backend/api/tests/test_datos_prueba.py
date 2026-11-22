@@ -1,4 +1,5 @@
 """python manage.py datos_prueba: carga los datos de prueba en una base vacia, sin errores."""
+import os
 from collections import Counter
 from datetime import date
 from io import StringIO
@@ -137,3 +138,54 @@ class DatosPruebaTests(PruebaAPI):
             self.couch.base('usuario').pop(c['_id'])
         with self.assertRaises(CommandError):
             self.cargar()
+
+    # ---------- --reiniciar: para que todo el equipo tenga la misma base en su PC ----------
+    # contraseñas inventadas para la prueba (las de verdad van en el backend/.env de cada uno, no en git)
+    CLAVES = {'CLAVES_EQUIPO': 'neymi:prueba0001,luigi:prueba0002,alan:prueba0003,pochano:prueba0004'}
+
+    def test_reiniciar_no_funciona_fuera_de_la_pc(self):
+        # en Railway DEBUG es False: no se borra nada
+        producto = self.couch.poner('producto', {'nombre': 'Dato real', 'categoria': 'alimentos'})
+        with mock.patch.dict(os.environ, self.CLAVES), self.assertRaises(CommandError):
+            self.cargar('--reiniciar')
+        self.assertIsNotNone(self.couch.leer('producto', producto['_id']))
+
+    def test_reiniciar_sin_contrasenas_no_borra_nada(self):
+        producto = self.couch.poner('producto', {'nombre': 'Algo mio', 'categoria': 'alimentos'})
+        sin_claves = {k: v for k, v in os.environ.items() if k != 'CLAVES_EQUIPO'}
+        with self.settings(DEBUG=True), mock.patch.dict(os.environ, sin_claves, clear=True):
+            with self.assertRaisesMessage(CommandError, 'Faltan las contraseñas'):
+                self.cargar('--reiniciar')
+        self.assertIsNotNone(self.couch.leer('producto', producto['_id']))
+
+    def test_reiniciar_deja_la_misma_base_para_todos(self):
+        # una base local con datos propios: se borran
+        self.couch.poner('producto', {'nombre': 'Algo mio', 'categoria': 'alimentos'})
+        self.couch.poner('usuario', {'usuario': 'viejo', 'rol': 'Administrador', 'activo': True})
+        self.couch.base('producto')['_design/indices'] = {'_id': '_design/indices', '_rev': '1-a', 'views': {}}
+
+        with self.settings(DEBUG=True), mock.patch.dict(os.environ, self.CLAVES):
+            salida, errores = self.cargar('--reiniciar')
+        self.assertEqual(errores, '')
+        self.assertIn('Datos de prueba cargados.', salida)
+        # las contraseñas no se muestran en la consola
+        self.assertNotIn('prueba0001', salida)
+
+        nombres = {p.get('nombre') for p in self.couch.todos('producto')}
+        self.assertNotIn('Algo mio', nombres)
+        self.assertIn('_design/indices', self.couch.base('producto'))  # los indices se quedan
+        usuarios = {u['usuario']: u for u in self.couch.todos('usuario')}
+        # solo las cuentas del equipo: sin los usuarios de prueba
+        self.assertEqual(set(usuarios), {u for u, *_ in dp.CUENTAS_LOCALES})
+        self.assertTrue(usuarios['neymi']['principal'])
+        self.assertEqual(sum(1 for u in usuarios.values() if u.get('principal')), 1)
+
+        # cada uno entra con la contraseña de CLAVES_EQUIPO
+        for par in self.CLAVES['CLAVES_EQUIPO'].split(','):
+            usuario, clave = par.split(':')
+            r = self.client.post('/api/auth/login/', {'usuario': usuario, 'clave': clave}, format='json')
+            self.assertEqual(r.status_code, 200, usuario)
+        # los movimientos los registra el equipo, cada uno con su cuenta
+        movs = self.couch.todos('movimiento')
+        self.assertEqual({m['responsable'] for m in movs}, {'Neymi', 'Luigi', 'Alan', 'Pochano'})
+        self.assertTrue(all(m['usuario_id'] in {u['_id'] for u in usuarios.values()} for m in movs))

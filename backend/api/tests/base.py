@@ -80,6 +80,20 @@ class CouchFalsa:
 
         if method == 'POST' and doc_id == '_find':
             return self._find(base, json)
+        # listar y borrar en lote (datos_prueba --reiniciar)
+        if method == 'GET' and doc_id == '_all_docs':
+            filas = [{'id': i, 'key': i, 'value': {'rev': d['_rev']}} for i, d in base.items()]
+            return Respuesta({'total_rows': len(filas), 'rows': filas}, 200)
+        if method == 'POST' and doc_id == '_bulk_docs':
+            hechos = []
+            for d in json.get('docs', []):
+                actual = base.get(d['_id'])
+                if d.get('_deleted') and actual and actual['_rev'] == d.get('_rev'):
+                    del base[d['_id']]
+                    hechos.append({'ok': True, 'id': d['_id']})
+                else:
+                    hechos.append({'id': d['_id'], 'error': 'conflict'})
+            return Respuesta(hechos, 201)
         if method == 'POST' and doc_id is None:
             return self._guardar(base, nombre, uuid.uuid4().hex, json)
         if method == 'GET':
