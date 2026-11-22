@@ -95,7 +95,7 @@ export function ModalMovimiento({ modal }) {
               <div className={esIngreso && puedeVence(item) ? 'dos-columnas' : ''}>
                 <div className="campo">
                   <label htmlFor="cantidad">CANTIDAD ({item.unidad.toUpperCase()})</label>
-                  <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
+                  <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" autoFocus onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
                   <small>{esIngreso ? `En stock: ${item.cantidad} ${item.unidad}` : textoDisponible(item)}</small>
                 </div>
                 {esIngreso && <CampoVenceMerch item={item} />}
@@ -108,7 +108,7 @@ export function ModalMovimiento({ modal }) {
             <div className="dos-columnas">
               <div className="campo">
                 <label htmlFor="cantidad">CANTIDAD</label>
-                <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} />
+                <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" autoFocus onAviso={f.setError} />
                 <small>En stock: {item.cantidad} {item.unidad}</small>
               </div>
               <CampoVencimiento />
@@ -116,7 +116,7 @@ export function ModalMovimiento({ modal }) {
           ) : (
             <div className="campo">
               <label htmlFor="cantidad">CANTIDAD</label>
-              <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} />
+              <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" autoFocus onAviso={f.setError} />
               <small>{textoDisponible(item)}</small>
             </div>
           )}
@@ -253,7 +253,7 @@ function ModalProductoMerch({ modal }) {
           <div id="coincidencias"><Coincidencias parecidos={parecidos} onElegir={(cat, id) => usarExistente(modal, cat, id)} /></div>
           <div className="campo">
             <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
-            <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="7751271010016" />
+            <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="Ej. 7751271010016" />
           </div>
           <MensajeError texto={f.error} />
         </div>
@@ -375,7 +375,7 @@ function ModalProductoInventario({ modal }) {
               name="envase-otro"
               type="text"
               maxLength={largos.envaseOtro}
-              placeholder="¿Cómo se llama el envase? Ej. Bidón"
+              placeholder="Ej. Bidón"
               hidden={envase !== 'otro'}
               onInput={e => setEnvaseOtro(e.target.value.trim())}
             />
@@ -388,11 +388,11 @@ function ModalProductoInventario({ modal }) {
           <div className="dos-columnas">
             <div className="campo">
               <label htmlFor="minimo">STOCK MÍNIMO</label>
-              <CampoNumero id="minimo" decimales={decimalesCantidad} placeholder="0" onAviso={f.setError} />
+              <CampoNumero id="minimo" decimales={decimalesCantidad} placeholder="Ej. 5" onAviso={f.setError} />
             </div>
             <div className="campo">
               <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
-              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="7751271010016" />
+              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="Ej. 7751271010016" />
             </div>
           </div>
 
@@ -483,7 +483,7 @@ export function ModalAjuste({ modal }) {
             </div>
             <div className="campo">
               <label htmlFor="contado">CANTIDAD CONTADA</label>
-              <CampoNumero id="contado" decimales={decimalesDe(item.unidad)} placeholder="0" autoFocus onAviso={f.setError} onInput={e => setContado(e.target.value.trim())} />
+              <CampoNumero id="contado" decimales={decimalesDe(item.unidad)} placeholder="Ej. 12" autoFocus onAviso={f.setError} onInput={e => setContado(e.target.value.trim())} />
             </div>
           </div>
 
@@ -636,7 +636,7 @@ export function ModalEditarMinimo({ modal }) {
         <div className="modal-cuerpo">
           <div className="campo">
             <label htmlFor="minimo">STOCK MÍNIMO ({item.unidad.toUpperCase()})</label>
-            <CampoNumero id="minimo" decimales={decimalesDe(item.unidad)} placeholder="0" defaultValue={item.minimo ?? ''} autoFocus onAviso={f.setError} />
+            <CampoNumero id="minimo" decimales={decimalesDe(item.unidad)} placeholder="Ej. 5" defaultValue={item.minimo ?? ''} autoFocus onAviso={f.setError} />
             <small>Hay {item.cantidad} {item.unidad}. Si baja de este número, aparece en "Stock bajo" y en las alertas.</small>
           </div>
           <MensajeError texto={f.error} />
@@ -743,11 +743,11 @@ export function ModalDonador() {
         <div className="modal-cuerpo">
           <div className="campo">
             <label>NOMBRE</label>
-            <input id="nuevo-nombre" name="nuevo-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Nombre o institución" autoFocus />
+            <input id="nuevo-nombre" name="nuevo-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Ej. Parroquia San José" autoFocus />
           </div>
           <div className="campo">
             <label>NÚMERO DE CONTACTO</label>
-            <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" />
+            <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="Ej. 987 654 321" />
           </div>
           <div className="campo">
             <label htmlFor="nuevo-observaciones">OBSERVACIONES (OPCIONAL)</label>

@@ -1858,6 +1858,15 @@ export function abrirCodigo() {
   if (estado.lote) abrirModal({ tipo: 'lote-codigo', volver: abrirBusqueda, alCerrar: cerrarLote });
 }
 
+// ingreso o salida que ya se eligio: la lista abierta, aunque todavia no tenga productos
+// (sin lista, por ejemplo con el microfono junto al "+", hay que decirlo)
+export const tipoElegido = () => estado.lote?.tipo ?? null;
+
+// dictar desde "Elige el producto" (tambien al añadir mas productos a una lista abierta)
+export function abrirVozLote() {
+  if (estado.lote) abrirModal({ tipo: 'lote-voz', volver: abrirBusqueda, alCerrar: cerrarLote });
+}
+
 // ---------- agregar a la lista ----------
 // a mano: se agrega y se abre para poner la cantidad
 export function agregarManual(categoria, id) {
@@ -1921,10 +1930,11 @@ export function cantidadDicha(valor) {
 export async function agregarDictado(v) {
   // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
   const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
+  // abierta: la lista que ya tiene productos (no se puede mezclar con el otro tipo)
   const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
 
   // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
-  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? abierta));
+  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? tipoElegido()));
 
   // 3. IA (Groq, Gemini... via Django): Parsing de alta precisión para productos, cantidades y fechas ISO
   // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
@@ -1949,9 +1959,9 @@ export async function agregarDictado(v) {
   if (dicho.ambos) {
     falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
   }
-  // 1. lo dicho, 2. lo que entendio la IA, 3. la lista que ya esta abierta
+  // 1. lo dicho, 2. la lista abierta o elegida ("Registrar ingreso" > "Hablar"), 3. lo que entendio la IA
   const tipoIA = { salida: 'Salida', ingreso: 'Ingreso' }[itemsValidos[0]?.tipo] ?? null;
-  const tipo = dicho.tipo ?? abierta ?? tipoIA;
+  const tipo = dicho.tipo ?? tipoElegido() ?? tipoIA;
   if (!tipo) {
     falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
   }

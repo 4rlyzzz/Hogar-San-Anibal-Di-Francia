@@ -228,11 +228,11 @@ export function CampoDonador({ donadores, actividades = [], inicial = {} }) {
       <div className="dos-columnas" id="nuevo-donador" hidden={donador !== 'nuevo'}>
         <div className="campo">
           <label>NOMBRE DEL DONADOR</label>
-          <input id="donador-nombre" name="donador-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Nombre o institución" defaultValue={inicial['donador-nombre']} />
+          <input id="donador-nombre" name="donador-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Ej. ADRA Perú" defaultValue={inicial['donador-nombre']} />
         </div>
         <div className="campo">
           <label>NÚMERO DE CONTACTO</label>
-          <input id="donador-telefono" name="donador-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" defaultValue={inicial['donador-telefono']} />
+          <input id="donador-telefono" name="donador-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="Ej. 987 654 321" defaultValue={inicial['donador-telefono']} />
         </div>
       </div>
 
@@ -245,7 +245,7 @@ export function CampoDonador({ donadores, actividades = [], inicial = {} }) {
           name="actividad-otra"
           type="text"
           maxLength={largos.actividadOtra}
-          placeholder="Ej. Colecta parroquial, Kermés"
+          placeholder="Ej. Kermés navideña"
           defaultValue={inicial['actividad-otra']}
           hidden={actividad !== 'otra'}
           ref={otra}
@@ -297,7 +297,7 @@ export function CampoPara({ ninos = [], inicial = [] }) {
         name="para-otro"
         type="text"
         maxLength={largos.nino}
-        placeholder="Nombre del niño o niña"
+        placeholder="Ej. Mateo"
         hidden={!conOtro}
         ref={otro}
         defaultValue={deFuera}

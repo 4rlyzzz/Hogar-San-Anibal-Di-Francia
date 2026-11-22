@@ -45,10 +45,21 @@ input[type="search"]::-ms-clear {
   display: none;
 }
 
-/* el texto de ayuda no se corta: si no entra, se ve el comienzo con "…" */
+/* el texto de ayuda no se corta: si no entra, se ve el comienzo con "…"
+   claro y sin negrita: que no se confunda con algo ya escrito (los campos escriben en negrita y oscuro) */
 input::placeholder,
 textarea::placeholder {
   text-overflow: ellipsis;
+  color: #a3b0ab;
+  font-weight: 400;
+  opacity: 1;
+}
+
+/* fecha vacia (data-vacia lo pone main.jsx): "dd/mm/aaaa" como ejemplo, no como dato.
+   Al escribirla vuelve al color normal, aunque todavia este a medias */
+input[type="date"][data-vacia]:not(:focus) {
+  color: #a3b0ab;
+  font-weight: 400;
 }
 
 .mono {

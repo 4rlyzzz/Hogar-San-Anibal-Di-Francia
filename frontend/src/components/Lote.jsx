@@ -6,12 +6,12 @@ import { usuario } from '../data/datos.js';
 import { largos, decimalesDe } from '../validacion.js';
 import { IconoCodigo, IconoMicrofono, IconoEditar, IconoBorrar, IconoIngreso, IconoSalida, IconoBuscar } from '../assets/iconos.jsx';
 import {
-  abrirBusqueda, abrirCodigo, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
+  abrirBusqueda, abrirCodigo, abrirVozLote, tipoElegido, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
   opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe, categorias, personaDeItem, extraDictado,
 } from '../acciones.js';
 import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
-import { esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
+import { CATEGORIA as MERCH, esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
 import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from '../logica/dictado.js';
@@ -35,10 +35,35 @@ function CabeceraLote({ titulo, subtitulo, onVolver }) {
 // 'Lata x 400 g' o 'Suelto, en kg': para no confundir tamaños del mismo producto
 const presentacion = item => (item.tipoMerch ? textoMerch(item) || textoTipo(item) : textoPresentacion(item) || `Suelto, en ${item.unidad}`);
 
+// ---------- pestañas por inventario ----------
+// la lista de productos mezclaba alimentos, salud y merch: se separa por pestañas
+// encontrados: lo que coincide con lo escrito (el numero de cada pestaña es de eso)
+const nombresPestana = { Todos: 'Todos', Alimentos: 'Alimentos', Salud: 'Salud', [MERCH]: 'Merch' };
+
+function PestanasCategoria({ valor, onCambiar, encontrados }) {
+  return (
+    <div className="filtros lote-categorias" role="radiogroup" aria-label="Inventario">
+      {['Todos', ...categorias].map(c => {
+        const n = c === 'Todos' ? encontrados.length : encontrados.filter(p => p.categoria === c).length;
+        return (
+          <button key={c} type="button" role="radio" aria-checked={valor === c} className={valor === c ? 'activo' : ''} data-accion="categoria-lote" onClick={() => onCambiar(c)}>
+            {nombresPestana[c]} <span className="lote-categoria-numero">{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const enCategoria = (lista, categoria) => (categoria === 'Todos' ? lista : lista.filter(p => p.categoria === categoria));
+
 // ---------- 1a. buscar el producto ----------
 export function ModalLoteManual() {
   const [busqueda, setBusqueda] = useState('');
-  const productos = todosLosProductos().filter(({ item }) => !busqueda.trim() || coincideNombre(busqueda, item.nombre));
+  // desde la pagina de un inventario se empieza en esa pestaña
+  const [categoria, setCategoria] = useState(() => (categorias.includes(estado.seccion) ? estado.seccion : 'Todos'));
+  const encontrados = todosLosProductos().filter(({ item }) => !busqueda.trim() || coincideNombre(busqueda, item.nombre));
+  const productos = enCategoria(encontrados, categoria);
   const esSalida = estado.lote.tipo === 'Salida';
 
   return (
@@ -52,11 +77,15 @@ export function ModalLoteManual() {
               <input id="lote-buscar" type="search" maxLength={largos.busqueda} autoComplete="off" autoFocus placeholder="Buscar producto" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
             </div>
             <button type="button" className="btn btn-blanco lote-camara" data-accion="escanear" title="Escanear el código de barras con la cámara" onClick={abrirCodigo}>
-              <IconoCodigo /> Cámara
+              <IconoCodigo /> <span className="lote-boton-texto">Escanear</span>
+            </button>
+            <button type="button" className="btn btn-blanco lote-camara" data-accion="dictar" title="Decir los productos con el micrófono" onClick={abrirVozLote}>
+              <IconoMicrofono /> <span className="lote-boton-texto">Hablar</span>
             </button>
           </div>
+          <PestanasCategoria valor={categoria} onCambiar={setCategoria} encontrados={encontrados} />
           <div className="lote-productos">
-            {productos.length === 0 && <p className="lote-vacio">No hay productos con ese nombre.</p>}
+            {productos.length === 0 && <p className="lote-vacio">{encontrados.length ? `No hay en ${nombresPestana[categoria]}: mira en las otras pestañas.` : 'No hay productos con ese nombre.'}</p>}
             {productos.map(({ item, categoria }) => {
               const sinStock = esSalida && disponible(item) <= 0;
               return (
@@ -72,7 +101,7 @@ export function ModalLoteManual() {
             })}
           </div>
           {!esSalida && (
-            <button type="button" className="btn-anadir" data-accion="crear-producto" onClick={() => abrirProducto(categorias.includes(estado.seccion) ? estado.seccion : 'Alimentos', { nombre: busqueda.trim().slice(0, largos.nombreProducto) })}>
+            <button type="button" className="btn-anadir" data-accion="crear-producto" onClick={() => abrirProducto(categoria !== 'Todos' ? categoria : categorias.includes(estado.seccion) ? estado.seccion : 'Alimentos', { nombre: busqueda.trim().slice(0, largos.nombreProducto) })}>
               + ¿No está? Crear producto nuevo
             </button>
           )}
@@ -403,7 +432,7 @@ export function ModalLoteVoz() {
     const dichoTipo = tipoDictado(textoCompleto);
     const textoDictado = dichoTipo.resto;
     // igual que procesarConOmni: con el tipo se sabe si "a María López" compra o vende
-    const tipoVoz = dichoTipo.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null);
+    const tipoVoz = dichoTipo.tipo ?? tipoElegido();
     if (!textoDictado.trim()) return setItemsEntendidos([]);
     const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
     setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
@@ -416,7 +445,7 @@ export function ModalLoteVoz() {
     const dichoTipo = tipoDictado(textoCompleto);
     const textoDictado = dichoTipo.resto;
     // con el tipo, "a María López" es quien compra (venta) o a quien se le compro (ingreso)
-    const tipoVoz = dichoTipo.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null);
+    const tipoVoz = dichoTipo.tipo ?? tipoElegido();
     if (!textoDictado.trim()) return setItemsEntendidos([]);
     setCargandoIA(true);
     setAviso('');
@@ -545,7 +574,7 @@ export function ModalLoteVoz() {
 
   // ingreso o salida: lo que se dijo o, si no se dijo, el de la lista que ya esta abierta
   const dicho = tipoDictado(texto);
-  const tipo = tipos[dicho.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null)];
+  const tipo = tipos[dicho.tipo ?? tipoElegido()];
   let falta = '';
   if (dicho.ambos) falta = 'Dijiste ingreso y salida: registra uno a la vez.';
   else if (texto.trim() && !tipo) falta = 'Falta decir si es ingreso o salida.';
@@ -820,9 +849,12 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
   const [texto, setTexto] = useState('');
 
   const posibles = x.dudas.map(c => productoPorClave(c)).filter(Boolean);
+  // empieza en la pestaña del producto elegido; con dudas ("¿cuál de estos?") se ven todas
+  const [categoria, setCategoria] = useState(() => (!posibles.length && elegido && !elegido.nuevo ? elegido.categoria : 'Todos'));
   const todos = todosLosProductos();
   const encontrados = texto.trim() ? todos.filter(({ item }) => coincideNombre(texto, item.nombre)) : posibles.length ? posibles : todos;
-  const visibles = encontrados.slice(0, MAXIMO_SUGERIDOS);
+  const enPestana = enCategoria(encontrados, categoria);
+  const visibles = enPestana.slice(0, MAXIMO_SUGERIDOS);
 
   function elegir(nuevaClave) {
     onElegir(nuevaClave);
@@ -868,8 +900,9 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
           }}
         />
       </div>
+      <PestanasCategoria valor={categoria} onCambiar={setCategoria} encontrados={encontrados} />
       <div className="lote-productos lote-productos-elegir">
-        {nuevo && !texto.trim() && (
+        {nuevo && !texto.trim() && (categoria === 'Todos' || categoria === nuevo.categoria) && (
           <button type="button" className="lote-producto" onClick={() => elegir('nuevo')}>
             <span className={`tarjeta-codigo ${colorCategoria(nuevo.categoria)}`}>+</span>
             <span><b>{nuevo.item.nombre}</b><small>{presentacion(nuevo.item)} · producto nuevo</small></span>
@@ -891,7 +924,8 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
           );
         })}
         {encontrados.length === 0 && <p className="lote-vacio">No hay productos con ese nombre.</p>}
-        {encontrados.length > visibles.length && <p className="lote-elegir-nota">Y {encontrados.length - visibles.length} más: escribe más letras para encontrarlo.</p>}
+        {encontrados.length > 0 && enPestana.length === 0 && <p className="lote-vacio">No hay en {nombresPestana[categoria]}: mira en las otras pestañas.</p>}
+        {enPestana.length > visibles.length && <p className="lote-elegir-nota">Y {enPestana.length - visibles.length} más: escribe más letras para encontrarlo.</p>}
         {!texto.trim() && posibles.length > 0 && <p className="lote-elegir-nota">¿No es ninguno? Escribe para buscar entre todos.</p>}
       </div>
     </>
@@ -965,7 +999,7 @@ export function ModalLoteItem({ modal }) {
           <div className="dos-columnas">
             <div className="campo">
               <label htmlFor="cantidad">CANTIDAD{elegido ? ` (${elegido.item.unidad.toUpperCase()})` : ''}</label>
-              <CampoNumero id="cantidad" decimales={decimales} placeholder="0" defaultValue={x.cantidad ?? ''} autoFocus={Boolean(elegido)} onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
+              <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" defaultValue={x.cantidad ?? ''} autoFocus={Boolean(elegido)} onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
               {elegido && !esIngreso && <small>Se pueden usar {disponible(elegido.item)}</small>}
             </div>
             {esIngreso && !merch && <CampoVencimiento inicial={x.vence} />}
@@ -980,7 +1014,7 @@ export function ModalLoteItem({ modal }) {
             </>
           )}
           {!esIngreso && elegido?.categoria === 'Salud' && <CampoPara ninos={opcionesNinos()} inicial={x.para} />}
-          <CampoObservaciones ejemplo="Opcional" inicial={x.observaciones} />
+          <CampoObservaciones ejemplo="Ej. una lata llegó abollada" inicial={x.observaciones} />
 
           <MensajeError texto={f.error} />
         </div>
