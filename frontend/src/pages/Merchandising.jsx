@@ -5,7 +5,8 @@ import {
   CATEGORIA, filtrarMerch, chipsMerch, opcionesTipo, opcionesSubcategoria, opcionesStockMerch, opcionesVenceMerch, ordenesMerch,
   tiposMerch, ordenTipos, soles,
 } from '../logica/merch.js';
-import { Encabezado, SinResultados } from '../components/Comunes.jsx';
+import { Encabezado, SinResultados, usePaginacion, Paginacion } from '../components/Comunes.jsx';
+import { tamanosTarjetas } from '../logica/paginas.js';
 import { BotonFiltros, Chips, PanelFiltros, CampoSelect } from '../components/Filtros.jsx';
 import { Tarjeta } from '../components/Tarjeta.jsx';
 
@@ -37,7 +38,8 @@ export function Merchandising() {
     'Stock bajo': productos.filter(bajoMinimo).length,
   };
   const subs = f.tipoMerch === 'Todos' ? opcionesSubcategoria : [['Todos', 'Todas'], ...tiposMerch[f.tipoMerch].subcategorias];
-  const valorStock = Math.round(lista.reduce((suma, p) => suma + disponible(p) * (p.precio ?? 0), 0) * 100) / 100;
+  const pagina = usePaginacion('merch', lista, tamanosTarjetas, JSON.stringify([f, estado.filtro, estado.busqueda]));
+  const valorStock =Math.round(lista.reduce((suma, p) => suma + disponible(p) * (p.precio ?? 0), 0) * 100) / 100;
 
   return (
     <div className="con-filtros con-filtros-inventario">
@@ -54,8 +56,9 @@ export function Merchandising() {
       </div>
       {chips.length > 0 && <div className="chips-inventario"><Chips grupo="merchFiltros" chips={chips} /></div>}
       {lista.length
-        ? <div className="grilla">{lista.map(item => <Tarjeta key={item.id} item={item} categoria={CATEGORIA} />)}</div>
+        ? <div className="grilla">{pagina.visibles.map(item => <Tarjeta key={item.id} item={item} categoria={CATEGORIA} />)}</div>
         : <SinResultados texto={productos.length ? 'Sin productos en este filtro' : 'Todavía no hay merchandising: regístralo con el botón + (Registrar ingreso → Crear producto nuevo)'} />}
+      <Paginacion control={pagina.control} nombre="productos" />
 
       {abierto && (
         <PanelFiltros grupo="merchFiltros" resultados={lista.length}>

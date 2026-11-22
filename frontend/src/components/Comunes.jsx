@@ -1,6 +1,76 @@
 // partes que se repiten en las paginas
+import { useRef, useState } from 'react';
 import { ordenar, verMovimiento, cambiar } from '../acciones.js';
 import { cambioDe, textoCambio } from '../logica/comunes.js';
+import { paginar } from '../logica/paginas.js';
+
+// ---------- paginas ----------
+// cuantos por pagina eligio cada lista (se recuerda mientras la app esta abierta)
+const tamanosElegidos = new Map();
+
+// clave: nombre de la lista; opciones: tamanos posibles (tamanosTabla o tamanosTarjetas)
+// firma: cambia cuando cambian los filtros o la busqueda, y entonces se vuelve a la pagina 1
+export function usePaginacion(clave, lista, opciones, firma) {
+  const [porPagina, setPorPagina] = useState(() => tamanosElegidos.get(clave) ?? opciones[0]);
+  const [pagina, setPagina] = useState(1);
+  const [firmaVista, setFirmaVista] = useState(firma);
+  if (firma !== firmaVista) {
+    setFirmaVista(firma);
+    setPagina(1);
+  }
+  const p = paginar(lista, pagina, porPagina);
+  return {
+    visibles: p.visibles,
+    control: {
+      ...p,
+      opciones,
+      porPagina,
+      irA: setPagina,
+      cambiarTamano: n => {
+        tamanosElegidos.set(clave, n);
+        setPorPagina(n);
+        setPagina(1);
+      },
+    },
+  };
+}
+
+// debajo de la lista: cuantos ver y las flechas para pasar de pagina
+// con pocos (no llegan al tamano mas chico) no se muestra
+export function Paginacion({ control, nombre = 'resultados' }) {
+  const barra = useRef(null);
+  const { total, pagina, paginas, desde, hasta, opciones, porPagina, irA, cambiarTamano } = control;
+  if (total <= opciones[0]) return null;
+
+  // al cambiar de pagina se vuelve al principio de la lista
+  const subir = () => requestAnimationFrame(() => {
+    const lista = barra.current?.closest('.con-filtros') ?? barra.current?.parentElement;
+    if (lista && lista.getBoundingClientRect().top < 0) lista.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+  const ir = n => {
+    irA(n);
+    subir();
+  };
+
+  return (
+    <nav className="paginacion" ref={barra} aria-label={`Páginas de ${nombre}`}>
+      <div className="paginacion-tamano">
+        <span>Ver</span>
+        <div className="filtros" role="group" aria-label="Cuántos ver por página">
+          {opciones.map(n => (
+            <button key={n} type="button" className={n === porPagina ? 'activo' : ''} aria-pressed={n === porPagina} data-accion="por-pagina" onClick={() => cambiarTamano(n)}>{n}</button>
+          ))}
+        </div>
+      </div>
+      <span className="paginacion-rango"><b>{desde}–{hasta}</b> de {total}</span>
+      <div className="paginacion-flechas">
+        <button type="button" className="paginacion-flecha" data-accion="pagina-anterior" aria-label="Página anterior" disabled={pagina <= 1} onClick={() => ir(pagina - 1)}>‹</button>
+        <span className="paginacion-pagina">{pagina} / {paginas}</span>
+        <button type="button" className="paginacion-flecha" data-accion="pagina-siguiente" aria-label="Página siguiente" disabled={pagina >= paginas} onClick={() => ir(pagina + 1)}>›</button>
+      </div>
+    </nav>
+  );
+}
 
 export const clasesMovimiento = { Ingreso: 'ingreso', Salida: 'salida', Ajuste: 'ajuste' };
 

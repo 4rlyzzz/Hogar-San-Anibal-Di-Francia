@@ -19,7 +19,6 @@ import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
 } from './Formulario.jsx';
-import { Desplegable } from './Desplegable.jsx';
 
 
 // lo que cambia entre ingreso y salida
@@ -793,6 +792,95 @@ function merchInicial(x) {
   };
 }
 
+// elegir el producto escribiendo su nombre (con muchos productos una lista desplegable no sirve)
+// sin escribir nada muestra primero los que pueden ser (lo dictado), si los hay
+const MAXIMO_SUGERIDOS = 40;
+
+function ElegirProducto({ clave, onElegir, x, esSalida }) {
+  const nuevo = x.productoNuevo ? { item: x.productoNuevo, categoria: x.categoria, nuevo: true } : null;
+  const elegido = clave === 'nuevo' ? nuevo : productoPorClave(clave);
+  const [buscando, setBuscando] = useState(!elegido);
+  const [texto, setTexto] = useState('');
+
+  const posibles = x.dudas.map(c => productoPorClave(c)).filter(Boolean);
+  const todos = todosLosProductos();
+  const encontrados = texto.trim() ? todos.filter(({ item }) => coincideNombre(texto, item.nombre)) : posibles.length ? posibles : todos;
+  const visibles = encontrados.slice(0, MAXIMO_SUGERIDOS);
+
+  function elegir(nuevaClave) {
+    onElegir(nuevaClave);
+    setBuscando(false);
+    setTexto('');
+  }
+
+  if (elegido && !buscando) {
+    return (
+      <>
+        <input type="hidden" name="producto" value={clave} />
+        <div className="lote-producto lote-elegido">
+          <span className={`tarjeta-codigo ${colorCategoria(elegido.categoria)}`}>{elegido.item.codigo ?? '+'}</span>
+          <span>
+            <b>{elegido.item.nombre}</b>
+            <small>{presentacion(elegido.item)} · {nombreCategoria(elegido.categoria)}{elegido.nuevo ? ' · producto nuevo' : ''}</small>
+          </span>
+          <button type="button" className="link" data-accion="cambiar-producto" onClick={() => setBuscando(true)}>Cambiar</button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <input type="hidden" name="producto" value={elegido ? clave : ''} />
+      <div className="buscador lote-buscador">
+        <IconoBuscar />
+        <input
+          id="producto"
+          type="search"
+          maxLength={largos.busqueda}
+          autoComplete="off"
+          autoFocus={Boolean(elegido) || !x.dudas.length}
+          placeholder="Escribe para buscar el producto"
+          value={texto}
+          onChange={e => setTexto(e.target.value)}
+          // Enter elige el primero (no envia el formulario)
+          onKeyDown={e => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (visibles[0]) elegir(claveProducto(visibles[0].categoria, visibles[0].item.id));
+          }}
+        />
+      </div>
+      <div className="lote-productos lote-productos-elegir">
+        {nuevo && !texto.trim() && (
+          <button type="button" className="lote-producto" onClick={() => elegir('nuevo')}>
+            <span className={`tarjeta-codigo ${colorCategoria(nuevo.categoria)}`}>+</span>
+            <span><b>{nuevo.item.nombre}</b><small>{presentacion(nuevo.item)} · producto nuevo</small></span>
+            <span className="opcion-flecha">›</span>
+          </button>
+        )}
+        {!texto.trim() && posibles.length > 0 && <p className="lote-elegir-nota">Puede ser:</p>}
+        {visibles.map(({ item, categoria }) => {
+          const k = claveProducto(categoria, item.id);
+          return (
+            <button key={k} type="button" className={`lote-producto ${k === clave ? 'activo' : ''}`} data-producto={item.nombre} onClick={() => elegir(k)}>
+              <span className={`tarjeta-codigo ${colorCategoria(categoria)}`}>{item.codigo}</span>
+              <span>
+                <b>{item.nombre}</b>
+                <small>{presentacion(item)} · {nombreCategoria(categoria)} · {esSalida ? `se pueden usar ${disponible(item)}` : `${item.cantidad} ${item.unidad} en stock`}</small>
+              </span>
+              <span className="opcion-flecha">›</span>
+            </button>
+          );
+        })}
+        {encontrados.length === 0 && <p className="lote-vacio">No hay productos con ese nombre.</p>}
+        {encontrados.length > visibles.length && <p className="lote-elegir-nota">Y {encontrados.length - visibles.length} más: escribe más letras para encontrarlo.</p>}
+        {!texto.trim() && posibles.length > 0 && <p className="lote-elegir-nota">¿No es ninguno? Escribe para buscar entre todos.</p>}
+      </div>
+    </>
+  );
+}
+
 export function ModalLoteItem({ modal }) {
   const f = useFormulario();
   const x = estado.lote?.items.find(i => i.id === modal.itemId);
@@ -815,14 +903,6 @@ export function ModalLoteItem({ modal }) {
   const esIngreso = estado.lote.tipo === 'Ingreso';
   const actividades = opcionesActividad();
 
-  // el nombre con su presentacion: hay varios tamaños del mismo producto
-  const opciones = [['', 'Elige el producto']];
-  if (x.productoNuevo) opciones.push([null, 'Nuevo'], ['nuevo', `${x.productoNuevo.nombre} · ${presentacion(x.productoNuevo)}`]);
-  for (const categoria of categorias) {
-    if (!todosLosProductos().some(p => p.categoria === categoria)) continue;
-    opciones.push([null, nombreCategoria(categoria)]);
-    for (const p of todosLosProductos().filter(p => p.categoria === categoria)) opciones.push([claveProducto(categoria, p.item.id), `${p.item.nombre} · ${presentacion(p.item)}`]);
-  }
   const dudas = x.dudas.map(c => productoPorClave(c)?.item.nombre).filter(Boolean);
 
   // presentacion dicha que no esta registrada ("bolsas de 10 L")
@@ -851,7 +931,7 @@ export function ModalLoteItem({ modal }) {
 
           <div className="campo">
             <label htmlFor="producto">PRODUCTO</label>
-            <Desplegable id="producto" name="producto" opciones={opciones} valor={clave} onChange={setClave} />
+            <ElegirProducto clave={clave} onElegir={setClave} x={x} esSalida={!esIngreso} />
             {dudas.length > 0 && !elegido && <small>Puede ser: {dudas.join(' o ')}</small>}
             {esIngreso && !x.productoNuevo && (otra ? (
               // la presentacion dicha no esta registrada: se ofrece crearla ya rellenada

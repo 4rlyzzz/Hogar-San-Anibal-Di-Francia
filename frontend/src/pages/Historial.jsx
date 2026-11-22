@@ -5,7 +5,8 @@ import { verMovimiento, descargarExcelHistorial, cambiarFiltro } from '../accion
 import { nombreCategoria, nombresCategoria, colorCategoria, textoCambio, textoStock, textoDetalle, mediosPago } from '../logica/comunes.js';
 import { filtrarHistorial, opcionesDe, chipsHistorial, subcategoriasDe } from '../logica/historial.js';
 import { tiposMerch, ordenTipos, tipoDeMovimiento } from '../logica/merch.js';
-import { Encabezado, clasesMovimiento } from '../components/Comunes.jsx';
+import { Encabezado, clasesMovimiento, usePaginacion, Paginacion } from '../components/Comunes.jsx';
+import { tamanosTabla } from '../logica/paginas.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, CampoFecha, Chips, opcionesCon } from '../components/Filtros.jsx';
 
 // boton de descarga: se desactiva mientras se crea el archivo
@@ -52,6 +53,8 @@ export function Historial() {
   const sinMerch = f.categoria !== 'Todos' && f.categoria !== 'Merchandising';
   const abierto = estado.filtrosAbiertos === 'historialFiltros';
   const antiguos = f.orden === 'antiguos';
+  // el Excel lleva todo lo filtrado; la pantalla, una pagina
+  const pagina = usePaginacion('historial', filas, tamanosTabla, JSON.stringify([f, estado.busqueda]));
 
   return (
     <>
@@ -77,7 +80,7 @@ export function Historial() {
             </span><span>INSUMO</span><span>CATEGORÍA</span><span>MOVIMIENTO</span><span>CANTIDAD</span><span>STOCK</span><span>DETALLE</span><span>RESPONSABLE</span>
           </div>
 
-          {filas.map(fila => {
+          {pagina.visibles.map(fila => {
             const indice = estado.historial.indexOf(fila);
             return (
               <button key={indice} className={`fila fila-boton ${clasesMovimiento[fila.movimiento]}`} data-accion="ver-movimiento" onClick={() => verMovimiento(indice)}>
@@ -94,6 +97,7 @@ export function Historial() {
           })}
 
           {filas.length === 0 && <div className="vacio">Ningún movimiento coincide con los filtros</div>}
+          <Paginacion control={pagina.control} nombre="movimientos" />
         </div>
 
         {abierto && (

@@ -50,6 +50,25 @@ class DictadoTests(PruebaAPI):
         self.assertEqual(cuerpo['model'], 'modelo')
         self.assertEqual(cuerpo['reasoning_effort'], 'low')
 
+    def test_direccion_de_cada_proveedor(self):
+        # OmniRoute y Groq: se agrega la ruta; Gemini: la direccion completa se usa tal cual
+        self.assertEqual(dictado.url_chat('http://localhost:20128'), 'http://localhost:20128/v1/chat/completions')
+        self.assertEqual(dictado.url_chat('https://api.groq.com/openai/'), 'https://api.groq.com/openai/v1/chat/completions')
+        gemini = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+        self.assertEqual(dictado.url_chat(gemini), gemini)
+        self.assertEqual(dictado.url_chat(gemini + '/'), gemini)
+
+    @override_settings(OMNIROUTE_URL='https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', OMNIROUTE_MODEL='gemini-2.5-flash')
+    def test_gemini_con_la_direccion_completa(self):
+        self.entrar_como(self.usuario)
+        contenido = json.dumps([{'tipo': 'salida', 'producto': 'Panetón', 'cantidad': 2}])
+        with mock.patch.object(dictado.requests, 'post', return_value=RespuestaIA(contenido)) as post:
+            r = self.dictar()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['items'][0]['producto'], 'Panetón')
+        self.assertEqual(post.call_args.args[0], 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions')
+        self.assertEqual(post.call_args.kwargs['json']['model'], 'gemini-2.5-flash')
+
     @override_settings(OMNIROUTE_REASONING_EFFORT='')
     def test_sin_reasoning_effort_no_se_envia(self):
         self.entrar_como(self.usuario)

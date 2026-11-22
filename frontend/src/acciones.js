@@ -916,6 +916,32 @@ export async function guardarEdicionMerch(modal, v) {
   mostrarToast(`Datos guardados · ${item.nombre}`);
 }
 
+// ---------- stock minimo (Alimentos y Salud) ----------
+// lo unico que se edita de un producto ya creado: el nombre, la unidad y la presentacion quedan fijos
+// (cambiarlos rompería el historial y los lotes)
+export function abrirEditarMinimo(categoria, id) {
+  const item = productoPorId(categoria, id);
+  if (item) abrirModal({ tipo: 'editar-minimo', item, categoria });
+}
+
+export async function guardarMinimo(modal, v) {
+  const { item, categoria } = modal;
+  const minimo = leer(v, 'minimo', cantidadDe(item.unidad, { que: 'el stock mínimo', puedeSerCero: true }));
+  if (minimo === item.minimo) {
+    abrirModal({ tipo: 'panel-producto', item, categoria, volver: null });
+    return;
+  }
+  try {
+    actualizarProducto(item, await actualizarProductoAPI(item.id, { stock_minimo: minimo }));
+  } catch (err) {
+    if (motivoDelServidor(err)) falla(motivoDelServidor(err));
+    throw err;
+  }
+  // de vuelta al detalle, ya con el nuevo minimo
+  abrirModal({ tipo: 'panel-producto', item, categoria, volver: null });
+  mostrarToast(`Stock mínimo: ${minimo} ${item.unidad} · ${item.nombre}`);
+}
+
 function leerDescuento(d) {
   if (d.descuentoDesde == null && d.precioDescuento == null) return;
   if (d.descuentoDesde == null) falla('Pon desde cuántas unidades va el descuento.', 'descuento-desde');
