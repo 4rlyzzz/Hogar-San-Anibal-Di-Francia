@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { paginar, tamanosTabla, tamanosTarjetas } from '../src/logica/paginas.js';
+import { paginar, tamanosTabla, tamanosTarjetas, tamanosUtiles } from '../src/logica/paginas.js';
 
 const cuarentaYCuatro = Array.from({ length: 44 }, (_, i) => i + 1);
 
@@ -27,4 +27,12 @@ test('lista vacia', () => {
 test('tres opciones de cuantos ver', () => {
   assert.deepEqual(tamanosTabla, [25, 50, 100]);
   assert.deepEqual(tamanosTarjetas, [15, 30, 50]);
+});
+
+test('solo los tamaños que cambian algo: no "50" si hay 18', () => {
+  assert.deepEqual(tamanosUtiles(tamanosTarjetas, 18), [15, 30]);
+  assert.deepEqual(tamanosUtiles(tamanosTarjetas, 30), [15, 30]);
+  assert.deepEqual(tamanosUtiles(tamanosTarjetas, 31), [15, 30, 50]);
+  assert.deepEqual(tamanosUtiles(tamanosTabla, 44), [25, 50]);
+  assert.deepEqual(tamanosUtiles(tamanosTabla, 300), [25, 50, 100]);
 });

@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import { ordenar, verMovimiento, cambiar } from '../acciones.js';
 import { cambioDe, textoCambio } from '../logica/comunes.js';
-import { paginar } from '../logica/paginas.js';
+import { paginar, tamanosUtiles } from '../logica/paginas.js';
 
 // ---------- paginas ----------
 // cuantos por pagina eligio cada lista (se recuerda mientras la app esta abierta)
@@ -41,6 +41,10 @@ export function Paginacion({ control, nombre = 'resultados' }) {
   const barra = useRef(null);
   const { total, pagina, paginas, desde, hasta, opciones, porPagina, irA, cambiarTamano } = control;
   if (total <= opciones[0]) return null;
+  // sin tamaños que mostrarian lo mismo (con 18 no va el 50); si se habia elegido uno de esos,
+  // se marca el ultimo que queda, que tambien muestra todos
+  const tamanos = tamanosUtiles(opciones, total);
+  const elegido = tamanos.includes(porPagina) ? porPagina : tamanos.at(-1);
 
   // al cambiar de pagina se vuelve al principio de la lista
   const subir = () => requestAnimationFrame(() => {
@@ -57,8 +61,8 @@ export function Paginacion({ control, nombre = 'resultados' }) {
       <div className="paginacion-tamano">
         <span>Ver</span>
         <div className="filtros" role="group" aria-label="Cuántos ver por página">
-          {opciones.map(n => (
-            <button key={n} type="button" className={n === porPagina ? 'activo' : ''} aria-pressed={n === porPagina} data-accion="por-pagina" onClick={() => cambiarTamano(n)}>{n}</button>
+          {tamanos.map(n => (
+            <button key={n} type="button" className={n === elegido ? 'activo' : ''} aria-pressed={n === elegido} data-accion="por-pagina" onClick={() => cambiarTamano(n)}>{n}</button>
           ))}
         </div>
       </div>
