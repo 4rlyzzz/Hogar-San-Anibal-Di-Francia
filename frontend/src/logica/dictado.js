@@ -393,7 +393,8 @@ function tieneTamano(item, tamano) {
 // el tamaño registrado; en merchandising va en el nombre ("Panetón ... caja 900 g", "Mermelada frasco 300 g")
 function tamanoDeItem(item) {
   if (item.medida && item.contenido) return { valor: item.contenido, medida: item.medida };
-  for (const m of plano(String(item.nombre ?? '')).matchAll(medidaSuelta)) {
+  // merchandising: en su presentacion ("caja 900 g"); los viejos lo tenian en el nombre
+  for (const m of plano(`${item.presentacion ?? ''} ${item.nombre ?? ''}`).matchAll(medidaSuelta)) {
     const medida = medidaRegistrada[abreviatura(m[2])];
     if (medida) return { valor: Number(m[1].replace(',', '.')), medida };
   }
@@ -454,9 +455,10 @@ const medidaRegistrada = { mg: null, mcg: null, g: 'g', kg: 'kg', ml: 'ml', l: '
 // el producto sin la dosis en el nombre pero con su tamaño registrado (Leche Gloria, latas de 400 g)
 function contradiceTamano(item, medida) {
   const m = medida.match(/^(\d+(?:\.\d+)?)([a-z]+)$/);
-  if (!m || !item.medida || !item.contenido) return false;
-  const enSuMedida = medidaRegistrada[m[2]] ? convertir(Number(m[1]), medidaRegistrada[m[2]], item.medida) : null;
-  return enSuMedida != null && Math.abs(enSuMedida - item.contenido) >= 0.001;
+  const suyo = tamanoDeItem(item);
+  if (!m || !suyo) return false;
+  const enSuMedida = medidaRegistrada[m[2]] ? convertir(Number(m[1]), medidaRegistrada[m[2]], suyo.medida) : null;
+  return enSuMedida != null && Math.abs(enSuMedida - suyo.valor) >= 0.001;
 }
 
 // productos: [{ item, categoria }]; devuelve { producto, dudas } como buscarProducto
@@ -842,7 +844,7 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     // (solo si se cuenta por unidades y sin contenido registrado: "2 cajas de paracetamol" de 10 unidades se convierte aparte)
     const envaseDelNombre = item && item.unidad === 'unidades' && !item.contenido
       && tokens[k] in unidadesDichas && !medidas.has(unidadesDichas[tokens[k]])
-      && mejorParecido(tokens[k], palabras(item.nombre)) === 1;
+      && mejorParecido(tokens[k], palabras(`${item.nombre} ${item.presentacion ?? ''}`)) === 1;
     if (envaseDelNombre) k++;
     else if (tokens[k] in unidadesDichas) unidadDicha = unidadesDichas[tokens[k++]];
     // "un kilo y medio"

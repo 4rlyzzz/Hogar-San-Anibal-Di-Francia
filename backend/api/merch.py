@@ -84,20 +84,29 @@ def _entero(valor, que, minimo=1, obligatorio=False):
 
 
 def nombre_completo(doc):
+    """El nombre con lo que distingue al producto: la marca del panetón, la variante, la talla y el color.
+
+    La presentacion ("caja 900 g") no va: ya se muestra aparte. Solo se agrega si hay otro con el mismo
+    nombre y otra presentacion (ver con_presentacion), como en Alimentos y Salud.
+    """
     partes = [doc['nombreBase']]
     base = doc['nombreBase'].lower()
     tipo, sub = doc['tipoMerch'], doc.get('subcategoria')
     if tipo == 'paneton':
         if doc['marca'].lower() not in base:
             partes.append(doc['marca'])
-        partes.append(doc['presentacion'])
-    elif tipo == 'hogar' and sub == 'alimentos':
-        partes.append(doc['presentacion'])
     elif tipo == 'hogar' and doc.get('variante'):
         partes.append(doc['variante'])
     elif tipo == 'promocional' and sub == 'prendas':
         partes += [f"talla {doc['talla']}", doc['color']]
     return ' '.join(' '.join(partes).split())
+
+
+def con_presentacion(doc):
+    """El nombre con su presentacion al final ("Panetón Clásico D'Onofrio caja 500 g"), o None si no tiene."""
+    if not doc.get('presentacion'):
+        return None
+    return ' '.join(f"{nombre_completo(doc)} {doc['presentacion']}".split())
 
 
 def _descuento(doc):

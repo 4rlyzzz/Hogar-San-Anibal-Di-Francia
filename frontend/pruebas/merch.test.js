@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  nombreMerch, precioSugerido, pideVence, puedeVence, llevaProveedor, pideProveedor, llevaCosto, textoMerch, textoTipo, textoPrecio,
+  nombreMerch, nombreMerchDisponible, baseMerch, precioSugerido, pideVence, puedeVence, llevaProveedor, pideProveedor, llevaCosto, textoMerch, textoTipo, textoPrecio,
   soles, filtrarMerch, merchVacio, chipsMerch, tipoDeMovimiento, textoTipoMovimiento,
 } from '../src/logica/merch.js';
 import { listaPersonas, personasVacio, montoDe, tiposDe, movimientosDePersona } from '../src/logica/personas.js';
@@ -12,18 +12,36 @@ import { calcularAlertas } from '../src/logica/alertas.js';
 import { reglas } from '../src/validacion.js';
 import { enDias, lote } from './ayuda.js';
 
-const paneton = { id: 'p1', nombre: "Panetón Clásico D'Onofrio caja 900 g", tipoMerch: 'paneton', subcategoria: null, marca: "D'Onofrio", presentacion: 'caja 900 g', unidad: 'unidades', precio: 25, descuentoDesde: 6, precioDescuento: 22, minimo: 6, cantidad: 10, lotes: [lote(1, 10, enDias(40))] };
+const paneton = { id: 'p1', nombre: "Panetón Clásico D'Onofrio", tipoMerch: 'paneton', subcategoria: null, marca: "D'Onofrio", presentacion: 'caja 900 g', unidad: 'unidades', precio: 25, descuentoDesde: 6, precioDescuento: 22, minimo: 6, cantidad: 10, lotes: [lote(1, 10, enDias(40))] };
 const polo = { id: 'p2', nombre: 'Polo Hogar talla M Azul', tipoMerch: 'promocional', subcategoria: 'prendas', articulo: 'polo', talla: 'M', color: 'Azul', unidad: 'unidades', precio: 30, minimo: 5, cantidad: 2, lotes: [lote(2, 2)] };
-const mermelada = { id: 'p3', nombre: 'Mermelada frasco 300 ml', tipoMerch: 'hogar', subcategoria: 'alimentos', presentacion: 'frasco 300 ml', perecible: true, unidad: 'unidades', precio: 12, minimo: 2, cantidad: 0, lotes: [] };
+const mermelada = { id: 'p3', nombre: 'Mermelada', tipoMerch: 'hogar', subcategoria: 'alimentos', presentacion: 'frasco 300 ml', perecible: true, unidad: 'unidades', precio: 12, minimo: 2, cantidad: 0, lotes: [] };
 const rosario = { id: 'p4', nombre: 'Rosario marrón', tipoMerch: 'hogar', subcategoria: 'general', articulo: 'rosario', variante: 'marrón', unidad: 'docenas', precio: 80, minimo: 1, cantidad: 3, lotes: [lote(3, 3)] };
 
 test('el nombre lleva lo que lo distingue', () => {
-  assert.equal(nombreMerch({ tipoMerch: 'paneton', nombreBase: 'Panetón Clásico', marca: "D'Onofrio", presentacion: 'caja 900 g' }), "Panetón Clásico D'Onofrio caja 900 g");
-  assert.equal(nombreMerch({ tipoMerch: 'paneton', nombreBase: "Panetón D'Onofrio", marca: "d'onofrio", presentacion: 'caja 900 g' }), "Panetón D'Onofrio caja 900 g");
+  // la presentacion no va en el nombre: se muestra aparte
+  assert.equal(nombreMerch({ tipoMerch: 'paneton', nombreBase: 'Panetón Clásico', marca: "D'Onofrio", presentacion: 'caja 900 g' }), "Panetón Clásico D'Onofrio");
+  assert.equal(nombreMerch({ tipoMerch: 'paneton', nombreBase: "Panetón D'Onofrio", marca: "d'onofrio", presentacion: 'caja 900 g' }), "Panetón D'Onofrio");
   assert.equal(nombreMerch({ tipoMerch: 'promocional', subcategoria: 'prendas', nombreBase: 'Polo Hogar', talla: 'M', color: 'Azul' }), 'Polo Hogar talla M Azul');
-  assert.equal(nombreMerch({ tipoMerch: 'hogar', subcategoria: 'alimentos', nombreBase: 'Mermelada', presentacion: 'frasco 300 ml' }), 'Mermelada frasco 300 ml');
+  assert.equal(nombreMerch({ tipoMerch: 'hogar', subcategoria: 'alimentos', nombreBase: 'Mermelada', presentacion: 'frasco 300 ml' }), 'Mermelada');
   assert.equal(nombreMerch({ tipoMerch: 'hogar', subcategoria: 'general', nombreBase: 'Rosario', variante: '' }), 'Rosario');
   assert.equal(nombreMerch({ tipoMerch: 'promocional', subcategoria: 'general', nombreBase: 'Taza  del  Hogar' }), 'Taza del Hogar');
+});
+
+test('otro tamaño del mismo: los dos llevan su presentacion', () => {
+  const nuevo = presentacion => ({ tipoMerch: 'paneton', nombre: "Panetón Clásico D'Onofrio", presentacion });
+  const existentes = [{ item: paneton, nuevo: false }, { item: polo, nuevo: false }];
+  // sin otro con ese nombre: queda sin presentacion
+  assert.deepEqual(nombreMerchDisponible(nuevo('caja 900 g'), [{ item: polo, nuevo: false }]), { nombre: "Panetón Clásico D'Onofrio", renombrar: [] });
+  // otro tamaño: el nuevo y el que ya estaba la reciben
+  const r = nombreMerchDisponible(nuevo('bolsa 500 g'), existentes);
+  assert.equal(r.nombre, "Panetón Clásico D'Onofrio bolsa 500 g");
+  assert.deepEqual(r.renombrar.map(x => [x.item.id, x.nombre]), [['p1', "Panetón Clásico D'Onofrio caja 900 g"]]);
+  // el mismo tamaño: es un repetido
+  assert.equal(nombreMerchDisponible(nuevo('caja 900 g'), existentes).repetido.item.id, 'p1');
+  // los que ya lo tienen a la manera vieja se reconocen
+  assert.equal(baseMerch({ nombre: "Panetón Clásico D'Onofrio caja 900 g", presentacion: 'caja 900 g' }), "Panetón Clásico D'Onofrio");
+  const viejo = { item: { ...paneton, nombre: "Panetón Clásico D'Onofrio caja 900 g" }, nuevo: false };
+  assert.deepEqual(nombreMerchDisponible(nuevo('bolsa 500 g'), [viejo]).renombrar, []);
 });
 
 test('precio con descuento desde la cantidad minima', () => {
@@ -228,7 +246,7 @@ test('palabras de merchandising que chocaban con el dictado', () => {
   const m = (id, nombre, x = {}) => ({ item: { id, nombre, unidad: 'unidades', tipoMerch: 'hogar', cantidad: 50, lotes: [], ...x }, categoria: 'Merchandising' });
   const lista = [
     { item: paneton, categoria: 'Merchandising' },
-    m('me', 'Mermelada de fresa frasco 300 g'), m('bo', 'Bolsa ecológica'), m('ga', 'Galletas de avena', { unidad: 'docenas' }),
+    m('me', 'Mermelada de fresa', { presentacion: 'frasco 300 g' }), m('bo', 'Bolsa ecológica'), m('ga', 'Galletas de avena', { unidad: 'docenas' }),
     m('tp', 'Taza Mejor Papá'), m('pr', 'Polo Hogar talla M Rosa'), m('ro', 'Rosario de madera'), m('st', 'Stickers', { unidad: 'packs' }),
     m('en', 'Entrada para la kermés'),
     { item: { id: 'pa2', nombre: 'Paracetamol 500mg', unidad: 'cajas', contenido: 10, medida: 'unidades' }, categoria: 'Salud' },

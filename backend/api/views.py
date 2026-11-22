@@ -270,6 +270,13 @@ class InventarioListCreateView(APIView):
             'unidos': [],
             **campos,
         }
+        # ya hay uno con ese nombre pero de otra presentacion (otro tamaño del panetón): el nuevo lleva
+        # la presentacion en el nombre para distinguirlos. Si es la misma, es un repetido (409 en _crear_unico)
+        repetido = _producto_con_nombre(merch.CATEGORIA, doc_data['nombre'])
+        if repetido and merch.con_presentacion(doc_data) and repetido.get('presentacion') != doc_data['presentacion']:
+            doc_data['nombre'] = merch.con_presentacion(doc_data)
+            if len(doc_data['nombre']) > merch.LARGO_NOMBRE:
+                return Response({'error': f"Con su presentación el nombre quedaría \"{doc_data['nombre']}\", que es muy largo: acórtalo"}, status=400)
         return _crear_unico(doc_data, merch.CATEGORIA)
 
 

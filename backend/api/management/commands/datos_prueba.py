@@ -128,7 +128,7 @@ SALUD = [
     ('Aripiprazol 15 mg', 'blísters', ('Blíster', 10, 'unidades'), 10, [I(49, 30, 380, 'Hospital Honorio Delgado'), S(31, 6, ['Valentina']), S(12, 6, ['Valentina'])]),
     ('Carbamazepina 200 mg', 'blísters', ('Blíster', 10, 'unidades'), 20, [I(46, 40, 450, 'Hospital Goyeneche', 'Donación libre'), S(26, 10, ['Mateo', 'Lucía']), S(7, 10, ['Mateo', 'Lucía'])]),
     ('Clonazepam 2 mg', 'blísters', ('Blíster', 10, 'unidades'), 6, [I(43, 12, 360, 'Hospital Honorio Delgado'), S(22, 4, ['Valentina']), S(3, 4, ['Valentina'])]),
-    ('Cloruro de sodio 0.9% 1000 ml', 'frascos', ('Frasco', 1000, 'ml'), 3, [I(41, 10, 600, 'ADRA Perú', 'Campaña de invierno'), S(15, 2)]),
+    ('Cloruro de sodio 0.9%', 'frascos', ('Frasco', 1000, 'ml'), 3, [I(41, 10, 600, 'ADRA Perú', 'Campaña de invierno'), S(15, 2)]),
     ('Fluoxetina 20 mg', 'blísters', ('Blíster', 10, 'unidades'), 10, [I(38, 20, 400, 'Hospital Goyeneche'), S(19, 5, ['Lucía'])]),
     ('Gasa estéril 10 x 10 cm', 'cajas', ('Caja', 20, 'unidades'), 5, [I(35, 8, 900, 'ADRA Perú'), S(17, 2), S(4, 2)]),
     ('Guantes quirúrgicos 7 1/2', 'cajas', ('Caja', 50, 'unidades'), 2, [I(52, 4, 1000, 'Hospital Honorio Delgado'), S(25, 1), S(6, 2)]),

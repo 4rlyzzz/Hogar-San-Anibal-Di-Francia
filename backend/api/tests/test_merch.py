@@ -42,14 +42,24 @@ class ProductoMerchTests(MerchBase):
     def test_paneton_con_su_nombre_completo(self):
         doc_id = self.crear_id(PANETON)
         doc = self.couch.leer('producto', doc_id)
-        self.assertEqual(doc_id, "producto:merchandising:paneton-clasico-d-onofrio-caja-900-g")
-        self.assertEqual(doc['nombre'], "Panetón Clásico D'Onofrio caja 900 g")
+        # la presentacion no va en el nombre: se muestra aparte
+        self.assertEqual(doc_id, "producto:merchandising:paneton-clasico-d-onofrio")
+        self.assertEqual((doc['nombre'], doc['presentacion']), ("Panetón Clásico D'Onofrio", 'caja 900 g'))
         self.assertEqual((doc['categoria'], doc['unidad'], doc['cantidad']), ('merchandising', 'unidades', 0))
         self.assertEqual((doc['precio'], doc['descuentoDesde'], doc['precioDescuento']), (25, 6, 22))
 
     def test_la_marca_no_se_repite_si_ya_esta_en_el_nombre(self):
         doc_id = self.crear_id(PANETON, nombre="Panetón D'Onofrio")
-        self.assertEqual(self.couch.leer('producto', doc_id)['nombre'], "Panetón D'Onofrio caja 900 g")
+        self.assertEqual(self.couch.leer('producto', doc_id)['nombre'], "Panetón D'Onofrio")
+
+    def test_otro_tamano_del_mismo_lleva_su_presentacion(self):
+        self.crear_id(PANETON)
+        doc_id = self.crear_id(PANETON, presentacion='bolsa 500 g')
+        self.assertEqual(self.couch.leer('producto', doc_id)['nombre'], "Panetón Clásico D'Onofrio bolsa 500 g")
+        # el mismo tamaño otra vez es un repetido
+        self.assertEqual(self.crear(PANETON).status_code, 409)
+        self.assertEqual(self.crear(MERMELADA).status_code, 201)
+        self.assertEqual(self.couch.leer('producto', 'producto:merchandising:mermelada-de-fresa')['nombre'], 'Mermelada de fresa')
 
     def test_cada_talla_y_color_es_otro_producto(self):
         self.crear_id(POLO)
