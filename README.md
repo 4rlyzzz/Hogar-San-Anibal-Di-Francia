@@ -113,33 +113,39 @@ npm run dev
 
 Abrir la dirección que indique Vite; por defecto es <http://localhost:5173/>.
 
-Dejar ambas terminales abiertas: una ejecuta Django y la otra el servidor de desarrollo del frontend. Si usas el dictado con IA, también la de OmniRoute (sección 5).
+Dejar ambas terminales abiertas: una ejecuta Django y la otra el servidor de desarrollo del frontend.
 
-## 5. Dictado con IA: OmniRoute (opcional)
+## 5. Dictado con IA (opcional)
 
-Sin OmniRoute la app funciona igual: el dictado usa el reconocimiento local, que entiende menos frases. Con OmniRoute, Django le pasa lo dictado a un modelo de IA (Groq, Gemini, etc.).
+Sin IA la app funciona igual: el dictado usa el reconocimiento local, que entiende menos frases. Con IA, Django le pasa lo dictado a un modelo (Groq, Gemini…) directamente, sin otro programa en medio.
 
-Para inicializar OmniRoute ejecutar (**3ra terminal**):
+1. Crear las claves (gratis):
+   - **Groq:** en <https://console.groq.com> → **API Keys**. Empieza con `gsk_`.
+   - **Gemini:** en <https://aistudio.google.com> → **Get API key**.
+2. Poner en `backend/.env` un grupo de variables por proveedor (ya vienen en `.env.example`, solo falta la clave):
 
-```bash
-npx omniroute
-```
+   ```
+   IA_1_URL=https://api.groq.com/openai
+   IA_1_KEY=gsk_...
+   IA_1_MODELOS=openai/gpt-oss-20b,openai/gpt-oss-120b
 
-Por defecto abre su panel en <http://localhost:20128/>. Ahí, la primera vez:
+   IA_2_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+   IA_2_KEY=...
+   IA_2_MODELOS=gemini-3.1-flash-lite,gemini-2.5-flash
+   ```
 
-1. Conectar un proveedor (por ejemplo Groq) con su API key, creada en la página de ese proveedor.
-2. Crear un **combo** con los modelos a usar (por ejemplo `inventario-fallback`).
-3. Crear una **API key** de OmniRoute para que Django pueda usarlo.
+   Se prueban en orden: los modelos de `IA_1` y después los de `IA_2`. Si uno falla (llegó a su límite del día, está caído o tarda), pasa al siguiente. Para un proveedor más, agrega `IA_3_URL`, `IA_3_KEY` e `IA_3_MODELOS`.
+3. Reiniciar Django (`Ctrl + C` y `python manage.py runserver`) para que lea los cambios del `.env`.
 
-Luego poner en `backend/.env`:
+Para saber si funciona, mira la terminal de Django al dictar:
 
-- `OMNIROUTE_URL=http://localhost:20128`
-- `OMNIROUTE_API_KEY`: la API key creada en OmniRoute (el paso 3).
-- `OMNIROUTE_MODEL`: el nombre **exacto** del combo (el paso 2). Si no coincide, la IA falla y el dictado usa el reconocimiento local sin avisar.
+- `Dictado con IA: respondio IA_1 openai/gpt-oss-20b` → respondió ese modelo.
+- `Dictado con IA: IA_1 openai/gpt-oss-20b respondio 429` → ese modelo llegó a su límite y se probó el siguiente.
+- `revisa IA_1_KEY` → la clave está mal copiada.
+- `respondio 404` → el nombre del modelo no existe: cópialo exacto de la página del proveedor.
+- `respondio 400` → ese modelo no acepta `reasoning_effort`: pon `IA_1_REASONING=` vacío (con el número de ese proveedor).
 
-Reiniciar Django (`Ctrl + C` y `python manage.py runserver`) para que lea los cambios del `.env`.
-
-> **Nota:** si el modelo rechaza el parámetro `reasoning_effort`, pon `OMNIROUTE_REASONING_EFFORT=` vacío en `backend/.env`.
+> **Nota:** las claves van solo en `backend/.env` (o en las variables de Railway), nunca en el repositorio ni en el chat del grupo.
 
 ## 6. Actualizar después de un pull
 

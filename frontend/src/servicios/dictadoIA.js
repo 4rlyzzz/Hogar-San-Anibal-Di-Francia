@@ -1,8 +1,8 @@
 import api from './api.js';
 import { preprocesarTextoVoz } from '../logica/dictado.js';
 
-// El dictado con IA pasa por Django (/api/dictado/), que llama a OmniRoute con su propia clave.
-// El navegador nunca ve esa clave ni le manda el token de la app a OmniRoute.
+// El dictado con IA pasa por Django (/api/dictado/), que llama a la IA (Groq, Gemini...) con sus propias claves.
+// El navegador nunca ve esa clave ni le manda el token de la app a la IA.
 // Si la IA no esta configurada o falla, devuelve [] y la pantalla usa el reconocimiento local.
 
 // la vista previa ("Entendí") y "Agregar a la lista" piden lo mismo: se guarda la consulta
@@ -11,7 +11,7 @@ import { preprocesarTextoVoz } from '../logica/dictado.js';
 const recientes = new Map();
 const MAX_RECIENTES = 10;
 
-export const procesarTextoConOmniroute = (textoDictado) => {
+export const procesarTextoConIA = (textoDictado) => {
   const texto = preprocesarTextoVoz(textoDictado);
   if (!texto) return Promise.resolve([]);
   if (!recientes.has(texto)) {

@@ -1,5 +1,5 @@
 // registrar varios productos a la vez: buscar (o escanear o dictar), la lista, editar una fila y confirmar
-import { procesarTextoConOmniroute } from '../servicios/Omniroute';
+import { procesarTextoConIA } from '../servicios/dictadoIA.js';
 import { useEffect, useRef, useState } from 'react';
 import { estado } from '../estado.js';
 import { usuario } from '../data/datos.js';
@@ -392,7 +392,7 @@ export function ModalLoteVoz() {
   // el temporizador de "dejo de escribir"
   const espera = useRef(null);
 
-  // Procesa con OmniRoute y obtiene la lista visual para el bloque "ENTENDÍ"
+  // Procesa con la IA y obtiene la lista visual para el bloque "ENTENDÍ"
   const procesarConOmni = async (textoCompleto) => {
     const numero = ++consulta.current;
     // "ingreso" o "salida" no son productos
@@ -405,8 +405,8 @@ export function ModalLoteVoz() {
     setAviso('');
 
     try {
-      // 1. Petición a OmniRoute
-      const json = await procesarTextoConOmniroute(textoDictado);
+      // 1. Petición a la IA (por Django)
+      const json = await procesarTextoConIA(textoDictado);
       if (numero !== consulta.current) return;
 
       // 2. Mapeo para previsualización gráfica en UI
@@ -439,13 +439,13 @@ export function ModalLoteVoz() {
       setItemsEntendidos(mapeados);
     } catch {
       if (numero !== consulta.current) return;
-      // Fallback: Si OmniRoute da error, usamos la interpretación local nativa
+      // Fallback: si la IA da error, usamos la interpretación local nativa
       if (typeof interpretarDictado === 'function') {
         const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
         // igual que al agregar a la lista (agregarDictado)
         setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
       } else {
-        setAviso('Error al conectar con OmniRoute. Usando procesamiento local.');
+        setAviso('No se pudo usar la IA: se usa el reconocimiento local.');
       }
     } finally {
       if (numero === consulta.current) setCargandoIA(false);
@@ -519,7 +519,7 @@ export function ModalLoteVoz() {
       if (reconocedor.current) reconocedor.current.debeSeguir = false;
       reconocedor.current?.stop();
       setGrabando(false);
-      // Al apagar el micrófono (Tiempo 2), consultamos a OmniRoute
+      // Al apagar el micrófono (Tiempo 2), consultamos a la IA
       procesarConOmni(texto);
     } else {
       escucharNavegador();
@@ -588,7 +588,7 @@ export function ModalLoteVoz() {
             {falta && <small id="voz-falta">{falta}</small>}
           </div>
 
-          {cargandoIA && <p style={{ textAlign: 'center', color: '#007acc' }}>🤖 Procesando lista con OmniRoute...</p>}
+          {cargandoIA && <p style={{ textAlign: 'center', color: '#007acc' }}>🤖 Procesando con IA…</p>}
 
           {/* Renderizado de la lista entendida */}
           {itemsEntendidos.length > 0 && (

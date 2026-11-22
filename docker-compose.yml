@@ -33,9 +33,13 @@ services:
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:?Falta COUCHDB_PASSWORD en .env.compose}
       COUCHDB_ADMIN_USER: ${COUCHDB_ADMIN_USER:-admin}
       COUCHDB_ADMIN_PASSWORD: ${COUCHDB_ADMIN_PASSWORD}
-      OMNIROUTE_URL: ${OMNIROUTE_URL:-}
-      OMNIROUTE_API_KEY: ${OMNIROUTE_API_KEY:-}
-      OMNIROUTE_MODEL: ${OMNIROUTE_MODEL:-inventario-fallback}
+      # dictado con IA (opcional; ver backend/.env.example)
+      IA_1_URL: ${IA_1_URL:-}
+      IA_1_KEY: ${IA_1_KEY:-}
+      IA_1_MODELOS: ${IA_1_MODELOS:-}
+      IA_2_URL: ${IA_2_URL:-}
+      IA_2_KEY: ${IA_2_KEY:-}
+      IA_2_MODELOS: ${IA_2_MODELOS:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

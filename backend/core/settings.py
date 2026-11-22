@@ -129,16 +129,38 @@ CACHES = {
     }
 }
 
-# ---------- OmniRoute (dictado con IA) ----------
-# Opcional: si OMNIROUTE_URL esta vacio, el dictado usa solo el reconocimiento local.
-# El navegador nunca habla con OmniRoute: pasa por /api/dictado/ (la clave queda en el servidor).
-OMNIROUTE_URL = os.getenv('OMNIROUTE_URL', '').rstrip('/')
-OMNIROUTE_API_KEY = os.getenv('OMNIROUTE_API_KEY', '')
-OMNIROUTE_MODEL = os.getenv('OMNIROUTE_MODEL', 'inventario-fallback')
-# Para modelos que razonan antes de responder: cuanto piensan (low/medium/high; vacio = no se envia)
-# y el limite de tokens de la respuesta, que incluye ese razonamiento.
-OMNIROUTE_REASONING_EFFORT = os.getenv('OMNIROUTE_REASONING_EFFORT', 'low')
-OMNIROUTE_MAX_TOKENS = int(os.getenv('OMNIROUTE_MAX_TOKENS', '1500'))
+# ---------- Dictado con IA ----------
+# Opcional: sin ningun proveedor, el dictado usa solo el reconocimiento local.
+# El navegador nunca habla con la IA: pasa por /api/dictado/ (las claves quedan en el servidor).
+# Cada proveedor (compatible con la API de OpenAI: Groq, Gemini, OmniRoute...) va numerado; el numero
+# es el orden en que se prueban, y dentro de cada uno sus modelos en el orden escrito:
+#   IA_1_URL, IA_1_KEY, IA_1_MODELOS (separados por coma), IA_1_REASONING (opcional)
+#   IA_2_URL, ...
+def _proveedores_ia():
+    proveedores = []
+    for n in range(1, 10):
+        url = os.getenv(f'IA_{n}_URL', '').strip().rstrip('/')
+        if not url:
+            continue
+        modelos = _lista(f'IA_{n}_MODELOS')
+        if not modelos:
+            print(f'AVISO: IA_{n}_URL no tiene IA_{n}_MODELOS: ese proveedor no se usa', file=sys.stderr)
+            continue
+        proveedores.append({
+            'nombre': f'IA_{n}',
+            'url': url,
+            'clave': os.getenv(f'IA_{n}_KEY', '').strip(),
+            'modelos': modelos,
+            # para modelos que razonan antes de responder: cuanto piensan (low/medium/high; vacio = no se envia)
+            'reasoning': os.getenv(f'IA_{n}_REASONING', 'low').strip(),
+        })
+    return proveedores
+
+
+IA_PROVEEDORES = _proveedores_ia()
+# limite de tokens de la respuesta (incluye el razonamiento) y segundos de espera por modelo
+IA_MAX_TOKENS = int(os.getenv('IA_MAX_TOKENS', '1500'))
+IA_ESPERA = int(os.getenv('IA_ESPERA', '10'))
 
 # ---------- Produccion (DEBUG=False) ----------
 if not DEBUG:

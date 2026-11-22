@@ -39,7 +39,7 @@ import {
 } from './logica/merch.js';
 import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
 import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from './logica/dictado.js';
-import { procesarTextoConOmniroute } from './servicios/Omniroute.js';
+import { procesarTextoConIA } from './servicios/dictadoIA.js';
 
 // envases (en plural)
 export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes', 'botellas', 'frascos', 'sobres'];
@@ -1903,9 +1903,9 @@ export async function agregarDictado(v) {
   // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
   const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? abierta));
 
-  // 3. OmniRoute (LLM): Parsing de alta precisión para productos, cantidades y fechas ISO
+  // 3. IA (Groq, Gemini... via Django): Parsing de alta precisión para productos, cantidades y fechas ISO
   // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
-  const itemsProcesados = await procesarTextoConOmniroute(dicho.resto);
+  const itemsProcesados = await procesarTextoConIA(dicho.resto);
 
   // --- FILTRO POST-PROCESADO: Anti-alucinaciones y limpieza de ruido ---
   const ruídosComunes = new Set(['eh', 'um', 'ah', 'pantalla', 'ruido', 'undefined', 'null', 'algo', 'cosa']);
@@ -1967,7 +1967,7 @@ export async function agregarDictado(v) {
       ? cantidadDeLaIA(itemIA.cantidad, itemIA.unidad, producto?.item, localDelProducto ?? null)
       : r.cantidad;
 
-    // 💡 Prioridad de Fecha: 1. Fecha ISO de OmniRoute, 2. Regex del Parser Local
+    // 💡 Prioridad de Fecha: 1. Fecha ISO de la IA, 2. Regex del Parser Local
     const fechaFinal = itemIA.vence || (r.vence && reglas.vencimiento(r.vence).ok ? r.vence : null);
 
     // 💡 Mapeo de Donador: 1. Donador ID desde la BD local, 2. Texto del donador dicho
