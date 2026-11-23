@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { interpretarDictado, interpretarMezclado, partirPorTipo, tipoDictado, partirPorInventario, categoriaDeIA, enInventario, productoDeNombre, desempatarConLocal } from '../src/logica/dictado.js';
+import { interpretarDictado, interpretarMezclado, partirPorTipo, tipoDictado, partirPorInventario, categoriaDeIA, enInventario, productoDeNombre, desempatarConLocal, compartirVentaIA } from '../src/logica/dictado.js';
 
 // la misma mermelada en dos inventarios
 const mermeladaA = { item: { id: 'a1', nombre: 'Mermelada de fresa', unidad: 'frascos' }, categoria: 'Alimentos' };
@@ -126,4 +126,88 @@ test('la cantidad separada de su producto por una pausa', () => {
 test('"blister, 10 unidades" sin "de" es el tamaño, no la cantidad', () => {
   assert.equal(dictar('salida de 15 carbamazepina, 200 miligramos blister, 10 unidades')[0].cantidad, 15);
   assert.equal(dictar('salida de carbamazepina 200 miligramos en blister 10 unidades')[0].cantidad, null);
+});
+
+// ---------- dictado largo con palabras mal escuchadas ----------
+const mas = [
+  ...salud,
+  { item: { id: 'a5', nombre: 'Lenteja', unidad: 'bolsas', contenido: 500, medida: 'g' }, categoria: 'Alimentos' },
+  { item: { id: 's3', nombre: 'Fluoxetina 20 mg', unidad: 'blísters', contenido: 10, medida: 'unidades' }, categoria: 'Salud' },
+  { item: { id: 's4', nombre: 'Gasa estéril 10 x 10 cm', unidad: 'cajas', contenido: 20, medida: 'unidades' }, categoria: 'Salud' },
+  { item: { id: 'm3', nombre: 'Taza Hogar San Aníbal', unidad: 'unidades', tipoMerch: 'hogar' }, categoria: 'Merchandising' },
+];
+const extra = () => ({ donadores: [{ id: 'd1', nombre: 'Colegio San José' }], compradores: [{ id: 'c1', nombre: 'Rosa Quispe' }], actividades: ['Día del niño'] });
+
+test('"el primero de enero" es el dia 1', () => {
+  const [r] = interpretarMezclado('ingreso de 7 lentejas que vencen el primero de enero del 2027', mas, extra);
+  assert.equal(r.vence, '2027-01-01');
+});
+
+test('un donador registrado dicho sin "donado por" no se toma como producto', () => {
+  const r = interpretarMezclado('ingreso de 7 lentejas en bolsa de 500 g. Nadas por el colegio San José por el día del niño.', mas, extra);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].donador.nombre, 'Colegio San José');
+  assert.equal(r[0].actividad, 'Día del niño');
+});
+
+test('"blista" y la coma no parten el producto en varios', () => {
+  const r = interpretarMezclado('ingreso de fluoxetina, 20 miligramos en blista de 10 unidades que vencen el primero de febrero del 2027', mas, extra);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].producto.item.nombre, 'Fluoxetina 20 mg');
+  assert.equal(r[0].cantidad, null);
+  assert.equal(r[0].vence, '2027-02-01');
+});
+
+test('"10x10cm" de la IA es la gasa de 10 x 10 cm, no la taza', () => {
+  assert.equal(productoDeNombre('Gaza esteril 10x10cm', mas).producto.item.nombre, 'Gasa estéril 10 x 10 cm');
+  assert.equal(productoDeNombre('Gasa estéril 10 por 10 cm', mas).producto.item.nombre, 'Gasa estéril 10 x 10 cm');
+});
+
+test('"comprada por" es quien compra; el comprador de la IA solo entre ventas', () => {
+  const [r] = interpretarMezclado('venta de 3 panetones a 8 soles cada uno comprada por Rosa Quispe', mas, extra);
+  assert.equal(r.comprador.nombre, 'Rosa Quispe');
+  const ia = compartirVentaIA([{ tipo: 'ingreso', producto: 'Lenteja' }, { tipo: 'salida', producto: 'Tarjeta', comprador: 'Rosa Quispe' }]);
+  assert.equal(ia[0].comprador, undefined);
+});
+
+// ---------- palabras parecidas que tienen que seguir siendo distintas ----------
+test('"llave" es un producto, no Yape; "yape" si es el medio de pago', () => {
+  const conLlave = [...mas, { item: { id: 'm4', nombre: 'Llave decorativa', unidad: 'unidades', tipoMerch: 'hogar' }, categoria: 'Merchandising' }];
+  const [sin] = interpretarMezclado('venta de 2 llaves decorativas a Rosa Quispe', conLlave, extra);
+  assert.equal(sin.producto.item.nombre, 'Llave decorativa');
+  assert.equal(sin.medioPago, '');
+  const [con] = interpretarMezclado('venta de 2 llaves decorativas a Rosa Quispe con yape', conLlave, extra);
+  assert.equal(con.producto.item.nombre, 'Llave decorativa');
+  assert.equal(con.medioPago, 'yape-plin');
+});
+
+test('el nombre de un donador dentro del nombre de un producto sigue siendo el producto', () => {
+  const donadores = () => ({ donadores: [{ id: 'd2', nombre: 'Hogar San Aníbal' }] });
+  const [r] = interpretarMezclado('salida de 2 tazas hogar san aníbal', mas, donadores);
+  assert.equal(r.producto.item.nombre, 'Taza Hogar San Aníbal');
+  assert.equal(r.donador, null);
+});
+
+test('"primero" solo es el dia antes de un mes; "blista" no cambia otras palabras', () => {
+  const [r] = interpretarMezclado('ingreso de 2 kilos de arroz primero', mas, extra);
+  assert.equal(r.vence, null);
+  assert.equal(r.producto.item.nombre, 'Arroz');
+});
+
+// ---------- dictado con pausas: lo que se dice despues de una pausa va con su producto ----------
+test('precio, comprador y pago dichos en pausas no se pierden', () => {
+  const conTodo = t => ({ tipo: t, compradores: [{ id: 'c2', nombre: 'Carmen Ruiz' }], proveedores: [{ id: 'p1', nombre: 'Distribuidora Andina' }] });
+  const [tarjeta] = interpretarMezclado('venta de 3 tarjetas navideñas con sobre. En packs a 8 soles cada una compradas por Carmen Ruiz. Con yape.',
+    [...mas, { item: { id: 'm5', nombre: 'Tarjeta navideña con sobre', unidad: 'packs', tipoMerch: 'hogar' }, categoria: 'Merchandising' }], conTodo);
+  assert.equal(tarjeta.cantidad, 3);
+  assert.equal(tarjeta.precio, 8);
+  assert.equal(tarjeta.comprador.nombre, 'Carmen Ruiz');
+  assert.equal(tarjeta.medioPago, 'yape-plin');
+
+  // "a un precio de 14 soles": ese "un" no es 1 unidad de otro producto
+  const r = interpretarMezclado('ingreso de taza hogar san aníbal. Por la distribuidora Andina. A un precio de 14 soles cada una.', mas, conTodo);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].precio, 14);
+  assert.equal(r[0].cantidad, null);
+  assert.equal(r[0].proveedor.nombre, 'Distribuidora Andina');
 });

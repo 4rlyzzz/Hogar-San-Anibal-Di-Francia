@@ -79,5 +79,6 @@ test('usuario y contraseña (mismas reglas que el backend)', () => {
 test('dictado limpia signos raros y limita el largo', () => {
   ok(reglas.dictado('dos kilos de arroz <b>'), 'dos kilos de arroz b');
   falla(reglas.dictado('   '));
-  falla(reglas.dictado('a'.repeat(501)));
+  falla(reglas.dictado('a'.repeat(1001)));
+  assert.equal(reglas.dictado('a'.repeat(1000)).ok, true);
 });

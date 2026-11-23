@@ -54,6 +54,7 @@ const unidadesDichas = {
   lata: 'latas', latas: 'latas', bolsa: 'bolsas', bolsas: 'bolsas', saco: 'sacos', sacos: 'sacos',
   caja: 'cajas', cajas: 'cajas', paquete: 'paquetes', paquetes: 'paquetes', botella: 'botellas', botellas: 'botellas',
   frasco: 'frascos', frascos: 'frascos', sobre: 'sobres', sobres: 'sobres', blister: 'blísters', blisters: 'blísters',
+  blista: 'blísters', blistas: 'blísters', blisteres: 'blísters',
   ampolla: 'ampollas', ampollas: 'ampollas', tubo: 'tubos', tubos: 'tubos', unidad: 'unidades', unidades: 'unidades',
   pack: 'packs', packs: 'packs',
 };
@@ -118,7 +119,8 @@ export function buscarFecha(tokens, hoy = new Date()) {
     // el dia antes: "15 de octubre"
     let k = m - 1;
     if (tokens[k] === 'de') k--;
-    const d = k >= 0 ? leerNumero(tokens, k) : null;
+    // "el primero de enero" es el dia 1
+    const d = k >= 0 ? (['primero', 'primer'].includes(tokens[k]) ? { valor: 1, fin: k + 1 } : leerNumero(tokens, k)) : null;
     if (d && d.fin === (tokens[m - 1] === 'de' ? m - 1 : m) && d.valor >= 1 && d.valor <= 31) {
       dia = d.valor;
       inicio = k;
@@ -472,6 +474,8 @@ const medidaSuelta = /(\d+(?:[.,]\d+)?)\s*(miligramos?|mcg|mg|kilogramos?|kilos?
 
 function palabrasConMedida(texto) {
   return plano(String(texto ?? ''))
+    // las medidas de largo por ancho van juntas: "10 x 10 cm", "10x10cm" y "10 por 10 cm" son lo mismo
+    .replace(/(\d+)\s*(?:x|por)\s*(\d+)\s*(cm|mm|m)?(?![a-zñ])/g, (_, a, b, u) => `${a}x${b}${u ?? ''}`)
     .replace(medidaSuelta, (_, n, u) => n.replace(',', '.') + abreviatura(u))
     .split(/[^a-z0-9ñ.]+/)
     .map(p => p.replace(/^\.+|\.+$/g, ''))
@@ -562,6 +566,26 @@ export function cantidadDeLaIA(cantidad, unidad, item, local = null) {
   return cantidad;
 }
 
+// un donador registrado cuyo nombre (de dos palabras o mas) se dijo completo y seguido
+// si su nombre esta dentro del de un producto ("Taza Hogar San Aníbal" y el donador "Hogar San Aníbal"), no cuenta:
+// sin "donado por" puede ser el producto
+function donadorNombrado(tokens, usados, donadores, productos = []) {
+  // con las mismas letras que tokens (plano deja la ñ)
+  const palabrasPlanas = t => plano(String(t ?? '')).split(/[^a-z0-9ñ]+/).filter(Boolean);
+  const nombresProductos = productos.map(p => ` ${palabrasPlanas(p.item.nombre).join(' ')} `);
+  for (const d of donadores) {
+    const suyas = palabrasPlanas(d.nombre).filter(p => !relleno.has(p));
+    if (suyas.length < 2) continue;
+    if (nombresProductos.some(n => n.includes(` ${suyas.join(' ')} `))) continue;
+    for (let i = 0; i + suyas.length <= tokens.length; i++) {
+      if (suyas.every((p, k) => !usados.has(i + k) && tokens[i + k] === p)) {
+        return { donador: d, posiciones: suyas.map((_, k) => i + k) };
+      }
+    }
+  }
+  return null;
+}
+
 // ---------- sin fecha de vencimiento ----------
 const avisosSinVence = [['sin', 'fecha'], ['sin', 'vencimiento'], ['sin', 'vence'], ['no', 'vence'], ['no', 'vencen'], ['no', 'caduca'], ['no', 'caducan'],
   ['no', 'tiene', 'fecha'], ['no', 'tienen', 'fecha'], ['no', 'tiene', 'vencimiento'], ['no', 'expira']];
@@ -620,9 +644,10 @@ function buscarActividad(tokens, actividades) {
   return mejor;
 }
 
-const avisosComprador = [['vendido', 'a'], ['vendida', 'a'], ['vendidos', 'a'], ['vendidas', 'a'], ['le', 'vendi', 'a'], ['a', 'nombre', 'de'],
+const avisosComprador = [['vendido', 'a'], ['vendida', 'a'], ['vendidos', 'a'], ['vendidas', 'a'],
+  ['comprado', 'por'], ['comprada', 'por'], ['comprados', 'por'], ['compradas', 'por'], ['le', 'vendi', 'a'], ['a', 'nombre', 'de'],
   ['comprador'], ['compradora'], ['cliente'], ['compro'], ['compraron']];
-const avisosProveedor = [['comprado', 'a'], ['comprada', 'a'], ['comprados', 'a'], ['compradas', 'a'], ['proveedor'], ['proveedora'], ['distribuidor']];
+const avisosProveedor = [['comprado', 'a'], ['comprada', 'a'], ['comprados', 'a'], ['compradas', 'a'], ['proveedor'], ['proveedora'], ['distribuidor'], ['por', 'la', 'distribuidora']];
 const mediosDichos = { yape: 'yape-plin', llape: 'yape-plin', yapeo: 'yape-plin', plin: 'yape-plin', plim: 'yape-plin', efectivo: 'efectivo', cash: 'efectivo', transferencia: 'transferencia', deposito: 'transferencia', transfirio: 'transferencia' };
 const palabrasPago = new Set(['pago', 'pagaron', 'pagado', 'pagada', 'pagan', 'paga']);
 const palabrasSoles = new Set(['soles', 'sol']);
@@ -673,6 +698,9 @@ function buscarPago(tokens, usados) {
     if (tokens[k] === 'cada') usados.add(k).add(k + 1);
     if (tokens[i - 1] === 'a' || tokens[i - 1] === 'por') usados.add(i - 1);
     if (tokens[i - 2] === 'a' && conSigno) usados.add(i - 2);
+    // "a un precio de 14 soles", "costo de 14 soles": ese "un" no es una cantidad
+    const precioDicho = ['precio', 'costo'].includes(tokens[i - 1]) || (tokens[i - 1] === 'de' && ['precio', 'costo'].includes(tokens[i - 2]));
+    for (let j = i - 1; precioDicho && j >= 0 && ['de', 'precio', 'costo', 'un', 'el', 'su', 'a', 'al', 'con'].includes(tokens[j]); j--) usados.add(j);
     break;
   }
   return { medioPago, precio: precio != null ? redondear(precio) : null };
@@ -801,6 +829,14 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     donador = buscarDonador(resto, donadores);
     // como se dijo, para proponerlo como donador nuevo
     if (!donador && resto.length) donadorDicho = originales.slice(desde).join(' ');
+  } else {
+    // sin aviso (el reconocedor escribio "nadas por" en vez de "donadas por"): un donador registrado
+    // dicho con su nombre completo ("por el Colegio San José")
+    const encontrado = donadorNombrado(tokens, usados, donadores, productos);
+    if (encontrado) {
+      donador = encontrado.donador;
+      encontrado.posiciones.forEach(k => usados.add(k));
+    }
   }
 
   // fecha de vencimiento dicha ("vence el 15 de octubre de 2026"): sus palabras no son producto ni cantidad
@@ -1138,6 +1174,8 @@ export function interpretarDictado(texto, productos, extra = {}) {
       const anterior = resultado.at(-1);
       for (const campo of ['comprador', 'compradorDicho', 'proveedor', 'proveedorDicho', 'medioPago']) if (r[campo]) anterior[campo] = r[campo];
       if (r.precio != null) anterior.precio = r.precio;
+      // si despues se vuelve a leer junto con lo que sigue ("... Con yape."), esto no se pierde
+      anterior.dicho = `${anterior.dicho} ${parte}`;
     } else if (tieneDonador) {
       if (r.paraTodos || resultado.length === 0) paraTodos = r;
       else {
@@ -1176,8 +1214,11 @@ function compartirVenta(items, grupos) {
 }
 
 // lo mismo con lo que entendio la IA: [{ producto, comprador, proveedor, medio_pago, ... }]
+// solo entre los del mismo tipo: quien compro es de las ventas, el proveedor de los ingresos
 export function compartirVentaIA(items) {
-  compartirVenta(items, [['comprador'], ['proveedor'], ['medio_pago']]);
+  for (const tipo of new Set(items.map(i => i.tipo ?? null))) {
+    compartirVenta(items.filter(i => (i.tipo ?? null) === tipo), [['comprador'], ['proveedor'], ['medio_pago']]);
+  }
   return items;
 }
 

@@ -172,7 +172,7 @@ IA_2_MODELOS=gemini-3.1-flash-lite,gemini-2.5-flash
 
 - El número es el orden: primero los modelos de `IA_1`, en el orden escrito, después los de `IA_2`.
 - Para agregar otro proveedor compatible con la API de OpenAI (OpenRouter, Cerebras…), `IA_3_URL`, `IA_3_KEY` e `IA_3_MODELOS`. Para quitar uno, borra sus 3 variables.
-- Opcionales: `IA_N_REASONING=` vacío si un proveedor rechaza `reasoning_effort` (error 400 en los logs); `IA_MAX_TOKENS` (1500) e `IA_ESPERA` (10 segundos por modelo).
+- Opcionales: `IA_N_REASONING=` vacío si un proveedor rechaza `reasoning_effort` (error 400 en los logs); `IA_MAX_TOKENS` (3000) e `IA_ESPERA` (10 segundos por modelo).
 - Cambiar las variables y hacer redeploy del backend basta; el frontend no se toca.
 
 **Para saber qué modelo responde:** en **Deploy Logs** del backend, cada dictado deja `Dictado con IA: respondio IA_1 openai/gpt-oss-20b`; si uno falla aparece el motivo (`respondio 429` = llegó a su límite, `revisa IA_1_KEY` = clave mal copiada).

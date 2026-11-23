@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 # entre todos los intentos: gunicorn corta a los 60 s
 ESPERA_TOTAL = 40
-MAX_TEXTO = 600
+# un poco mas que el maximo de la pantalla (1000)
+MAX_TEXTO = 1100
 MAX_ITEMS = 20
 
 INSTRUCCIONES = """Extrae productos de inventario desde voz en JSON.

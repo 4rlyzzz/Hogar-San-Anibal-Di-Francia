@@ -2136,9 +2136,10 @@ export async function agregarDictado(v) {
     const vence = fechaFinal ? { vence: fechaFinal } : delLocal.sinVence ? { vence: null } : {};
 
     // 💡 Mapeo de Donador: 1. Donador ID desde la BD local, 2. Texto del donador dicho
-    const donadorId = r.donador ? String(r.donador.id) : '';
-    const donadorTexto = r.donadorDicho || itemIA.donador || '';
-    const actividadTexto = r.actividad || itemIA.actividad || '';
+    // del mismo producto en el local (no por posicion: el local puede haber partido distinto)
+    const donadorId = delLocal.donador ? String(delLocal.donador.id) : '';
+    const donadorTexto = delLocal.donadorDicho || itemIA.donador || '';
+    const actividadTexto = delLocal.actividad || itemIA.actividad || '';
 
     const merch = producto && esMerch(producto.categoria)
       ? merchDictado(producto.item, esIngreso, cantidadDicha(cantidad), { ...r, ...(localDelProducto ?? {}) }, itemIA)
@@ -2177,13 +2178,26 @@ export function textoParaIA(texto) {
   return dicho.ambos ? String(texto).trim() : dicho.resto;
 }
 
+// quien compro (o a quien se le compro) entre lo que dijo la IA y lo que reconocio el dictado local:
+// el que dijo la IA si esta registrado; si no (a veces junta palabras de mas: "Rosa Quispe Estás hogar"),
+// el registrado que reconocio el local; si ninguno esta registrado, como se dijo (para crearlo)
+// -> { registrado: persona o null, dicho: texto }. Lo usan la lista y la vista previa ("Entendí")
+export function personaDictada(tipo, ia = {}, local = {}) {
+  const dichoIA = typeof ia[tipo] === 'string' ? ia[tipo].trim() : '';
+  const registrado = (dichoIA && listaPersona(tipo).find(d => coincideNombre(dichoIA, d.nombre) && coincideNombre(d.nombre, dichoIA)))
+    || local[tipo] || null;
+  const dicho = registrado ? '' : (dichoIA || local[`${tipo}Dicho`] || '').slice(0, largos.nombreDonador);
+  return { registrado, dicho };
+}
+
 function merchDictado(item, esIngreso, cantidad, local, ia) {
   const tipo = esIngreso ? 'proveedor' : 'comprador';
-  const dichoIA = typeof ia[tipo] === 'string' ? ia[tipo].trim() : '';
-  const registrado = dichoIA
-    ? listaPersona(tipo).find(d => coincideNombre(dichoIA, d.nombre) && coincideNombre(d.nombre, dichoIA))
-    : local[tipo];
-  const dicho = registrado ? '' : (dichoIA || local[`${tipo}Dicho`] || '').slice(0, largos.nombreDonador);
+  // lo hecho en el hogar no tiene proveedor (aunque se haya dicho uno para otro producto de la lista)
+  if (esIngreso && !llevaProveedor(item)) {
+    local = { ...local, proveedor: null, proveedorDicho: '' };
+    ia = { ...ia, proveedor: null };
+  }
+  const { registrado, dicho } = personaDictada(tipo, ia, local);
   const precio = cantidadDicha(ia.precio) ?? local.precio ?? null;
   const medio = permitido(ia.medio_pago, mediosPago.map(([m]) => m)) ? ia.medio_pago : local.medioPago || '';
   return {
