@@ -48,3 +48,6 @@ yarn-error.log*
 pnpm-debug.log*
 # Respaldos de CouchDB (exportar_couch): tienen datos y contrasenas cifradas, nunca al repo
 respaldo*.json
+respaldo*.json.gz
+# credencial de Google Cloud para los respaldos en Drive (es secreta)
+client_secret*.json
