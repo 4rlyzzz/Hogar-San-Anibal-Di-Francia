@@ -8,7 +8,7 @@ import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
   guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasSueltoSalud, medidasAlimentos, medidasSalud, medidaEntera,
-  categorias, abrirPersona, guardarMinimo,
+  categorias, abrirPersona, guardarMinimo, miUsuario, cambiarMiUsuario,
 } from '../acciones.js';
 import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CamposProductoMerch, CampoVenceMerch } from './Merch.jsx';
@@ -803,6 +803,34 @@ export function ModalClave({ modal }) {
           <MensajeError texto={f.error} />
         </div>
         <Botones textoGuardar={propia ? 'Cambiar contraseña' : 'Guardar contraseña nueva'} enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
+// ---------- mi usuario (con el que entro), desde el menu de arriba ----------
+// el nombre no se cambia: es el que sale como responsable en el historial
+export function ModalMiUsuario() {
+  const f = useFormulario();
+  const actual = miUsuario();
+  return (
+    <Fondo>
+      <form className="modal" id="form-mi-usuario" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, cambiarMiUsuario)}>
+        <Cabecera codigo={<IconoUsuarios />} color="azul" titulo="Cambiar mi usuario" subtitulo={usuario.nombre} />
+        <div className="modal-cuerpo">
+          <p className="ajuste-nota">
+            {actual ? <>Ahora entras como <b>{actual}</b>. </> : null}
+            Tu nombre, <b>{usuario.nombre}</b>, no cambia: es el que sale como responsable en el historial.
+          </p>
+          <div className="campo">
+            <label htmlFor="mi-usuario">USUARIO NUEVO</label>
+            <input id="mi-usuario" name="mi-usuario" type="text" maxLength={largos.nombreUsuario} autoCapitalize="none" autoComplete="username" spellCheck={false} placeholder={`Ej. ${actual || 'cocina'}2`} autoFocus />
+            <small>Con este entrarás a la app: de 3 a 20 caracteres, sin espacios ni tildes (letras, números y . _ -)</small>
+          </div>
+          <CampoClave id="mi-usuario-clave" etiqueta="TU CONTRASEÑA" ayuda="Para confirmar que eres tú" autoComplete="current-password" />
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar="Cambiar usuario" enviando={f.enviando} />
       </form>
     </Fondo>
   );

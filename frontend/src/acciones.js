@@ -15,6 +15,7 @@ import {
   actualizarUsuarioAPI,
   getMiCuentaAPI,
   cambiarClaveAPI,
+  cambiarUsuarioAPI,
   getProveedoresAPI,
   guardarProveedorAPI,
   getCompradoresAPI,
@@ -1623,6 +1624,41 @@ export async function cambiarMiClave(v) {
   mostrarToast('Contraseña cambiada');
 }
 
+// ---------- mi usuario (con el que entro) ----------
+// el nombre de la cuenta no cambia (es el responsable del historial); el usuario si, desde el menu
+export const miUsuario = () => leerSesion()?.usuario ?? '';
+
+export function abrirMiUsuario() {
+  abrirModal({ tipo: 'mi-usuario' });
+}
+
+export async function cambiarMiUsuario(v) {
+  const nuevo = leer(v, 'mi-usuario', reglas.nombreUsuario);
+  if (nuevo === miUsuario().toLowerCase()) falla('Ese ya es tu usuario: escribe uno distinto.', 'mi-usuario');
+  const clave = v['mi-usuario-clave'] ?? '';
+  if (!clave) falla('Escribe tu contraseña.', 'mi-usuario-clave');
+  let res;
+  try {
+    res = await cambiarUsuarioAPI(nuevo, clave);
+  } catch (err) {
+    const mensaje = err.response?.data?.error ?? '';
+    if (err.response?.status === 400 && /contraseña/i.test(mensaje)) falla('La contraseña no es correcta.', 'mi-usuario-clave');
+    if (err.response?.status === 409) falla('Ese usuario ya lo tiene otra cuenta: elige otro.', 'mi-usuario');
+    if (err.response?.status === 429) falla('Demasiados intentos. Espera un momento antes de volver a intentar.', 'mi-usuario-clave');
+    errorDelServidor(err, 'mi-usuario');
+  }
+  const usuarioNuevo = res?.usuario ?? nuevo;
+  guardarSesion({ ...leerSesion(), usuario: usuarioNuevo });
+  // si es admin, su fila en Usuarios tambien
+  const yo = cuentaPorId(usuario.id);
+  if (yo) {
+    yo.usuario = usuarioNuevo;
+    yo.cambios = [...(yo.cambios || []), { accion: 'usuario', valor: usuarioNuevo, quienId: usuario.id, quien: usuario.nombre, fecha: new Date().toISOString() }];
+  }
+  cerrarModal();
+  mostrarToast(`Listo: ahora entras como ${usuarioNuevo}`);
+}
+
 // el admin le pone una contraseña nueva a otra cuenta (la olvido)
 export async function restablecerClave(modal, v) {
   const c = cuentaPorId(modal.cuentaId);
@@ -1643,6 +1679,11 @@ export async function restablecerClave(modal, v) {
 async function refrescarMiCuenta() {
   const yo = await getMiCuentaAPI();
   const cambioRol = yo.rol !== usuario.rol;
+  // el usuario con el que entra pudo cambiarlo un admin: el menu muestra el nuevo
+  if (yo.usuario && yo.usuario !== miUsuario()) {
+    guardarSesion({ ...leerSesion(), usuario: yo.usuario });
+    refrescar();
+  }
   if (!cambioRol && yo.nombre === usuario.nombre) return false;
   Object.assign(usuario, { nombre: yo.nombre, rol: yo.rol, iniciales: iniciales(yo.nombre) });
   guardarSesion({ ...leerSesion(), id: yo.id, nombre: yo.nombre, usuario: yo.usuario, rol: yo.rol });
