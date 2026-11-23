@@ -3639,6 +3639,48 @@ button.uf-usuario:hover b {
 .lote-cambio.ingreso em { color: #2d8e6c; }
 .lote-cambio.salida em { color: #c96b16; }
 
+/* ingresos y salidas en la misma lista: una seccion para cada uno */
+.lote-seccion + .lote-seccion {
+  margin-top: 16px;
+}
+
+.lote-seccion-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4b5a55;
+}
+
+.lote-seccion-titulo span {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.lote-seccion-titulo.verde span { background: #e3f5ee; color: #2d8e6c; }
+.lote-seccion-titulo.naranja span { background: #fdeedd; color: #c96b16; }
+
+.lote-seccion-titulo small {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a9a94;
+}
+
+/* "Entendí" con ingreso y salida: de que tipo es cada producto */
+.entendido li .entendido-tipo {
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
 /* editar una fila */
 .lote-origen {
   padding: 10px 12px;

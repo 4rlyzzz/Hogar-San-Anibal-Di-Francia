@@ -8,7 +8,7 @@ import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
   guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasSueltoSalud, medidasAlimentos, medidasSalud, medidaEntera,
-  categorias, abrirPersona, guardarMinimo, miUsuario, cambiarMiUsuario, opcionesArea, guardarArea,
+  categorias, abrirPersona, guardarMinimo, miUsuario, cambiarMiUsuario, opcionesArea, guardarArea, listaMezclada, tipoDeItem,
 } from '../acciones.js';
 import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CamposProductoMerch, CampoVenceMerch } from './Merch.jsx';
@@ -706,7 +706,10 @@ export function ModalElegir() {
   // una lista que se cerro sin guardar
   if (lote?.items.length) {
     const n = lote.items.length;
-    registrar.unshift({ accion: 'continuar-lista', color: 'azul', Icono: lote.tipo === 'Ingreso' ? IconoIngreso : IconoSalida, titulo: `Continuar la lista de ${lote.tipo.toLowerCase()}`, detalle: `${n} ${n === 1 ? 'producto' : 'productos'} sin guardar`, abrir: abrirLista });
+    // con ingresos y salidas: "Continuar la lista de ingresos y salidas"
+    const tipoLista = listaMezclada(lote) ? null : tipoDeItem(lote.items[0]);
+    const deQue = tipoLista ? tipoLista.toLowerCase() : 'ingresos y salidas';
+    registrar.unshift({ accion: 'continuar-lista', color: 'azul', Icono: tipoLista === 'Salida' ? IconoSalida : IconoIngreso, titulo: `Continuar la lista de ${deQue}`, detalle: `${n} ${n === 1 ? 'producto' : 'productos'} sin guardar`, abrir: abrirLista });
   }
   // los productos nuevos se crean al registrar su ingreso
   const opciones = [

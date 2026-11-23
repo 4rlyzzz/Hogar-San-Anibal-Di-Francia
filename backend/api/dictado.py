@@ -32,6 +32,8 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
 3. OPERACIÓN ('tipo'):
    - "salida": si indica sacar, usar, retirar, llevarse o dar de baja.
    - "ingreso": por defecto si es agregar, comprar, donar o neutro.
+   - En una misma frase pueden ir los dos: cada producto lleva el tipo que se dijo antes de él.
+     "ingreso de 3 kilos de arroz y salida de 2 latas de leche" -> Arroz "ingreso", Leche "salida".
 4. NOMBRE COMPLETO DEL PRODUCTO:
    - La dosis, concentración o tamaño que acompaña al nombre ES PARTE DEL PRODUCTO, nunca la cantidad ni la unidad:
      "100 mg", "500 mg", "120 mg/5 ml", "0.9 %", "x 100 tabletas", "1 L", "400 g".
