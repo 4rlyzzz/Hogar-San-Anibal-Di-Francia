@@ -198,6 +198,23 @@ railway ssh --service backend -- python manage.py exportar_couch > respaldo-AAAA
 
 El archivo incluye los usuarios con el hash de su contraseña: guárdalo en un lugar privado. Para restaurar en una CouchDB vacía: `python manage.py setup_couch --datos respaldo.json`.
 
+#### Respaldos automáticos en Google Drive
+Un servicio **respaldo** (cron de Railway) corre `python manage.py respaldo_drive`: sube `respaldo-AAAA-MM-DD_HHMM.json.gz` a la carpeta *Respaldos Hogar San Aníbal* del Drive del Hogar y borra los que sobran. Se guardan el último de cada día (7), de cada semana (4), de cada mes (12) y de cada año (todos). La app solo tiene el permiso `drive.file`: no ve el resto del Drive.
+
+1. **Google Cloud** (con la cuenta del Hogar): proyecto propio, *Google Drive API* habilitada, *Google Auth Platform* con público **Externo**, publicada (**En producción**: en "Prueba" el permiso vence a los 7 días), página principal y `privacidad.html` del frontend, permiso `drive.file` y un cliente **App de escritorio**. Su JSON se guarda fuera del repositorio.
+2. **Permiso, una vez, en tu PC** (abre el navegador; entra con la cuenta del Hogar):
+   ```powershell
+   python manage.py autorizar_drive --credenciales C:\ruta\client_secret_XXXX.json
+   ```
+   Muestra `DRIVE_CLIENT_ID`, `DRIVE_CLIENT_SECRET` y `DRIVE_REFRESH_TOKEN`: son secretas.
+3. **Railway → + New → GitHub Repo** (el mismo repositorio), nombre `respaldo`:
+   - *Settings → Root Directory* `backend`; *Custom Start Command* `python manage.py respaldo_drive`; sin dominio público.
+   - *Cron Schedule* (en hora UTC): `0 8 * * *` = todos los días a las 3:00 a. m. de Lima. Para probar: `0 * * * *` (cada hora) con `RESPALDO_HORAS=24`, y después volver al diario y quitar `RESPALDO_HORAS`.
+   - *Variables*: `SECRET_KEY` (la del backend), `COUCHDB_URL`, `COUCHDB_USER` (`casa_app`), `COUCHDB_PASSWORD` y las tres `DRIVE_*`.
+4. Revisa *Deployments* del servicio: cada ejecución muestra `Subido respaldo-...`. Si falla (por ejemplo `invalid_grant`: se quitó el permiso), queda en rojo; se arregla volviendo a correr `autorizar_drive` y cambiando `DRIVE_REFRESH_TOKEN`.
+
+Para restaurar uno: bajarlo de Drive, descomprimirlo (7-Zip) y `python manage.py setup_couch --datos respaldo-AAAA-MM-DD_HHMM.json` en una CouchDB vacía.
+
 ### 6.3 Costos (plan Hobby)
 El plan incluye un monto de uso al mes; si el consumo lo supera, se cobra la diferencia. Revisa **Usage** en Railway la primera semana. Para gastar menos: `WEB_CONCURRENCY=1` en el backend (un solo proceso de gunicorn alcanza para el personal de un hogar). El dictado con IA no suma servicios: Groq y Gemini se usan con sus planes gratuitos.
 

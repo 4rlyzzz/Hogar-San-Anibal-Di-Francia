@@ -4,6 +4,7 @@ Las pruebas nunca tocan la CouchDB real: se reemplaza session.request de couchdb
 por esta clase, que responde como CouchDB (409 si el _rev no coincide, _find con bookmark, etc.).
 """
 import itertools
+import json as json_modulo
 import uuid
 from copy import deepcopy
 from unittest import mock
@@ -80,10 +81,18 @@ class CouchFalsa:
 
         if method == 'POST' and doc_id == '_find':
             return self._find(base, json)
-        # listar y borrar en lote (datos_prueba --reiniciar)
+        # listar (datos_prueba --reiniciar, respaldos) y borrar en lote; ordenado por id como CouchDB
         if method == 'GET' and doc_id == '_all_docs':
-            filas = [{'id': i, 'key': i, 'value': {'rev': d['_rev']}} for i, d in base.items()]
-            return Respuesta({'total_rows': len(filas), 'rows': filas}, 200)
+            params = params or {}
+            ids = sorted(base)
+            if 'startkey' in params:
+                desde = json_modulo.loads(params['startkey'])
+                ids = [i for i in ids if i >= desde]
+            if 'limit' in params:
+                ids = ids[:int(params['limit'])]
+            con_docs = str(params.get('include_docs')).lower() == 'true'
+            filas = [{'id': i, 'key': i, 'value': {'rev': base[i]['_rev']}, **({'doc': deepcopy(base[i])} if con_docs else {})} for i in ids]
+            return Respuesta({'total_rows': len(base), 'rows': filas}, 200)
         if method == 'POST' and doc_id == '_bulk_docs':
             hechos = []
             for d in json.get('docs', []):

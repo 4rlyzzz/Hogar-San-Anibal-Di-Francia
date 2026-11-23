@@ -163,6 +163,20 @@ IA_PROVEEDORES = _proveedores_ia()
 IA_MAX_TOKENS = int(os.getenv('IA_MAX_TOKENS', '3000'))
 IA_ESPERA = int(os.getenv('IA_ESPERA', '10'))
 
+# ---------- Respaldos en Google Drive (python manage.py respaldo_drive) ----------
+# la credencial (App de escritorio) de Google Cloud y el permiso que da "python manage.py autorizar_drive"
+DRIVE_CLIENT_ID = os.getenv('DRIVE_CLIENT_ID', '').strip()
+DRIVE_CLIENT_SECRET = os.getenv('DRIVE_CLIENT_SECRET', '').strip()
+DRIVE_REFRESH_TOKEN = os.getenv('DRIVE_REFRESH_TOKEN', '').strip()
+# carpeta del Drive donde quedan (se crea sola)
+DRIVE_CARPETA = os.getenv('DRIVE_CARPETA', 'Respaldos Hogar San Aníbal').strip() or 'Respaldos Hogar San Aníbal'
+# cuantos se guardan de cada tipo; los anuales se guardan todos
+RESPALDO_DIARIOS = int(os.getenv('RESPALDO_DIARIOS', '7'))
+RESPALDO_SEMANALES = int(os.getenv('RESPALDO_SEMANALES', '4'))
+RESPALDO_MENSUALES = int(os.getenv('RESPALDO_MENSUALES', '12'))
+# solo para probar con un respaldo cada hora: cuantas horas se guardan (0 = ninguno por hora)
+RESPALDO_HORAS = int(os.getenv('RESPALDO_HORAS', '0'))
+
 # ---------- Produccion (DEBUG=False) ----------
 if not DEBUG:
     # Railway termina HTTPS en su proxy y avisa con X-Forwarded-Proto
