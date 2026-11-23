@@ -8,7 +8,7 @@ import { personasVacio } from './logica/personas.js';
 export const estado = {
   seccion: 'Inicio',
   grafico: { vista: 'Movimientos', periodo: 'Mes', categoria: 'Alimentos' },
-  usuarios: { rol: 'Todos', estado: 'Todos', orden: 'acceso', invertido: false },
+  usuarios: { rol: 'Todos', estado: 'Todos', area: 'Todos', orden: 'acceso', invertido: false },
   alertasOrden: { orden: 'prioridad', invertido: false },
   historialFiltros: filtrosHistorialVacios(),
   donadoresFiltros: { actividad: 'Todos', anio: 'Todos' },

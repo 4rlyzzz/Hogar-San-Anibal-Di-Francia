@@ -6,15 +6,16 @@ import { usuario } from '../data/datos.js';
 import { largos, decimalesDe } from '../validacion.js';
 import { IconoCodigo, IconoMicrofono, IconoEditar, IconoBorrar, IconoIngreso, IconoSalida, IconoBuscar } from '../assets/iconos.jsx';
 import {
-  abrirBusqueda, abrirCodigo, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
+  abrirBusqueda, abrirCodigo, abrirVozLote, tipoElegido, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
   opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe, categorias, personaDeItem, extraDictado,
+  tipoDeItem, esIngresoItem, ingresosDe, salidasDe, listaMezclada, textoParaIA, personaDictada,
 } from '../acciones.js';
 import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
-import { esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
+import { CATEGORIA as MERCH, esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta, llevaProveedor } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from '../logica/dictado.js';
+import { interpretarMezclado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -25,20 +26,48 @@ import {
 const tipos = {
   Ingreso: { titulo: 'Registrar ingreso', color: 'verde', Icono: IconoIngreso, signo: '+' },
   Salida: { titulo: 'Registrar salida', color: 'naranja', Icono: IconoSalida, signo: '−' },
+  // la lista tiene de los dos
+  Mezcla: { titulo: 'Registrar ingresos y salidas', color: 'azul', Icono: IconoIngreso, signo: '' },
 };
 
-function CabeceraLote({ titulo, subtitulo, onVolver }) {
-  const t = tipos[estado.lote.tipo];
+// tipo: el de una fila o 'Mezcla'; sin el, lo que se esta agregando
+function CabeceraLote({ titulo, subtitulo, onVolver, tipo }) {
+  const t = tipos[tipo ?? estado.lote.tipo];
   return <Cabecera codigo={<t.Icono />} color={t.color} titulo={titulo ?? t.titulo} subtitulo={subtitulo} onVolver={onVolver} />;
 }
 
 // 'Lata x 400 g' o 'Suelto, en kg': para no confundir tamaños del mismo producto
 const presentacion = item => (item.tipoMerch ? textoMerch(item) || textoTipo(item) : textoPresentacion(item) || `Suelto, en ${item.unidad}`);
 
+// ---------- pestañas por inventario ----------
+// la lista de productos mezclaba alimentos, salud y merch: se separa por pestañas
+// encontrados: lo que coincide con lo escrito (el numero de cada pestaña es de eso)
+const nombresPestana = { Todos: 'Todos', Alimentos: 'Alimentos', Salud: 'Salud', [MERCH]: 'Merch' };
+
+function PestanasCategoria({ valor, onCambiar, encontrados }) {
+  return (
+    <div className="filtros lote-categorias" role="radiogroup" aria-label="Inventario">
+      {['Todos', ...categorias].map(c => {
+        const n = c === 'Todos' ? encontrados.length : encontrados.filter(p => p.categoria === c).length;
+        return (
+          <button key={c} type="button" role="radio" aria-checked={valor === c} className={valor === c ? 'activo' : ''} data-accion="categoria-lote" onClick={() => onCambiar(c)}>
+            {nombresPestana[c]} <span className="lote-categoria-numero">{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const enCategoria = (lista, categoria) => (categoria === 'Todos' ? lista : lista.filter(p => p.categoria === categoria));
+
 // ---------- 1a. buscar el producto ----------
 export function ModalLoteManual() {
   const [busqueda, setBusqueda] = useState('');
-  const productos = todosLosProductos().filter(({ item }) => !busqueda.trim() || coincideNombre(busqueda, item.nombre));
+  // desde la pagina de un inventario se empieza en esa pestaña
+  const [categoria, setCategoria] = useState(() => (categorias.includes(estado.seccion) ? estado.seccion : 'Todos'));
+  const encontrados = todosLosProductos().filter(({ item }) => !busqueda.trim() || coincideNombre(busqueda, item.nombre));
+  const productos = enCategoria(encontrados, categoria);
   const esSalida = estado.lote.tipo === 'Salida';
 
   return (
@@ -52,11 +81,15 @@ export function ModalLoteManual() {
               <input id="lote-buscar" type="search" maxLength={largos.busqueda} autoComplete="off" autoFocus placeholder="Buscar producto" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
             </div>
             <button type="button" className="btn btn-blanco lote-camara" data-accion="escanear" title="Escanear el código de barras con la cámara" onClick={abrirCodigo}>
-              <IconoCodigo /> Cámara
+              <IconoCodigo /> <span className="lote-boton-texto">Escanear</span>
+            </button>
+            <button type="button" className="btn btn-blanco lote-camara" data-accion="dictar" title="Decir los productos con el micrófono" onClick={abrirVozLote}>
+              <IconoMicrofono /> <span className="lote-boton-texto">Hablar</span>
             </button>
           </div>
+          <PestanasCategoria valor={categoria} onCambiar={setCategoria} encontrados={encontrados} />
           <div className="lote-productos">
-            {productos.length === 0 && <p className="lote-vacio">No hay productos con ese nombre.</p>}
+            {productos.length === 0 && <p className="lote-vacio">{encontrados.length ? `No hay en ${nombresPestana[categoria]}: mira en las otras pestañas.` : 'No hay productos con ese nombre.'}</p>}
             {productos.map(({ item, categoria }) => {
               const sinStock = esSalida && disponible(item) <= 0;
               return (
@@ -72,7 +105,7 @@ export function ModalLoteManual() {
             })}
           </div>
           {!esSalida && (
-            <button type="button" className="btn-anadir" data-accion="crear-producto" onClick={() => abrirProducto(categorias.includes(estado.seccion) ? estado.seccion : 'Alimentos', { nombre: busqueda.trim().slice(0, largos.nombreProducto) })}>
+            <button type="button" className="btn-anadir" data-accion="crear-producto" onClick={() => abrirProducto(categoria !== 'Todos' ? categoria : categorias.includes(estado.seccion) ? estado.seccion : 'Alimentos', { nombre: busqueda.trim().slice(0, largos.nombreProducto) })}>
               + ¿No está? Crear producto nuevo
             </button>
           )}
@@ -331,11 +364,12 @@ export function ModalLoteCodigo() {
 }
 
 // ---------- 1c. voz (se abre con el microfono junto al "+") ----------
-// cuanto esperar (ms) despues de la ultima tecla para consultar a la IA
-const ESPERA_AL_ESCRIBIR = 900;
+// cuanto esperar (ms) despues de la ultima tecla para actualizar "Entendí"
+// al escribir no se consulta a la IA (cada consulta cuesta): eso pasa al soltar el microfono o al agregar
+const ESPERA_AL_ESCRIBIR = 300;
 
 // una linea de "Entendí": arriba cuanto y que; abajo, en pequeño, lo que hay que saber
-function LineaEntendida({ r }) {
+function LineaEntendida({ r, conTipo = false }) {
   const item = r.producto?.item;
   // con una presentacion no registrada se muestra la unidad tal como se dijo ("10 bolsas")
   const unidad = r.presentacion?.unidad ?? (item ? item.unidad : r.unidadDicha ?? '');
@@ -349,15 +383,22 @@ function LineaEntendida({ r }) {
   if (item && r.cantidad == null) avisos.push('falta la cantidad');
   const datos = [];
   if (r.vence) datos.push(`vence ${fechaVence(r.vence)}`);
+  else if (r.sinVence) datos.push('sin fecha de vencimiento');
   if (r.donador || r.donadorDicho) datos.push(`donó ${r.donador?.nombre ?? r.donadorDicho}`);
   if (r.actividad) datos.push(r.actividad);
-  if (r.comprador || r.compradorDicho) datos.push(`compra ${r.comprador?.nombre ?? r.compradorDicho}`);
-  if (r.proveedor || r.proveedorDicho) datos.push(`proveedor ${r.proveedor?.nombre ?? r.proveedorDicho}`);
+  // comprador, proveedor y medio de pago solo son de merchandising: comprador y pago en una salida,
+  // proveedor en un ingreso (y no en lo hecho en el hogar)
+  const deVenta = !item || item.tipoMerch;
+  const esSalida = r.tipo ? r.tipo === 'Salida' : true;
+  const esIngreso = r.tipo ? r.tipo === 'Ingreso' : true;
+  if (deVenta && esSalida && (r.comprador || r.compradorDicho)) datos.push(`compra ${r.comprador?.nombre ?? r.compradorDicho}`);
+  if (deVenta && esIngreso && (!item || llevaProveedor(item)) && (r.proveedor || r.proveedorDicho)) datos.push(`proveedor ${r.proveedor?.nombre ?? r.proveedorDicho}`);
   if (r.precio != null) datos.push(`${soles(r.precio)} c/u`);
-  if (r.medioPago) datos.push(nombreMedio(r.medioPago));
+  if (deVenta && esSalida && r.medioPago) datos.push(nombreMedio(r.medioPago));
 
   return (
     <li className={avisos.length ? 'con-duda' : ''}>
+      {conTipo && r.tipo && <span className={`pastilla ${r.tipo === 'Salida' ? 'naranja' : 'verde'} entendido-tipo`}>{r.tipo}</span>}
       <b>{r.cantidad != null ? `${r.cantidad} ${unidad}` : '—'}</b> · {nombre}
       {avisos.length > 0 && <small className="entendido-aviso">{avisos.join(' · ')}</small>}
       {datos.length > 0 && <small>{datos.join(' · ')}</small>}
@@ -371,6 +412,9 @@ const erroresMicrofono = {
   'audio-capture': 'No se encontró el micrófono o lo está usando otro programa.',
   'network': 'Sin conexión con el servicio de voz. Revisa internet o usa Chrome o Edge.',
 };
+
+// cortes del servicio de voz seguidos (sin oir nada entre ellos) que se reintentan solos
+const MAXIMO_CORTES = 3;
 
 function detenerReconocedor(ref) {
   const r = ref.current;
@@ -392,21 +436,37 @@ export function ModalLoteVoz() {
   // el temporizador de "dejo de escribir"
   const espera = useRef(null);
 
+  // lo escrito a mano se entiende con el reconocimiento local, sin gastar en la IA
+  // (al agregar a la lista, agregarDictado si consulta a la IA una vez)
+  const vistaLocal = (textoCompleto) => {
+    // una respuesta de la IA que venga en camino ya no corresponde a lo escrito
+    ++consulta.current;
+    setCargandoIA(false);
+    setAviso('');
+    const dichoTipo = tipoDictado(textoCompleto);
+    // igual que procesarConOmni: con el tipo se sabe si "a María López" compra o vende
+    const tipoVoz = dichoTipo.tipo ?? tipoElegido();
+    if (!dichoTipo.resto.trim()) return setItemsEntendidos([]);
+    // cada producto con su tipo ("ingreso de arroz y salida de leche")
+    const local = interpretarMezclado(textoCompleto, todosLosProductos(), extraDictado, tipoVoz);
+    setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
+  };
+
   // Procesa con la IA y obtiene la lista visual para el bloque "ENTENDÍ"
   const procesarConOmni = async (textoCompleto) => {
     const numero = ++consulta.current;
     // "ingreso" o "salida" no son productos
     const dichoTipo = tipoDictado(textoCompleto);
-    const textoDictado = dichoTipo.resto;
     // con el tipo, "a María López" es quien compra (venta) o a quien se le compro (ingreso)
-    const tipoVoz = dichoTipo.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null);
-    if (!textoDictado.trim()) return setItemsEntendidos([]);
+    const tipoVoz = dichoTipo.tipo ?? tipoElegido();
+    if (!dichoTipo.resto.trim()) return setItemsEntendidos([]);
     setCargandoIA(true);
     setAviso('');
 
     try {
       // 1. Petición a la IA (por Django)
-      const json = await procesarTextoConIA(textoDictado);
+      // con ingreso y salida dichos va todo el texto: la IA dice de que tipo es cada producto
+      const json = await procesarTextoConIA(textoParaIA(textoCompleto));
       if (numero !== consulta.current) return;
 
       // 2. Mapeo para previsualización gráfica en UI
@@ -414,22 +474,31 @@ export function ModalLoteVoz() {
       // el nombre que entendio la IA se busca entre los registrados (con su dosis: 100 mg no es 50 mg)
       const productos = todosLosProductos();
       // el dictado local sirve para revisar la cantidad ("5 sacos de 50 kg" no son 50 sacos)
-      const local = interpretarDictado(textoDictado, productos, extraDictado(tipoVoz));
+      const local = interpretarMezclado(textoCompleto, productos, extraDictado, tipoVoz);
       const mapeados = compartirVentaIA(Array.isArray(json) ? json.filter(i => i && typeof i === 'object') : [])
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
         .map(i => {
           // si empatan varios, vale el que entendio el local por el tamaño dicho ("cajas de 20 unidades")
-          const { producto, dudas } = desempatarConLocal(productoDeNombre(i.producto, productos), local);
+          // con el inventario dicho ("a merchandising"), solo entre sus productos
+          const { producto, dudas } = desempatarConLocal(productoDeNombre(i.producto, enInventario(productos, categoriaDeIA(i, local))), local);
           const suyo = producto && local.find(x => mismoProducto(x.producto, producto));
           return {
+            // con los dos dichos, el tipo sale del orden de lo dicho (el local); la IA a veces se equivoca
+            tipo: dichoTipo.ambos ? (suyo?.tipo ?? { salida: 'Salida', ingreso: 'Ingreso' }[i.tipo] ?? null) : tipoVoz,
+            vence: i.vence || suyo?.vence || null,
+            donador: suyo?.donador ?? null,
+            donadorDicho: suyo?.donadorDicho || '',
+            actividad: suyo?.actividad || null,
+            sinVence: !i.vence && Boolean(suyo?.sinVence),
             cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo || null)),
             unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
             nombreDicho: i.producto.trim().slice(0, largos.nombreProducto),
             producto,
             dudas,
             presentacion: suyo?.presentacion ?? null,
-            compradorDicho: i.comprador || suyo?.compradorDicho || suyo?.comprador?.nombre || '',
-            proveedorDicho: i.proveedor || suyo?.proveedorDicho || suyo?.proveedor?.nombre || '',
+            // igual que en la lista (personaDictada): asi "Entendí" muestra a quien quedara registrado
+            compradorDicho: (() => { const p = personaDictada('comprador', i, suyo || {}); return p.registrado?.nombre ?? p.dicho; })(),
+            proveedorDicho: (() => { const p = personaDictada('proveedor', i, suyo || {}); return p.registrado?.nombre ?? p.dicho; })(),
             precio: cantidadDicha(i.precio) ?? suyo?.precio ?? null,
             medioPago: i.medio_pago || suyo?.medioPago || '',
           };
@@ -440,8 +509,8 @@ export function ModalLoteVoz() {
     } catch {
       if (numero !== consulta.current) return;
       // Fallback: si la IA da error, usamos la interpretación local nativa
-      if (typeof interpretarDictado === 'function') {
-        const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
+      if (typeof interpretarMezclado === 'function') {
+        const local = interpretarMezclado(textoCompleto, todosLosProductos(), extraDictado, tipoVoz);
         // igual que al agregar a la lista (agregarDictado)
         setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
       } else {
@@ -465,6 +534,8 @@ export function ModalLoteVoz() {
     r.interimResults = false;
 
     r.onresult = (e) => {
+      // oyo algo: los cortes de antes ya no cuentan como seguidos
+      r.cortes = 0;
       let trascripcion = '';
       for (let i = e.resultIndex; i < e.results.length; ++i) {
         trascripcion += e.results[i][0].transcript + ' ';
@@ -478,6 +549,10 @@ export function ModalLoteVoz() {
     r.onerror = (e) => {
       // 'no-speech' es solo silencio: se sigue escuchando
       if (e.error === 'no-speech') return;
+      // 'network': el servicio de voz del navegador (Google) corta las sesiones largas aunque haya internet.
+      // Se vuelve a encender solo (onend) y lo dicho se conserva; solo se avisa si se corta varias veces
+      // seguidas sin oir nada, que ya es un corte de verdad
+      if (e.error === 'network' && r.debeSeguir && (r.cortes = (r.cortes ?? 0) + 1) <= MAXIMO_CORTES) return;
       // cualquier otro error detiene de verdad (si no, onend lo reinicia y falla en bucle)
       r.debeSeguir = false;
       if (e.error !== 'aborted') setAviso(erroresMicrofono[e.error] ?? 'Error o corte en el micrófono.');
@@ -487,7 +562,13 @@ export function ModalLoteVoz() {
     r.onend = () => {
       // solo se reinicia el reconocedor activo y si no se pidio parar
       if (r.debeSeguir && reconocedor.current === r) {
-        try { r.start(); } catch { r.debeSeguir = false; setGrabando(false); }
+        const reanudar = () => {
+          if (!r.debeSeguir || reconocedor.current !== r) return;
+          try { r.start(); } catch { r.debeSeguir = false; setGrabando(false); }
+        };
+        // tras un corte se espera un poco antes de reconectar
+        if (r.cortes) setTimeout(reanudar, 400);
+        else reanudar();
       } else if (reconocedor.current === r) {
         setGrabando(false);
       }
@@ -527,11 +608,11 @@ export function ModalLoteVoz() {
   }
 
   // ingreso o salida: lo que se dijo o, si no se dijo, el de la lista que ya esta abierta
+  // con los dos dichos ("ingreso de arroz y salida de leche") van juntos a la lista
   const dicho = tipoDictado(texto);
-  const tipo = tipos[dicho.tipo ?? (estado.lote?.items.length ? estado.lote.tipo : null)];
+  const tipo = tipos[dicho.ambos ? 'Mezcla' : dicho.tipo ?? tipoElegido()];
   let falta = '';
-  if (dicho.ambos) falta = 'Dijiste ingreso y salida: registra uno a la vez.';
-  else if (texto.trim() && !tipo) falta = 'Falta decir si es ingreso o salida.';
+  if (texto.trim() && !tipo) falta = 'Falta decir si es ingreso o salida.';
 
   return (
     <Fondo>
@@ -551,7 +632,7 @@ export function ModalLoteVoz() {
           codigo={tipo ? <tipo.Icono /> : <IconoMicrofono />}
           color={tipo?.color ?? 'gris'}
           titulo={tipo?.titulo ?? 'Registrar por voz'}
-          subtitulo='Di "ingreso" o "salida" y los productos'
+          subtitulo='Di "ingreso" o "salida" y los productos (pueden ir los dos)'
         />
         <div className="modal-cuerpo">
           <div className="voz">
@@ -579,9 +660,9 @@ export function ModalLoteVoz() {
               onChange={e => {
                 const escrito = e.target.value;
                 setTexto(escrito);
-                // se consulta cuando deja de escribir, no con cada tecla
+                // se actualiza cuando deja de escribir, no con cada tecla
                 clearTimeout(espera.current);
-                espera.current = setTimeout(() => procesarConOmni(escrito), ESPERA_AL_ESCRIBIR);
+                espera.current = setTimeout(() => vistaLocal(escrito), ESPERA_AL_ESCRIBIR);
               }}
               placeholder='Ej. "ingreso de dos kilos de arroz", "salida de tres latas de leche" o "venta de 2 panetones a Rosa Quispe, pagó con Yape"'
             />
@@ -596,7 +677,7 @@ export function ModalLoteVoz() {
               <span>ENTENDÍ</span>
               <ul>
                 {itemsEntendidos.map((r, idx) => (
-                  <LineaEntendida key={idx} r={r} />
+                  <LineaEntendida key={idx} r={r} conTipo={dicho.ambos} />
                 ))}
               </ul>
             </div>
@@ -674,17 +755,25 @@ export function ModalLoteLista({ modal }) {
   const [descartar, setDescartar] = useState(false);
   const lote = estado.lote;
   if (!lote) return null;
-  const { tipo, items } = lote;
+  const { items } = lote;
   const conProblemas = items.filter(x => problemasItem(x).length).length;
+  // ingresos y salidas en la misma lista: cada uno en su seccion
+  const mezcla = listaMezclada(lote);
+  const tipo = mezcla ? 'Mezcla' : items.length ? tipoDeItem(items[0]) : lote.tipo;
+  const secciones = mezcla
+    ? [['Ingreso', 'Ingresos', ingresosDe(lote)], ['Salida', 'Salidas', salidasDe(lote)]]
+    : [[tipo, null, items]];
 
   let subtitulo = 'Puedes editar o quitar cada producto';
   if (items.length === 0) subtitulo = 'La lista está vacía';
   else if (conProblemas) subtitulo = `${conProblemas} por corregir`;
+  else if (mezcla) subtitulo = `${ingresosDe(lote).length} de ingreso y ${salidasDe(lote).length} de salida`;
+  const revisar = { Ingreso: 'Revisar ingreso', Salida: 'Revisar salida', Mezcla: 'Revisar todo' }[tipo];
 
   return (
     <Fondo>
       <form className="modal modal-lote" id="form-lote" ref={f.formulario} hidden={confirmando} noValidate onSubmit={e => f.enviar(e, revisarLote) && setConfirmando(true)}>
-        <CabeceraLote titulo={`${tipos[tipo].titulo} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`} subtitulo={subtitulo} />
+        <CabeceraLote tipo={tipo} titulo={`${tipos[tipo].titulo} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`} subtitulo={subtitulo} />
 
         <div className="modal-cuerpo">
           {conProblemas > 0 && (
@@ -692,7 +781,12 @@ export function ModalLoteLista({ modal }) {
               Lo que está en rojo falta corregir: toca el lápiz <IconoEditar /> de ese producto.
             </p>
           )}
-          {items.length > 0 && <ul className="lote-lista">{items.map(x => <FilaLote key={x.id} x={x} tipo={tipo} />)}</ul>}
+          {items.length > 0 && secciones.map(([t, titulo, filas]) => (
+            <section key={t} className="lote-seccion">
+              {titulo && <h3 className={`lote-seccion-titulo ${tipos[t].color}`}><span>{tipos[t].signo}</span> {titulo} <small>{filas.length}</small></h3>}
+              <ul className="lote-lista">{filas.map(x => <FilaLote key={x.id} x={x} tipo={t} />)}</ul>
+            </section>
+          ))}
           <button type="button" className="btn-anadir" data-accion="anadir" onClick={abrirBusqueda}>+ Añadir productos</button>
           <MensajeError texto={f.error} />
         </div>
@@ -701,7 +795,7 @@ export function ModalLoteLista({ modal }) {
           <button type="button" className="btn btn-blanco" data-accion="descartar-lista" onClick={() => (descartar ? descartarLote() : setDescartar(true))}>
             {descartar ? '¿Seguro? Descartar' : 'Descartar'}
           </button>
-          <button type="submit" className="btn btn-verde">Revisar {tipo.toLowerCase()}</button>
+          <button type="submit" className="btn btn-verde">{revisar}</button>
         </div>
       </form>
 
@@ -714,53 +808,67 @@ export function ModalLoteLista({ modal }) {
 function ConfirmarLote({ modal, onVolver }) {
   // se guarda fila por fila en el servidor: mientras tanto el boton queda en "Guardando…"
   const f = useFormulario();
-  const { tipo, items } = estado.lote;
-  const esIngreso = tipo === 'Ingreso';
+  const lote = estado.lote;
+  const { items } = lote;
+  const mezcla = listaMezclada(lote);
+  const tipo = mezcla ? 'Mezcla' : tipoDeItem(items[0]);
 
   // stock que va quedando: dos filas del mismo producto se suman
+  // en el orden en que se guardan: primero los ingresos
   const quedan = new Map();
-  const filas = items.map(x => {
+  const filas = [...ingresosDe(lote), ...salidasDe(lote)].map(x => {
     const { item, nuevo, categoria } = productoDeItem(x);
+    const esIngreso = esIngresoItem(x);
     const antes = quedan.get(item) ?? item.cantidad;
     const despues = redondear(antes + (esIngreso ? x.cantidad : -x.cantidad));
     quedan.set(item, despues);
-    return { x, item, nuevo, antes, despues, merch: esMerch(categoria) };
+    return { x, item, nuevo, antes, despues, esIngreso, merch: esMerch(categoria) };
   });
+  const secciones = mezcla
+    ? [['Ingreso', 'Ingresos', filas.filter(r => r.esIngreso)], ['Salida', 'Salidas', filas.filter(r => !r.esIngreso)]]
+    : [[tipo, null, filas]];
 
-  const detalle = (x, merch) => [
+  const detalle = (x, merch, esIngreso) => [
     esIngreso && (!merch || x.vence) ? (x.vence ? `Vence ${fechaVence(x.vence)}` : 'Sin fecha') : '',
-    merch ? textoMerchFila(x, tipo) : esIngreso ? textoDonador(x) : '',
+    merch ? textoMerchFila(x, tipoDeItem(x)) : esIngreso ? textoDonador(x) : '',
     x.para.length ? `Para ${textoPara(x)}` : '',
     x.observaciones,
   ].filter(Boolean).join(' · ');
-  const ventas = esIngreso ? 0 : redondear(items.reduce((s, x) => s + (x.precio != null && x.cantidad ? totalVenta(x.precio, x.cantidad) : 0), 0));
+  const ventas = redondear(salidasDe(lote).reduce((s, x) => s + (x.precio != null && x.cantidad ? totalVenta(x.precio, x.cantidad) : 0), 0));
+  const tituloRevisa = { Ingreso: 'Revisa el ingreso', Salida: 'Revisa la salida', Mezcla: 'Revisa ingresos y salidas' }[tipo];
+  const confirmar = { Ingreso: 'Confirmar ingreso', Salida: 'Confirmar salida', Mezcla: 'Confirmar todo' }[tipo];
 
   return (
     <form className="modal modal-lote" id="form-lote-confirmar" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, () => confirmarLote(modal))}>
-      <CabeceraLote titulo={esIngreso ? 'Revisa el ingreso' : 'Revisa la salida'} subtitulo={`${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${usuario.nombre} · ${fechaActual()}`} onVolver={onVolver} />
+      <CabeceraLote tipo={tipo} titulo={tituloRevisa} subtitulo={`${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${usuario.nombre} · ${fechaActual()}`} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
-        <ul className="lote-resumen">
-          {filas.map(({ x, item, nuevo, antes, despues, merch }) => (
-            <li key={x.id}>
-              <div>
-                <b>{item.nombre}{nuevo ? ' (producto nuevo)' : ''}</b>
-                <small>{presentacion(item)}</small>
-                {detalle(x, merch) && <small>{detalle(x, merch)}</small>}
-                {!esIngreso && despues < item.minimo && <span className="lote-problema">Quedará bajo el mínimo ({item.minimo} {item.unidad})</span>}
-              </div>
-              <div className={`lote-cambio ${esIngreso ? 'ingreso' : 'salida'}`}>
-                <em>{tipos[tipo].signo}{x.cantidad} {item.unidad}</em>
-                <small>{antes} → {despues}</small>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {secciones.map(([t, titulo, filasSeccion]) => (
+          <section key={t} className="lote-seccion">
+            {titulo && <h3 className={`lote-seccion-titulo ${tipos[t].color}`}><span>{tipos[t].signo}</span> {titulo} <small>{filasSeccion.length}</small></h3>}
+            <ul className="lote-resumen">
+              {filasSeccion.map(({ x, item, nuevo, antes, despues, merch, esIngreso }) => (
+                <li key={x.id}>
+                  <div>
+                    <b>{item.nombre}{nuevo ? ' (producto nuevo)' : ''}</b>
+                    <small>{presentacion(item)}</small>
+                    {detalle(x, merch, esIngreso) && <small>{detalle(x, merch, esIngreso)}</small>}
+                    {!esIngreso && despues < item.minimo && <span className="lote-problema">Quedará bajo el mínimo ({item.minimo} {item.unidad})</span>}
+                  </div>
+                  <div className={`lote-cambio ${esIngreso ? 'ingreso' : 'salida'}`}>
+                    <em>{tipos[esIngreso ? 'Ingreso' : 'Salida'].signo}{x.cantidad} {item.unidad}</em>
+                    <small>{antes} → {despues}</small>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
         {ventas > 0 && <p className="lote-total-ventas">Total de ventas: <b>{soles(ventas)}</b></p>}
         <MensajeError texto={f.error} />
       </div>
 
-      <Botones textoGuardar={`Confirmar ${tipo.toLowerCase()} (${items.length})`} enviando={f.enviando} conCancelar={false} />
+      <Botones textoGuardar={`${confirmar} (${items.length})`} enviando={f.enviando} conCancelar={false} />
     </form>
   );
 }
@@ -803,9 +911,13 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
   const [texto, setTexto] = useState('');
 
   const posibles = x.dudas.map(c => productoPorClave(c)).filter(Boolean);
+  // empieza en la pestaña del producto elegido; con dudas ("¿cuál de estos?") se ven todas
+  // o en la del inventario que se dijo ("ingreso a merchandising de ...")
+  const [categoria, setCategoria] = useState(() => (!posibles.length && elegido && !elegido.nuevo ? elegido.categoria : x.categoriaDicha ?? 'Todos'));
   const todos = todosLosProductos();
   const encontrados = texto.trim() ? todos.filter(({ item }) => coincideNombre(texto, item.nombre)) : posibles.length ? posibles : todos;
-  const visibles = encontrados.slice(0, MAXIMO_SUGERIDOS);
+  const enPestana = enCategoria(encontrados, categoria);
+  const visibles = enPestana.slice(0, MAXIMO_SUGERIDOS);
 
   function elegir(nuevaClave) {
     onElegir(nuevaClave);
@@ -851,8 +963,9 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
           }}
         />
       </div>
+      <PestanasCategoria valor={categoria} onCambiar={setCategoria} encontrados={encontrados} />
       <div className="lote-productos lote-productos-elegir">
-        {nuevo && !texto.trim() && (
+        {nuevo && !texto.trim() && (categoria === 'Todos' || categoria === nuevo.categoria) && (
           <button type="button" className="lote-producto" onClick={() => elegir('nuevo')}>
             <span className={`tarjeta-codigo ${colorCategoria(nuevo.categoria)}`}>+</span>
             <span><b>{nuevo.item.nombre}</b><small>{presentacion(nuevo.item)} · producto nuevo</small></span>
@@ -874,7 +987,8 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
           );
         })}
         {encontrados.length === 0 && <p className="lote-vacio">No hay productos con ese nombre.</p>}
-        {encontrados.length > visibles.length && <p className="lote-elegir-nota">Y {encontrados.length - visibles.length} más: escribe más letras para encontrarlo.</p>}
+        {encontrados.length > 0 && enPestana.length === 0 && <p className="lote-vacio">No hay en {nombresPestana[categoria]}: mira en las otras pestañas.</p>}
+        {enPestana.length > visibles.length && <p className="lote-elegir-nota">Y {enPestana.length - visibles.length} más: escribe más letras para encontrarlo.</p>}
         {!texto.trim() && posibles.length > 0 && <p className="lote-elegir-nota">¿No es ninguno? Escribe para buscar entre todos.</p>}
       </div>
     </>
@@ -900,7 +1014,8 @@ export function ModalLoteItem({ modal }) {
   }, [decimales, f.formulario]);
 
   if (!x) return null;
-  const esIngreso = estado.lote.tipo === 'Ingreso';
+  // cada fila con su tipo (la lista puede tener ingresos y salidas)
+  const esIngreso = esIngresoItem(x);
   const actividades = opcionesActividad();
 
   const dudas = x.dudas.map(c => productoPorClave(c)?.item.nombre).filter(Boolean);
@@ -910,7 +1025,7 @@ export function ModalLoteItem({ modal }) {
   const dicho = productoDeItem(x);
   // el nombre sin su presentacion del final: "Leche Evaporada Gloria lata 400 g" -> "Leche Evaporada Gloria"
   const nombreBase = dicho ? baseDe(dicho.item.nombre, dicho.item) : x.nombreDicho;
-  const crearProducto = () => abrirProducto(elegido?.categoria ?? x.categoria ?? 'Alimentos', {
+  const crearProducto = () => abrirProducto(elegido?.categoria ?? x.categoria ?? x.categoriaDicha ?? 'Alimentos', {
     itemId: x.id,
     nombre: nombreBase,
     codigoBarras: x.codigoBarras,
@@ -923,7 +1038,7 @@ export function ModalLoteItem({ modal }) {
   return (
     <Fondo>
       <form className="modal" id="form-item" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarItem(modal, v))}>
-        <CabeceraLote titulo={elegido ? elegido.item.nombre : 'Editar producto'} subtitulo={subtitulo} />
+        <CabeceraLote tipo={tipoDeItem(x)} titulo={elegido ? elegido.item.nombre : 'Editar producto'} subtitulo={subtitulo} />
 
         <div className="modal-cuerpo">
           {x.dicho && <p className="lote-origen">Se dijo: <b>"{x.dicho}"</b></p>}
@@ -948,7 +1063,7 @@ export function ModalLoteItem({ modal }) {
           <div className="dos-columnas">
             <div className="campo">
               <label htmlFor="cantidad">CANTIDAD{elegido ? ` (${elegido.item.unidad.toUpperCase()})` : ''}</label>
-              <CampoNumero id="cantidad" decimales={decimales} placeholder="0" defaultValue={x.cantidad ?? ''} autoFocus={Boolean(elegido)} onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
+              <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" defaultValue={x.cantidad ?? ''} autoFocus={Boolean(elegido)} onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
               {elegido && !esIngreso && <small>Se pueden usar {disponible(elegido.item)}</small>}
             </div>
             {esIngreso && !merch && <CampoVencimiento inicial={x.vence} />}
@@ -963,7 +1078,7 @@ export function ModalLoteItem({ modal }) {
             </>
           )}
           {!esIngreso && elegido?.categoria === 'Salud' && <CampoPara ninos={opcionesNinos()} inicial={x.para} />}
-          <CampoObservaciones ejemplo="Opcional" inicial={x.observaciones} />
+          <CampoObservaciones ejemplo="Ej. una lata llegó abollada" inicial={x.observaciones} />
 
           <MensajeError texto={f.error} />
         </div>

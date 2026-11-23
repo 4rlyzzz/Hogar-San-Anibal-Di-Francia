@@ -91,10 +91,11 @@ export function textoTotal(item) {
   if (!item.contenido || !item.medida) return '';
   let total = item.cantidad * item.contenido;
   let medida = item.medida;
-  // 38400 g se lee mejor como 38.4 kg
-  if ((medida === 'g' || medida === 'ml') && total >= 1000) {
+  // 38400 g se lee mejor como 38.4 kg (y 5000 mg como 5 g)
+  const mayor = { mg: 'g', g: 'kg', ml: 'L' };
+  if (mayor[medida] && total >= 1000) {
     total /= 1000;
-    medida = medida === 'g' ? 'kg' : 'L';
+    medida = mayor[medida];
   }
   return `${Math.round(total * 100) / 100} ${medida} en total`;
 }

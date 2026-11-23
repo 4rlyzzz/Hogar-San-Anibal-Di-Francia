@@ -1,4 +1,6 @@
 import math
+import re
+import uuid
 from datetime import datetime, timezone
 
 from django.contrib.auth.hashers import make_password, check_password
@@ -34,7 +36,10 @@ CAMPOS_PRODUCTO = (
     'codigo', 'codigosBarras', 'almacen', 'ubicacion',
     'envase', 'contenido', 'medida', 'unidos',
 )
-CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo')
+CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo', 'area')
+# al editar una cuenta el nombre no va: es el que queda como responsable en el historial y no cambia.
+# el usuario (con el que se entra) si se puede cambiar
+CAMPOS_EDITAR_USUARIO = ('usuario', 'rol', 'activo', 'area')
 ROLES = ('Usuario', 'Administrador')
 # cambios de rol/estado que se guardan por cuenta
 MAX_CAMBIOS = 50
@@ -78,6 +83,37 @@ def _clave_invalida(clave):
     if not any(c.isalpha() for c in clave) or not any(c.isdigit() for c in clave):
         return 'La contraseña debe tener letras y números'
     return None
+
+
+USUARIO_VALIDO = re.compile(r'^[a-z0-9._-]{3,20}$')
+
+
+def _leer_usuario(texto):
+    """Mismas reglas que nombreUsuario en validacion.js. -> (usuario en minusculas, error o None)"""
+    usuario = str(texto or '').strip().lower()
+    if not usuario:
+        return usuario, 'Escribe el usuario'
+    if not USUARIO_VALIDO.match(usuario):
+        return usuario, 'El usuario debe tener de 3 a 20 caracteres: letras sin tildes, números y . _ -'
+    return usuario, None
+
+
+LARGO_AREA = 40
+
+
+def _leer_area(texto):
+    """Area de la cuenta (Cocina, Secretaría...): texto libre de 2 a 40 letras, con mayuscula al inicio.
+    -> (area, error o None). La lista de areas la arma el frontend con las que ya hay."""
+    area = ' '.join(str(texto or '').split())
+    if not area:
+        return area, 'Elige el área'
+    if len(area) < 2 or len(area) > LARGO_AREA or not any(c.isalpha() for c in area):
+        return area, f'El área debe tener de 2 a {LARGO_AREA} caracteres'
+    return area[0].upper() + area[1:], None
+
+
+def _usuario_de(doc):
+    return str(doc.get('usuario') or doc.get('username') or '').lower()
 
 
 def principal_id(usuarios):
@@ -162,7 +198,8 @@ class CustomLoginView(APIView):
                 'nombre': user_doc.get('nombre', usuario_input),
                 # el usuario como esta guardado (no como se tecleo: 'Admin' y 'admin' son la misma cuenta)
                 'usuario': user_doc.get('usuario') or user_doc.get('username') or usuario_input,
-                'rol': rol_final
+                'rol': rol_final,
+                'area': user_doc.get('area', ''),
             }
         }, status=200)
 
@@ -210,6 +247,7 @@ class MiCuentaView(APIView):
             'nombre': doc.get('nombre', ''),
             'usuario': doc.get('usuario') or doc.get('username') or '',
             'rol': doc.get('rol', 'Usuario'),
+            'area': doc.get('area', ''),
         }, status=200)
 
 
@@ -487,12 +525,17 @@ class UsuariosListCreateView(APIView):
         if doc_data['rol'] not in ROLES:
             return Response({'error': 'Rol no válido'}, status=400)
 
-        nombre_usuario = str(doc_data.get('usuario', '')).strip()
+        nombre_usuario, error_usuario = _leer_usuario(doc_data.get('usuario'))
         raw_password = str(request.data.get('clave') or request.data.get('password') or '').strip()
 
         if not nombre_usuario or not raw_password:
             return Response({'error': 'Usuario y contraseña son obligatorios'}, status=400)
+        if error_usuario:
+            return Response({'error': error_usuario}, status=400)
         error = _clave_invalida(raw_password)
+        if error:
+            return Response({'error': error}, status=400)
+        doc_data['area'], error = _leer_area(doc_data.get('area'))
         if error:
             return Response({'error': error}, status=400)
 
@@ -500,8 +543,7 @@ class UsuariosListCreateView(APIView):
         existentes, status_code = get_documents_by_type('usuario')
         if status_code != 200:
             return Response(existentes, status=status_code)
-        if any((d.get('usuario') or d.get('username') or '').lower() == nombre_usuario.lower()
-               for d in existentes):
+        if any(_usuario_de(d) == nombre_usuario for d in existentes):
             return Response({'error': 'Ese usuario ya existe'}, status=409)
 
         doc_data['usuario'] = nombre_usuario
@@ -514,7 +556,14 @@ class UsuariosListCreateView(APIView):
         # identificador fijo: dos admins creando el mismo usuario a la vez -> CouchDB deja solo uno
         data, status_code = create_document(doc_data, f'usuario:{slug(nombre_usuario)}')
         if status_code == 409:
-            return Response({'error': 'Ese usuario ya existe'}, status=409)
+            # el identificador puede estar ocupado por una cuenta a la que despues le cambiaron el usuario
+            # (el identificador no cambia). Si nadie tiene ese usuario, la nueva va con otro identificador
+            existentes, status_code = get_documents_by_type('usuario')
+            if status_code != 200:
+                return Response(existentes, status=status_code)
+            if any(_usuario_de(d) == nombre_usuario for d in existentes):
+                return Response({'error': 'Ese usuario ya existe'}, status=409)
+            data, status_code = create_document(doc_data, f'usuario:{slug(nombre_usuario)}-{uuid.uuid4().hex[:6]}')
         return Response(data, status=status_code)
 
 
@@ -522,7 +571,7 @@ class UsuarioDetailView(APIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
 
     def put(self, request, doc_id):
-        doc_data = _solo_campos(request.data, CAMPOS_USUARIO)
+        doc_data = _solo_campos(request.data, CAMPOS_EDITAR_USUARIO)
 
         if 'rol' in doc_data and doc_data['rol'] not in ROLES:
             return Response({'error': 'Rol no válido'}, status=400)
@@ -539,8 +588,32 @@ class UsuarioDetailView(APIView):
         todos, status_code = get_documents_by_type('usuario')
         if status_code != 200:
             return Response(todos, status=status_code)
-        if str(doc_id) == str(principal_id(todos)):
+        # (solo su area la puede cambiar ella misma)
+        solo_su_area = str(doc_id) == str(request.user.id) and set(request.data) <= {'area'}
+        if str(doc_id) == str(principal_id(todos)) and not solo_su_area:
             return Response({'error': 'La cuenta principal no se puede modificar'}, status=403)
+        cuenta = next((u for u in todos if str(u.get('_id')) == str(doc_id)), None)
+        if cuenta is None:
+            return Response({'error': 'No se encontró la cuenta'}, status=404)
+
+        # el nombre es el que sale como responsable en el historial: no se cambia
+        if 'nombre' in request.data and str(request.data['nombre'] or '').strip() != str(cuenta.get('nombre') or '').strip():
+            return Response({'error': 'El nombre de la cuenta no se puede cambiar'}, status=400)
+
+        # el usuario con el que se entra si: con las mismas reglas que al crear y sin repetirse
+        if 'usuario' in doc_data:
+            doc_data['usuario'], error = _leer_usuario(doc_data['usuario'])
+            if error:
+                return Response({'error': error}, status=400)
+            if any(_usuario_de(u) == doc_data['usuario'] for u in todos if str(u.get('_id')) != str(doc_id)):
+                return Response({'error': 'Ese usuario ya existe'}, status=409)
+            if doc_data['usuario'] == _usuario_de(cuenta):
+                del doc_data['usuario']
+
+        if 'area' in doc_data:
+            doc_data['area'], error = _leer_area(doc_data['area'])
+            if error:
+                return Response({'error': error}, status=400)
 
         # Solo se cambia la contraseña si llega una nueva (siempre se hashea);
         # si no llega, fusionar=True conserva el hash actual.
@@ -560,6 +633,10 @@ class UsuarioDetailView(APIView):
                 cambios.append({'accion': 'rol', 'valor': doc_data['rol']})
             if 'activo' in doc_data and doc_data['activo'] != actual.get('activo', True):
                 cambios.append({'accion': 'estado', 'valor': doc_data['activo']})
+            if 'usuario' in doc_data and doc_data['usuario'] != _usuario_de(actual):
+                cambios.append({'accion': 'usuario', 'valor': doc_data['usuario']})
+            if 'area' in doc_data and doc_data['area'] != actual.get('area'):
+                cambios.append({'accion': 'area', 'valor': doc_data['area']})
             if nueva:
                 # la contraseña no se guarda en el registro, solo que se cambio
                 cambios.append({'accion': 'clave', 'valor': True})
@@ -600,3 +677,42 @@ class CambiarClaveView(APIView):
         if status_code not in (200, 201):
             return Response(data, status=status_code)
         return Response({'ok': True}, status=200)
+
+
+class CambiarUsuarioView(APIView):
+    """Cada uno cambia su propio usuario (con el que entra) sabiendo su contraseña.
+    El nombre de la cuenta no cambia: es el que sale como responsable en el historial."""
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
+    def post(self, request):
+        clave = str(request.data.get('clave') or '')
+        nuevo, error = _leer_usuario(request.data.get('usuario'))
+
+        doc, status_code = get_document_con_secretos(request.user.id, 'usuario')
+        if status_code != 200:
+            return Response({'error': 'No se encontró tu cuenta'}, status=status_code)
+        if not check_password(clave.strip(), doc.get('clave') or doc.get('password') or DUMMY_HASH):
+            return Response({'error': 'La contraseña no es correcta'}, status=400)
+        if error:
+            return Response({'error': error}, status=400)
+        if nuevo == _usuario_de(doc):
+            return Response({'error': 'Ese ya es tu usuario'}, status=400)
+
+        todos, status_code = get_documents_by_type('usuario')
+        if status_code != 200:
+            return Response(todos, status=status_code)
+        if any(_usuario_de(u) == nuevo for u in todos if str(u.get('_id')) != str(doc['_id'])):
+            return Response({'error': 'Ese usuario ya existe'}, status=409)
+
+        # queda en sus cambios (sale en su actividad)
+        def aplicar(actual):
+            cambio = {'accion': 'usuario', 'valor': nuevo, 'quienId': request.user.id, 'quien': request.user.nombre, 'fecha': _ahora()}
+            return {'usuario': nuevo, 'cambios': (actual.get('cambios') or [])[-(MAX_CAMBIOS - 1):] + [cambio]}
+
+        data, status_code = actualizar_con_reintento(doc['_id'], 'usuario', aplicar)
+        if status_code not in (200, 201):
+            return Response(data, status=status_code)
+        cache.delete(f"couch_user:{doc['_id']}")
+        return Response({'ok': True, 'usuario': nuevo}, status=200)

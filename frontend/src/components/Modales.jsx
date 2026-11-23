@@ -7,8 +7,8 @@ import { estado } from '../estado.js';
 import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
-  guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasAlimentos, medidasSalud,
-  categorias, abrirPersona, guardarMinimo,
+  guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasSueltoSalud, medidasAlimentos, medidasSalud, medidaEntera,
+  categorias, abrirPersona, guardarMinimo, miUsuario, cambiarMiUsuario, opcionesArea, guardarArea, listaMezclada, tipoDeItem,
 } from '../acciones.js';
 import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CamposProductoMerch, CampoVenceMerch } from './Merch.jsx';
@@ -16,7 +16,7 @@ import {
   nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, pluralizar, redondear, fechaActual, textoPara, formatoNombre,
 } from '../logica/comunes.js';
 import { cantidadVencida, disponible, lotesVencidos, fechaLote, fechaVence } from '../logica/lotes.js';
-import { useFormulario, CampoNumero, CampoClave, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
+import { useFormulario, CampoNumero, CampoClave, CampoArea, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
 import { Desplegable } from './Desplegable.jsx';
 import { MovimientosEntre } from './Comunes.jsx';
 import { LotesSalida } from './Lotes.jsx';
@@ -95,7 +95,7 @@ export function ModalMovimiento({ modal }) {
               <div className={esIngreso && puedeVence(item) ? 'dos-columnas' : ''}>
                 <div className="campo">
                   <label htmlFor="cantidad">CANTIDAD ({item.unidad.toUpperCase()})</label>
-                  <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
+                  <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" autoFocus onAviso={f.setError} onInput={e => setCantidad(e.target.value)} />
                   <small>{esIngreso ? `En stock: ${item.cantidad} ${item.unidad}` : textoDisponible(item)}</small>
                 </div>
                 {esIngreso && <CampoVenceMerch item={item} />}
@@ -108,7 +108,7 @@ export function ModalMovimiento({ modal }) {
             <div className="dos-columnas">
               <div className="campo">
                 <label htmlFor="cantidad">CANTIDAD</label>
-                <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} />
+                <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" autoFocus onAviso={f.setError} />
                 <small>En stock: {item.cantidad} {item.unidad}</small>
               </div>
               <CampoVencimiento />
@@ -116,7 +116,7 @@ export function ModalMovimiento({ modal }) {
           ) : (
             <div className="campo">
               <label htmlFor="cantidad">CANTIDAD</label>
-              <CampoNumero id="cantidad" decimales={decimales} placeholder="0" autoFocus onAviso={f.setError} />
+              <CampoNumero id="cantidad" decimales={decimales} placeholder="Ej. 10" autoFocus onAviso={f.setError} />
               <small>{textoDisponible(item)}</small>
             </div>
           )}
@@ -253,7 +253,7 @@ function ModalProductoMerch({ modal }) {
           <div id="coincidencias"><Coincidencias parecidos={parecidos} onElegir={(cat, id) => usarExistente(modal, cat, id)} /></div>
           <div className="campo">
             <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
-            <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="7751271010016" />
+            <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="Ej. 7751271010016" />
           </div>
           <MensajeError texto={f.error} />
         </div>
@@ -281,7 +281,7 @@ function ModalProductoInventario({ modal }) {
   const suelto = envase.startsWith('suelto:');
   // decimales segun lo elegido
   const decimalesCantidad = suelto ? decimalesDe(envase.slice(7)) : envase ? 0 : 2;
-  const decimalesContenido = medida === 'unidades' ? 0 : 2;
+  const decimalesContenido = medidaEntera(medida) ? 0 : 2;
 
   // al cambiar los decimales, corrige lo que ya estaba escrito
   useEffect(() => {
@@ -363,7 +363,7 @@ function ModalProductoInventario({ modal }) {
                   ...(esSalud ? envasesSalud : envasesAlimentos).map(e => [e, e]),
                   ['otro', '+ otro envase…'],
                   [null, 'Suelto (a granel)'],
-                  ...medidasSuelto.map(m => [`suelto:${m}`, m]),
+                  ...(esSalud ? medidasSueltoSalud : medidasSuelto).map(m => [`suelto:${m}`, m]),
                 ]}
               />
               <span className="fila-presentacion-de">de</span>
@@ -375,7 +375,7 @@ function ModalProductoInventario({ modal }) {
               name="envase-otro"
               type="text"
               maxLength={largos.envaseOtro}
-              placeholder="¿Cómo se llama el envase? Ej. Bidón"
+              placeholder="Ej. Bidón"
               hidden={envase !== 'otro'}
               onInput={e => setEnvaseOtro(e.target.value.trim())}
             />
@@ -388,11 +388,11 @@ function ModalProductoInventario({ modal }) {
           <div className="dos-columnas">
             <div className="campo">
               <label htmlFor="minimo">STOCK MÍNIMO</label>
-              <CampoNumero id="minimo" decimales={decimalesCantidad} placeholder="0" onAviso={f.setError} />
+              <CampoNumero id="minimo" decimales={decimalesCantidad} placeholder="Ej. 5" onAviso={f.setError} />
             </div>
             <div className="campo">
               <label htmlFor="codigo-barras">CÓDIGO DE BARRAS (OPCIONAL)</label>
-              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="7751271010016" />
+              <input id="codigo-barras" name="codigo-barras" type="text" inputMode="numeric" autoComplete="off" maxLength={largos.codigoBarras} defaultValue={modal.codigoBarras} placeholder="Ej. 7751271010016" />
             </div>
           </div>
 
@@ -483,7 +483,7 @@ export function ModalAjuste({ modal }) {
             </div>
             <div className="campo">
               <label htmlFor="contado">CANTIDAD CONTADA</label>
-              <CampoNumero id="contado" decimales={decimalesDe(item.unidad)} placeholder="0" autoFocus onAviso={f.setError} onInput={e => setContado(e.target.value.trim())} />
+              <CampoNumero id="contado" decimales={decimalesDe(item.unidad)} placeholder="Ej. 12" autoFocus onAviso={f.setError} onInput={e => setContado(e.target.value.trim())} />
             </div>
           </div>
 
@@ -636,7 +636,7 @@ export function ModalEditarMinimo({ modal }) {
         <div className="modal-cuerpo">
           <div className="campo">
             <label htmlFor="minimo">STOCK MÍNIMO ({item.unidad.toUpperCase()})</label>
-            <CampoNumero id="minimo" decimales={decimalesDe(item.unidad)} placeholder="0" defaultValue={item.minimo ?? ''} autoFocus onAviso={f.setError} />
+            <CampoNumero id="minimo" decimales={decimalesDe(item.unidad)} placeholder="Ej. 5" defaultValue={item.minimo ?? ''} autoFocus onAviso={f.setError} />
             <small>Hay {item.cantidad} {item.unidad}. Si baja de este número, aparece en "Stock bajo" y en las alertas.</small>
           </div>
           <MensajeError texto={f.error} />
@@ -706,7 +706,10 @@ export function ModalElegir() {
   // una lista que se cerro sin guardar
   if (lote?.items.length) {
     const n = lote.items.length;
-    registrar.unshift({ accion: 'continuar-lista', color: 'azul', Icono: lote.tipo === 'Ingreso' ? IconoIngreso : IconoSalida, titulo: `Continuar la lista de ${lote.tipo.toLowerCase()}`, detalle: `${n} ${n === 1 ? 'producto' : 'productos'} sin guardar`, abrir: abrirLista });
+    // con ingresos y salidas: "Continuar la lista de ingresos y salidas"
+    const tipoLista = listaMezclada(lote) ? null : tipoDeItem(lote.items[0]);
+    const deQue = tipoLista ? tipoLista.toLowerCase() : 'ingresos y salidas';
+    registrar.unshift({ accion: 'continuar-lista', color: 'azul', Icono: tipoLista === 'Salida' ? IconoSalida : IconoIngreso, titulo: `Continuar la lista de ${deQue}`, detalle: `${n} ${n === 1 ? 'producto' : 'productos'} sin guardar`, abrir: abrirLista });
   }
   // los productos nuevos se crean al registrar su ingreso
   const opciones = [
@@ -743,11 +746,11 @@ export function ModalDonador() {
         <div className="modal-cuerpo">
           <div className="campo">
             <label>NOMBRE</label>
-            <input id="nuevo-nombre" name="nuevo-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Nombre o institución" autoFocus />
+            <input id="nuevo-nombre" name="nuevo-nombre" type="text" maxLength={largos.nombreDonador} placeholder="Ej. Parroquia San José" autoFocus />
           </div>
           <div className="campo">
             <label>NÚMERO DE CONTACTO</label>
-            <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" />
+            <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="Ej. 987 654 321" />
           </div>
           <div className="campo">
             <label htmlFor="nuevo-observaciones">OBSERVACIONES (OPCIONAL)</label>
@@ -808,6 +811,54 @@ export function ModalClave({ modal }) {
   );
 }
 
+// ---------- area de una cuenta (o la propia) ----------
+export function ModalArea({ modal }) {
+  const f = useFormulario();
+  const cuenta = estado.cuentas.find(c => String(c.id) === String(modal.cuentaId));
+  if (!cuenta) return null;
+  const propia = String(cuenta.id) === String(usuario.id);
+  return (
+    <Fondo>
+      <form className="modal" id="form-area" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarArea(modal, v))}>
+        <Cabecera codigo={<IconoUsuarios />} color="azul" titulo={propia ? 'Cambiar mi área' : 'Cambiar área'} subtitulo={`${cuenta.nombre} · @${cuenta.usuario}`} />
+        <div className="modal-cuerpo">
+          <CampoArea areas={opcionesArea()} inicial={cuenta.area} autoFocus />
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar="Guardar área" enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
+// ---------- mi usuario (con el que entro), desde el menu de arriba ----------
+// el nombre no se cambia: es el que sale como responsable en el historial
+export function ModalMiUsuario() {
+  const f = useFormulario();
+  const actual = miUsuario();
+  return (
+    <Fondo>
+      <form className="modal" id="form-mi-usuario" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, cambiarMiUsuario)}>
+        <Cabecera codigo={<IconoUsuarios />} color="azul" titulo="Cambiar mi usuario" subtitulo={usuario.nombre} />
+        <div className="modal-cuerpo">
+          <p className="ajuste-nota">
+            {actual ? <>Ahora entras como <b>{actual}</b>. </> : null}
+            Tu nombre, <b>{usuario.nombre}</b>, no cambia: es el que sale como responsable en el historial.
+          </p>
+          <div className="campo">
+            <label htmlFor="mi-usuario">USUARIO NUEVO</label>
+            <input id="mi-usuario" name="mi-usuario" type="text" maxLength={largos.nombreUsuario} autoCapitalize="none" autoComplete="username" spellCheck={false} placeholder={`Ej. ${actual || 'cocina'}2`} autoFocus />
+            <small>Con este entrarás a la app: de 3 a 20 caracteres, sin espacios ni tildes (letras, números y . _ -)</small>
+          </div>
+          <CampoClave id="mi-usuario-clave" etiqueta="TU CONTRASEÑA" ayuda="Para confirmar que eres tú" autoComplete="current-password" />
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar="Cambiar usuario" enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
 // ---------- usuario nuevo (solo administrador) ----------
 export function ModalUsuario() {
   const f = useFormulario();
@@ -828,6 +879,8 @@ export function ModalUsuario() {
             <input id="cuenta-usuario" name="cuenta-usuario" type="text" maxLength={largos.nombreUsuario} autoCapitalize="none" autoComplete="off" placeholder="Ej. cocina" />
             <small>Con este nombre entra a la app: sin espacios ni tildes</small>
           </div>
+
+          <CampoArea areas={opcionesArea()} />
 
           <CamposClaveNueva />
 

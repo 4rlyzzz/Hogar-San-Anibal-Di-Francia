@@ -707,22 +707,29 @@
 
 /* recuadros de arriba */
 .texto-azul { color: #2f7fb5; }
+.texto-morado { color: #6b4fc0; }
 
 .panel-recuadros {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 18px;
   margin-bottom: 18px;
 }
 
+/* cada recuadro se acomoda segun SU ancho (no el de la pantalla): con el menu abierto, en tablet
+   o en un monitor chico puede quedar angosto aunque la pantalla sea grande. Ver @container mas abajo */
 .recuadro {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   padding: 20px;
   background: #fff;
   border: 1px solid #e5eae8;
   border-radius: 18px;
   box-shadow: 0 1px 2px rgba(23, 33, 31, 0.04);
+  container-type: inline-size;
+  /* las palabras se pasan enteras a la linea de abajo, nunca letra por letra ("p r o d u c t o s") */
+  overflow-wrap: normal;
 }
 
 .recuadro-cabecera {
@@ -750,11 +757,13 @@
 
 .recuadro-fila {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
 }
 
 .recuadro-titulo {
+  min-width: 0;
   font-weight: 600;
   font-size: 13px;
   color: #3d4b46;
@@ -763,6 +772,7 @@
 .recuadro-unidad {
   font-size: 12px;
   color: #8b9a95;
+  white-space: nowrap;
 }
 
 .recuadro-detalle {
@@ -770,6 +780,63 @@
   font-weight: 700;
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* textos cortos para cuando el recuadro es angosto ("Merch" en vez de "Merchandising") */
+.recuadro .texto-corto {
+  display: none;
+}
+
+/* recuadro angosto (unos 230px o menos por dentro): el icono va encima del titulo,
+   el titulo en una linea con su nombre corto, y el detalle debajo del numero */
+@container (max-width: 230px) {
+  .recuadro-cabecera {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .recuadro-icono {
+    width: 32px;
+    height: 32px;
+  }
+
+  .recuadro-icono svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .recuadro-titulo {
+    max-width: 100%;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .recuadro-numero {
+    font-size: 24px;
+  }
+
+  .recuadro-unidad {
+    font-size: 11px;
+  }
+
+  .recuadro-detalle {
+    flex-basis: 100%;
+    margin-left: 0;
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .recuadro .texto-largo {
+    display: none;
+  }
+
+  .recuadro .texto-corto {
+    display: inline;
+  }
 }
 
 /* fila del grafico y la alerta */
@@ -1301,7 +1368,7 @@
 /* ---------- usuarios ---------- */
 .usuario-fila {
   display: grid;
-  grid-template-columns: 1.5fr 136px 120px 1fr 1.3fr 52px 1fr 104px;
+  grid-template-columns: 1.5fr 1fr 136px 120px 1fr 1.3fr 52px 1fr 104px;
   gap: 12px;
   align-items: center;
   padding: 10px 20px;
@@ -1337,6 +1404,43 @@
 .usuario-fila.inactivo .uf-acceso,
 .usuario-fila.inactivo .uf-actividad {
   opacity: 0.55;
+}
+
+/* area: con lapiz si se puede cambiar */
+.uf-area {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.uf-area-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uf-area-boton svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: #a9b7b2;
+}
+
+.uf-area-boton:hover {
+  background: #f2f5f4;
+}
+
+.uf-area-boton:hover svg {
+  color: #2f7fb5;
 }
 
 .uf-movimientos {
@@ -1496,6 +1600,11 @@
 
 .barra-tabla-resumen b {
   color: #17211f;
+}
+
+/* "14 donaciones" no se parte: si no entra, baja entero a la linea de abajo */
+.sin-cortar {
+  white-space: nowrap;
 }
 
 /* numero al lado del titulo de la pagina */
@@ -3055,6 +3164,44 @@ button.uf-usuario:hover b {
   color: #8b9a95;
 }
 
+/* dentro de un formulario (.campo) el campo de busqueda no lleva su propio recuadro:
+   el recuadro es el del buscador, con la lupa adentro */
+.campo .buscador input,
+.campo .buscador input:focus {
+  padding: 3px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Todos · Alimentos · Salud · Merch */
+.lote-categorias {
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* pegadas al buscador y a la lista: el cuerpo de la ventana separa 16px, aqui basta con 8px */
+.modal-cuerpo > .lote-categorias {
+  margin: -8px 0;
+}
+
+/* al editar (dentro de .campo, que separa 7px) la lista no suma su propio margen */
+.lote-categorias + .lote-productos-elegir {
+  margin-top: 0;
+}
+
+.lote-categorias button {
+  flex: 1;
+  padding: 7px 10px;
+}
+
+.lote-categoria-numero {
+  margin-left: 3px;
+  font-weight: 500;
+  color: #8b9a95;
+}
+
 .lote-productos {
   display: flex;
   flex-direction: column;
@@ -3491,6 +3638,48 @@ button.uf-usuario:hover b {
 
 .lote-cambio.ingreso em { color: #2d8e6c; }
 .lote-cambio.salida em { color: #c96b16; }
+
+/* ingresos y salidas en la misma lista: una seccion para cada uno */
+.lote-seccion + .lote-seccion {
+  margin-top: 16px;
+}
+
+.lote-seccion-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4b5a55;
+}
+
+.lote-seccion-titulo span {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.lote-seccion-titulo.verde span { background: #e3f5ee; color: #2d8e6c; }
+.lote-seccion-titulo.naranja span { background: #fdeedd; color: #c96b16; }
+
+.lote-seccion-titulo small {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a9a94;
+}
+
+/* "Entendí" con ingreso y salida: de que tipo es cada producto */
+.entendido li .entendido-tipo {
+  margin-right: 6px;
+  vertical-align: 1px;
+}
 
 /* editar una fila */
 .lote-origen {

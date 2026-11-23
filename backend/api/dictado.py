@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 # entre todos los intentos: gunicorn corta a los 60 s
 ESPERA_TOTAL = 40
-MAX_TEXTO = 600
+# un poco mas que el maximo de la pantalla (1000)
+MAX_TEXTO = 1100
 MAX_ITEMS = 20
 
 INSTRUCCIONES = """Extrae productos de inventario desde voz en JSON.
@@ -32,6 +33,8 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
 3. OPERACIÓN ('tipo'):
    - "salida": si indica sacar, usar, retirar, llevarse o dar de baja.
    - "ingreso": por defecto si es agregar, comprar, donar o neutro.
+   - En una misma frase pueden ir los dos: cada producto lleva el tipo que se dijo antes de él.
+     "ingreso de 3 kilos de arroz y salida de 2 latas de leche" -> Arroz "ingreso", Leche "salida".
 4. NOMBRE COMPLETO DEL PRODUCTO:
    - La dosis, concentración o tamaño que acompaña al nombre ES PARTE DEL PRODUCTO, nunca la cantidad ni la unidad:
      "100 mg", "500 mg", "120 mg/5 ml", "0.9 %", "x 100 tabletas", "1 L", "400 g".
@@ -59,11 +62,17 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
    - medio_pago: "efectivo", "yape-plin" (Yape o Plin) o "transferencia", solo si se dijo. Si no, null.
    - La talla y el color de una prenda SON PARTE DEL PRODUCTO: "dos polos talla M azules" -> producto "Polo talla M azul", cantidad 2.
    - La talla se escribe con sus letras aunque se diga por su nombre: "talla eme" -> "talla M", "talla ese" -> "talla S", "talla ele" -> "talla L", "talla equis ele" -> "talla XL", "talla doble equis ele" -> "talla XXL".
+8. INVENTARIO ('categoria'): hay tres inventarios y un mismo producto puede estar en varios ("Mermelada de fresa" en Alimentos y en Merchandising).
+   - Si se dijo a cuál va: "alimentos" -> "alimentos"; "salud" o "salud e higiene" -> "salud"; "merchandising" o "merch" -> "merchandising".
+   - Dicho al inicio ("ingreso a alimentos de 3 mermeladas y 2 panetones") vale para todos los productos que siguen; dicho junto a un producto ("3 mermeladas de merchandising") solo para ese.
+   - El nombre del inventario NO es parte del producto: "ingreso a merchandising de 3 mermeladas de fresa" -> producto "Mermelada de fresa", categoria "merchandising".
+   - Si no se dijo, null.
 
 Responde SOLO el JSON plano, sin markdown:
-[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null","comprador":"nombre|null","proveedor":"nombre|null","precio":"número|null","medio_pago":"efectivo|yape-plin|transferencia|null"}]"""
+[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null","comprador":"nombre|null","proveedor":"nombre|null","precio":"número|null","medio_pago":"efectivo|yape-plin|transferencia|null","categoria":"alimentos|salud|merchandising|null"}]"""
 
 MEDIOS_PAGO = ('efectivo', 'yape-plin', 'transferencia')
+CATEGORIAS = ('alimentos', 'salud', 'merchandising')
 
 
 def _texto(valor, maximo):
@@ -111,6 +120,7 @@ def limpiar_items(contenido):
                 'proveedor': _texto(d.get('proveedor'), 60),
                 'precio': precio if _precio_valido(precio) else None,
                 'medio_pago': d.get('medio_pago') if d.get('medio_pago') in MEDIOS_PAGO else None,
+                'categoria': d.get('categoria') if d.get('categoria') in CATEGORIAS else None,
             }.items() if v},
         })
     return items

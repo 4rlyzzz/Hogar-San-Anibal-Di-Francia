@@ -1,12 +1,13 @@
 import { useEstado } from '../estado.js';
 import { usuario } from '../data/datos.js';
-import { verActividad, cambiarRol, cambiarActivo, sePuedeAdministrar, roles } from '../acciones.js';
+import { verActividad, cambiarRol, cambiarActivo, sePuedeAdministrar, roles, abrirArea, puedeCambiarArea, opcionesArea } from '../acciones.js';
 import { iniciales, fechaLarga, textoFecha, tiempoRelativo, mismoId } from '../logica/comunes.js';
 import { actividadDe, movimientoDe } from '../logica/actividad.js';
 import { Encabezado, SinResultados, TituloOrden, usePaginacion, Paginacion } from '../components/Comunes.jsx';
 import { tamanosTabla } from '../logica/paginas.js';
 import { BotonFiltros, PanelFiltros, CampoSelect, Chips } from '../components/Filtros.jsx';
 import { Desplegable } from '../components/Desplegable.jsx';
+import { IconoEditar } from '../assets/iconos.jsx';
 
 // ordenes; "invertido" los da vuelta
 const ordenes = {
@@ -23,7 +24,8 @@ function pasaFiltros(c, filtros, texto) {
   if (filtros.rol !== 'Todos' && c.rol !== filtros.rol) return false;
   if (filtros.estado === 'Activos' && !c.activo) return false;
   if (filtros.estado === 'Desactivados' && c.activo) return false;
-  return (c.nombre + ' ' + c.usuario).toLowerCase().includes(texto);
+  if (filtros.area === 'Sin área' ? c.area : filtros.area !== 'Todos' && c.area !== filtros.area) return false;
+  return [c.nombre, c.usuario, c.area].join(' ').toLowerCase().includes(texto);
 }
 
 // ultima: lo ultimo que hizo
@@ -38,9 +40,19 @@ function FilaUsuario({ c, registros, ultima }) {
         <span className={`avatar ${c.rol === 'Administrador' ? '' : 'avatar-verde'}`}>{iniciales(c.nombre)}</span>
         <span>
           <b>{c.nombre}</b>
-          <small>@{c.usuario}{esYo ? ' · tú' : ''}{c.principal ? ' · principal' : ''}<span className="solo-movil"> · {c.rol}</span></small>
+          <small>@{c.usuario}{esYo ? ' · tú' : ''}{c.principal ? ' · principal' : ''}<span className="solo-movil"> · {c.rol}{c.area ? ` · ${c.area}` : ''}</span></small>
         </span>
       </button>
+
+      <span className="uf-area">
+        {puedeCambiarArea(c)
+          ? (
+            <button type="button" className="uf-area-boton" data-accion="cambiar-area" data-id={c.id} title={`Cambiar el área de ${c.nombre}`} onClick={() => abrirArea(c.id)}>
+              {c.area || <span className="uf-nada">Sin área</span>} <IconoEditar />
+            </button>
+          )
+          : c.area || <span className="uf-nada">Sin área</span>}
+      </span>
 
       <span className="uf-rol">
         {!editable
@@ -102,6 +114,7 @@ export function Usuarios() {
   const chips = [];
   if (filtros.rol !== 'Todos') chips.push({ campo: 'rol', texto: filtros.rol });
   if (filtros.estado !== 'Todos') chips.push({ campo: 'estado', texto: filtros.estado });
+  if (filtros.area !== 'Todos') chips.push({ campo: 'area', texto: filtros.area });
   const hayFiltros = chips.length || texto;
   const abierto = estado.filtrosAbiertos === 'usuarios';
   const activos = estado.cuentas.filter(c => c.activo).length;
@@ -124,7 +137,7 @@ export function Usuarios() {
           </div>
 
           <div className="usuario-fila fila-titulos">
-            <span><TituloOrden texto="USUARIO" orden="nombre" filtros={filtros} grupo="usuarios" /></span><span>ROL</span><span>ESTADO</span>
+            <span><TituloOrden texto="USUARIO" orden="nombre" filtros={filtros} grupo="usuarios" /></span><span>ÁREA</span><span>ROL</span><span>ESTADO</span>
             <span><TituloOrden texto="ÚLTIMO ACCESO" orden="acceso" filtros={filtros} grupo="usuarios" /></span>
             <span>ÚLTIMA ACTIVIDAD</span>
             <span><TituloOrden texto="MOV." orden="movimientos" filtros={filtros} grupo="usuarios" /></span>
@@ -141,6 +154,7 @@ export function Usuarios() {
           <PanelFiltros grupo="usuarios" resultados={lista.length}>
             <CampoSelect grupo="usuarios" campo="rol" titulo="Rol" opciones={filtrosRol} actual={filtros.rol} />
             <CampoSelect grupo="usuarios" campo="estado" titulo="Estado" opciones={filtrosEstado} actual={filtros.estado} />
+            <CampoSelect grupo="usuarios" campo="area" titulo="Área" opciones={[['Todos', 'Todas las áreas'], ...opcionesArea().filter(a => estado.cuentas.some(c => c.area === a)).map(a => [a, a]), ...(estado.cuentas.some(c => !c.area) ? [['Sin área', 'Sin área']] : [])]} actual={filtros.area} />
             <CampoSelect grupo="usuarios" campo="orden" titulo="Ordenar por" opciones={Object.entries(ordenes).map(([clave, o]) => [clave, o.texto])} actual={filtros.orden} />
           </PanelFiltros>
         )}

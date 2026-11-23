@@ -77,9 +77,11 @@ Crear el primer administrador (pide usuario, nombre y contraseña; solo se hace 
 python manage.py crear_usuario
 ```
 
-Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**.
+Su área queda como *Dirección*; para otra: `python manage.py crear_usuario --area Secretaría`. Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**. Cada cuenta tiene un **área** (Cocina, Secretaría, Repostería...) que se elige al crearla y se puede cambiar después.
 
 > **Datos de prueba (opcional):** si tu base no tiene productos y quieres probar con algo realista, ejecuta `python manage.py datos_prueba --clave <contraseña>`. Crea productos, donadores, proveedores, compradores, un equipo de usuarios de prueba (todos con esa contraseña) y movimientos de las últimas 8 semanas.
+
+> **Misma base para todo el equipo (manual, fotos, pruebas):** `python manage.py datos_prueba --reiniciar` **borra los datos de tu base local** y la deja igual que la de los demás: los datos de prueba y las cuentas del equipo (`neymi`, `luigi`, `alan`, `pochano`), con los movimientos registrados a nombre de ellos. Las contraseñas **no están en el repositorio**: pídelas al equipo y agrégalas a tu `backend/.env` en una línea `CLAVES_EQUIPO=neymi:<clave>,luigi:<clave>,alan:<clave>,pochano:<clave>`. Solo funciona con `DEBUG=True` en tu `backend/.env`: en Railway se niega y no borra nada.
 
 Para inicializar el servicio Django ejecutar (**1ra terminal**):
 
@@ -206,4 +208,4 @@ Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como
 ```powershell
 net stop "Apache CouchDB"
 net start "Apache CouchDB"
-```
+```

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useEstado } from '../estado.js';
-import { IconoAlimentos, IconoSalud, IconoReloj, IconoCaja } from '../assets/iconos.jsx';
+import { IconoAlimentos, IconoSalud, IconoMerch, IconoReloj, IconoCaja } from '../assets/iconos.jsx';
+import { esMerch, soles } from '../logica/merch.js';
 import { irA, verProducto, cambiar } from '../acciones.js';
 import { nombreCategoria, colorCategoria, colorVencimiento, textoCambio, diasParaVencer, porVencer, bajoMinimo, fechaDe, meses } from '../logica/comunes.js';
 import { calcularAlertas, ordenarAlertas, coloresPrioridad, itemSobrestock } from '../logica/alertas.js';
@@ -9,14 +10,27 @@ import { AlertaSobrestock } from '../components/AlertaSobrestock.jsx';
 import { PastillasProblemas } from '../components/Paneles.jsx';
 
 // ---------- recuadros de arriba ----------
+// lo vendido de merchandising en el mes actual (las salidas de merch guardan su total)
+function ventasDelMes(historial) {
+  const hoy = new Date();
+  return historial
+    .filter(f => esMerch(f.categoria) && f.movimiento === 'Salida' && f.total != null)
+    .filter(f => {
+      const fecha = fechaDe(f.fecha);
+      return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
+    })
+    .reduce((suma, f) => suma + Number(f.total), 0);
+}
+
 function Recuadros({ estado }) {
   const todos = [...estado.alimentos, ...estado.salud, ...estado.merch];
   return (
     <div className="panel-recuadros">
       <Recuadro color="verde" Icono={IconoAlimentos} numero={estado.alimentos.length} titulo="Alimentos" detalle={`${estado.alimentos.filter(porVencer).length} por vencer`} />
-      <Recuadro color="azul" Icono={IconoSalud} numero={estado.salud.length} titulo="Salud e higiene" detalle={`${estado.salud.filter(bajoMinimo).length} bajo mínimo`} />
-      <Recuadro color="naranja" Icono={IconoReloj} numero={todos.filter(porVencer).length} titulo="Por vencer / vencidos" detalle="≤ 15 días" />
-      <Recuadro color="rojo" Icono={IconoCaja} numero={todos.filter(bajoMinimo).length} titulo="Bajo stock mínimo" detalle={`de ${todos.length}`} />
+      <Recuadro color="azul" Icono={IconoSalud} numero={estado.salud.length} titulo={<>Salud<span className="texto-largo"> e higiene</span></>} detalle={`${estado.salud.filter(bajoMinimo).length} bajo mínimo`} />
+      <Recuadro color="morado" Icono={IconoMerch} numero={estado.merch.length} titulo={<>Merch<span className="texto-largo">andising</span></>} detalle={<>{soles(ventasDelMes(estado.historial))}<span className="texto-largo"> este mes</span><span className="texto-corto"> / mes</span></>} />
+      <Recuadro color="naranja" Icono={IconoReloj} numero={todos.filter(porVencer).length} titulo={<>Por vencer<span className="texto-largo"> / vencidos</span></>} detalle="≤ 15 días" />
+      <Recuadro color="rojo" Icono={IconoCaja} numero={todos.filter(bajoMinimo).length} titulo={<>Bajo stock<span className="texto-largo"> mínimo</span></>} detalle={`de ${todos.length}`} />
     </div>
   );
 }

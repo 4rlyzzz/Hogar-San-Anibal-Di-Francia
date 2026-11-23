@@ -13,7 +13,8 @@ from .views import (
     ProveedoresListCreateView,
     CompradoresListCreateView,
     UsuariosListCreateView,
-    UsuarioDetailView
+    UsuarioDetailView,
+    CambiarUsuarioView,
 )
 
 urlpatterns = [
@@ -23,6 +24,7 @@ urlpatterns = [
     path('auth/refresh/', RenovarTokenView.as_view(), name='token_refresh'),
     path('auth/yo/', MiCuentaView.as_view(), name='mi-cuenta'),
     path('auth/clave/', CambiarClaveView.as_view(), name='cambiar-clave'),
+    path('auth/usuario/', CambiarUsuarioView.as_view(), name='cambiar-usuario'),
     path('inventario/', InventarioListCreateView.as_view(), name='inventario-list-create'),
     path('inventario/<str:doc_id>/', InventarioDetailView.as_view(), name='inventario-detail'),
     path('historial/', HistorialListCreateView.as_view(), name='historial-list-create'),
@@ -33,4 +35,4 @@ urlpatterns = [
     path('compradores/', CompradoresListCreateView.as_view(), name='compradores-list-create'),
     path('usuarios/', UsuariosListCreateView.as_view(), name='usuarios-list-create'),
     path('usuarios/<str:doc_id>/', UsuarioDetailView.as_view(), name='usuario-detail'),
-]
+]

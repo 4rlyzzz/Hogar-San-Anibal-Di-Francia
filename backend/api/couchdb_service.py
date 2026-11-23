@@ -251,4 +251,4 @@ def delete_document(doc_id, rev, tipo_esperado):
     actual, status = _leer_documento(doc_id, tipo_esperado)
     if status != 200:
         return actual, status
-    return _request('DELETE', _doc_url(tipo_esperado, actual['_id']),params={'rev': rev})
+    return _request('DELETE', _doc_url(tipo_esperado, actual['_id']),params={'rev': rev})

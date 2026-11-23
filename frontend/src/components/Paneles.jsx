@@ -4,7 +4,7 @@ import { usuario } from '../data/datos.js';
 import { IconoAjustar, IconoSalida, IconoIngreso, IconoEditar } from '../assets/iconos.jsx';
 import {
   cerrarModal, abrirMovimiento, abrirAjuste, abrirUnir, historialProducto, movimientosDe, verMovimiento, corregirAjuste,
-  filtrarProducto, historialDonador, verProducto, cambiarRol, cambiarActivo, esAdmin, sePuedeAdministrar, abrirClave, roles,
+  filtrarProducto, historialDonador, verProducto, cambiarRol, cambiarActivo, esAdmin, sePuedeAdministrar, abrirClave, abrirArea, puedeCambiarArea, roles,
   abrirEditarMerch, abrirEditarMinimo, historialPersona,
 } from '../acciones.js';
 import { esMerch, textoTipo, textoPrecio, soles, nombreMedio, nombreComprobante, mayuscula } from '../logica/merch.js';
@@ -505,7 +505,7 @@ export function PanelActividad({ modal }) {
           <span className={`avatar ${cuenta.rol === 'Administrador' ? '' : 'avatar-verde'}`}>{iniciales(cuenta.nombre)}</span>
           <div>
             <div className="modal-titulo">{esPropio ? 'Mi actividad' : cuenta.nombre}</div>
-            <div className="modal-sub">{cuenta.usuario ? `@${cuenta.usuario} · ` : ''}{cuenta.rol}{cuenta.principal ? ' · cuenta principal' : ''}{cuenta.activo ? '' : ' · desactivado'}</div>
+            <div className="modal-sub">{cuenta.usuario ? `@${cuenta.usuario} · ` : ''}{cuenta.rol}{cuenta.area ? ` · ${cuenta.area}` : ''}{cuenta.principal ? ' · cuenta principal' : ''}{cuenta.activo ? '' : ' · desactivado'}</div>
           </div>
           <Cerrar />
         </div>
@@ -516,6 +516,7 @@ export function PanelActividad({ modal }) {
               <span id="rol-panel">Rol</span>
               <Desplegable variante="rol" className="selector-rol" data-id={cuenta.id} aria-labelledby="rol-panel" valor={cuenta.rol} onChange={r => cambiarRol(cuenta.id, r)} opciones={roles.map(r => [r, r])} />
             </div>
+            <button className="btn-mini" data-accion="cambiar-area" onClick={() => abrirArea(cuenta.id)}>Cambiar área</button>
             <button className="btn-mini" data-accion="restablecer-clave" onClick={() => abrirClave(cuenta.id)}>Restablecer contraseña</button>
             <button className={`btn-mini ${cuenta.activo ? 'btn-mini-rojo' : ''}`} data-accion="activar-usuario" data-id={cuenta.id} onClick={() => cambiarActivo(cuenta.id)}>
               {cuenta.activo ? 'Desactivar cuenta' : 'Activar cuenta'}
@@ -527,6 +528,7 @@ export function PanelActividad({ modal }) {
         )}
         {esPropio && (
           <div className="panel-actividad-controles">
+            {puedeCambiarArea(cuenta) && <button className="btn-mini" data-accion="cambiar-area" onClick={() => abrirArea(cuenta.id)}>Cambiar mi área</button>}
             <button className="btn-mini" data-accion="cambiar-mi-clave" onClick={() => abrirClave()}>Cambiar mi contraseña</button>
           </div>
         )}

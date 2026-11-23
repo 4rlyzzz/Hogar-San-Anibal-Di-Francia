@@ -12,7 +12,7 @@ class LoginTests(PruebaAPI):
         self.assertEqual(r.status_code, 200)
         self.assertIn('access', r.data)
         self.assertIn('refresh', r.data)
-        self.assertEqual(r.data['usuario'], {'id': 'usuario:admin', 'nombre': 'Dirección', 'usuario': 'admin', 'rol': 'Administrador'})
+        self.assertEqual(r.data['usuario'], {'id': 'usuario:admin', 'nombre': 'Dirección', 'usuario': 'admin', 'rol': 'Administrador', 'area': ''})
 
     def test_login_no_distingue_mayusculas_en_el_usuario(self):
         r = self.entrar('ADMIN', CLAVE)
@@ -64,7 +64,7 @@ class TokenTests(PruebaAPI):
         self.entrar_como(self.usuario)
         r = self.client.get('/api/auth/yo/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data, {'id': 'usuario:cocina', 'nombre': 'Cocina', 'usuario': 'cocina', 'rol': 'Usuario'})
+        self.assertEqual(r.data, {'id': 'usuario:cocina', 'nombre': 'Cocina', 'usuario': 'cocina', 'rol': 'Usuario', 'area': ''})
 
     def test_el_rol_sale_de_la_base_y_no_del_token(self):
         # el token dice Administrador, pero en la base ya es Usuario
@@ -142,3 +142,45 @@ class CambiarClaveTests(PruebaAPI):
     def test_la_cuenta_principal_tambien_puede_cambiar_su_clave(self):
         self.entrar_como(self.admin)
         self.assertEqual(self.cambiar(CLAVE, 'nueva98765').status_code, 200)
+
+
+class CambiarMiUsuarioTests(PruebaAPI):
+    """Cada uno cambia el usuario con el que entra (no el nombre) desde su menu."""
+    def cambiar(self, usuario, clave=CLAVE):
+        return self.client.post('/api/auth/usuario/', {'usuario': usuario, 'clave': clave}, format='json')
+
+    def test_cambia_el_usuario_y_no_el_nombre(self):
+        self.entrar_como(self.usuario)
+        r = self.cambiar('Cocina.Central')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['usuario'], 'cocina.central')
+        doc = self.couch.leer('usuario', 'usuario:cocina')
+        self.assertEqual((doc['usuario'], doc['nombre']), ('cocina.central', 'Cocina'))
+        self.assertEqual((doc['cambios'][-1]['accion'], doc['cambios'][-1]['quienId']), ('usuario', 'usuario:cocina'))
+        # sigue con su sesion y ve su usuario nuevo
+        self.assertEqual(self.client.get('/api/auth/yo/').data['usuario'], 'cocina.central')
+        self.salir()
+        cache.clear()
+        self.assertEqual(self.client.post('/api/auth/login/', {'usuario': 'cocina.central', 'clave': CLAVE}, format='json').status_code, 200)
+        self.assertNotEqual(self.client.post('/api/auth/login/', {'usuario': 'cocina', 'clave': CLAVE}, format='json').status_code, 200)
+
+    def test_pide_la_contrasena(self):
+        self.entrar_como(self.usuario)
+        self.assertEqual(self.cambiar('otro.nombre', clave='mala12345').status_code, 400)
+        self.assertEqual(self.couch.leer('usuario', 'usuario:cocina')['usuario'], 'cocina')
+
+    def test_invalido_repetido_o_el_mismo(self):
+        self.entrar_como(self.usuario)
+        for malo in ('', 'ab', 'con espacio', 'ñandú'):
+            self.assertEqual(self.cambiar(malo).status_code, 400, malo)
+        cache.clear()  # tiene el mismo limite de intentos que el login
+        self.assertEqual(self.cambiar('ADMIN').status_code, 409)
+        self.assertEqual(self.cambiar('cocina').status_code, 400)
+        self.assertEqual(self.couch.leer('usuario', 'usuario:cocina')['usuario'], 'cocina')
+
+    def test_la_cuenta_principal_tambien_puede(self):
+        self.entrar_como(self.admin)
+        self.assertEqual(self.cambiar('direccion').status_code, 200)
+
+    def test_sin_sesion_no(self):
+        self.assertEqual(self.cambiar('otro.nombre').status_code, 401)

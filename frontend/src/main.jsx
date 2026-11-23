@@ -30,6 +30,33 @@ document.addEventListener('keydown', e => {
   if (estado.menuUsuario) cambiar(x => (x.menuUsuario = false));
 });
 
+// fecha vacia: el "dd/mm/aaaa" lo dibuja el navegador como si ya estuviera escrito.
+// data-vacia lo pinta gris como los demas ejemplos (global.css). Se revisa al aparecer
+// un campo nuevo y al escribir o marcar algo ("No tiene fecha" la borra sin evento propio)
+const marcarFechas = () => {
+  for (const campo of document.querySelectorAll('input[type="date"]')) campo.toggleAttribute('data-vacia', !campo.value);
+};
+new MutationObserver(marcarFechas).observe(document.querySelector('#app'), { childList: true, subtree: true });
+document.addEventListener('input', marcarFechas, true);
+document.addEventListener('change', marcarFechas, true);
+
+// celular: el teclado tapaba el campo donde se escribe. Cuando el teclado termina de subir
+// (cambia el alto visible), el campo se lleva al centro de lo que se ve.
+// En Android ademas la pagina se achica con el teclado (interactive-widget en index.html)
+// (el buscador de arriba no: ya esta a la vista y moverlo desordena la pagina)
+const esCampoDeTexto = el => el?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea') && !el.closest('.topbar');
+const mostrarCampo = () => {
+  const campo = document.activeElement;
+  if (esCampoDeTexto(campo) && window.matchMedia('(max-width: 767px)').matches) {
+    campo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+};
+window.visualViewport?.addEventListener('resize', mostrarCampo);
+// por si el teclado ya estaba abierto (se pasa de un campo a otro): no cambia el alto
+document.addEventListener('focusin', e => {
+  if (esCampoDeTexto(e.target)) setTimeout(mostrarCampo, 350);
+});
+
 // errores que no se esperaban: se avisa y la app sigue funcionando
 window.addEventListener('error', () => mostrarToast('Ocurrió un error inesperado. Revisa el historial antes de volver a intentarlo.'));
 window.addEventListener('unhandledrejection', e => {

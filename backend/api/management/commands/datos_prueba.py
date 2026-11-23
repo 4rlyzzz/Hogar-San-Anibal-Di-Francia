@@ -2,6 +2,13 @@
 
     python manage.py datos_prueba            # muestra a que base se conecta y pide confirmar
     python manage.py datos_prueba --si       # sin preguntar (en Railway: railway ssh ... --si)
+    python manage.py datos_prueba --reiniciar  # SOLO EN TU PC: borra la base local y carga todo de cero
+
+--reiniciar (para el manual y las fotos: que todo el equipo vea lo mismo):
+  borra los datos de la base local (no las bases, ni permisos ni indices), crea las cuentas del equipo
+  (CUENTAS_LOCALES, con las contraseñas de CLAVES_EQUIPO en backend/.env) y carga los datos de prueba. No se crean los usuarios de
+  prueba: los movimientos los registra el equipo (AREAS_LOCALES). Solo funciona con DEBUG=True:
+  en Railway DEBUG es False y se niega, asi no se pueden borrar los datos reales.
 
 Crea donadores, proveedores, compradores, productos de Alimentos, Salud e higiene y Merchandising,
 y sus movimientos (ingresos, donaciones, salidas, ventas y ajustes) repartidos en las ultimas 8 semanas.
@@ -15,18 +22,21 @@ Todo pasa por las mismas vistas de la API, con sus validaciones: el stock y los 
   para probar las alertas, los filtros y "Dar de baja".
 """
 import itertools
+import os
 import random
 import secrets
 from datetime import datetime, time as hora, timedelta
 from types import SimpleNamespace
 from unittest import mock
 
+from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework.views import APIView
 
 from api import movimientos
-from api.couchdb_service import COUCHDB_URL, get_documents_by_type
+from api.couchdb_service import COUCHDB_URL, DBS, _request, create_document, get_documents_by_type, slug
 from api.movimientos import ZONA, RegistrarMovimientoView
 from api.views import (
     CompradoresListCreateView, DonadoresListCreateView, InventarioListCreateView, ProveedoresListCreateView, UsuariosListCreateView,
@@ -61,6 +71,40 @@ EQUIPO = [
     ('cocina', 'Kenny', 'Usuario', 'cocina'),
     ('terapia', 'Revel', 'Usuario', 'terapia'),
 ]
+# como se ve el area de cada uno en la app (campo "area" de la cuenta)
+NOMBRE_AREA = {'direccion': 'Dirección', 'secretaria': 'Secretaría', 'salud': 'Medicina', 'cocina': 'Cocina', 'terapia': 'Terapia'}
+# cuentas del equipo que hace el proyecto: solo con --reiniciar (en la PC de cada uno, nunca en Railway).
+# Las contraseñas NO van aqui (el repositorio lo puede ver cualquiera): van en el backend/.env de cada uno,
+# que no se sube a git:   CLAVES_EQUIPO=neymi:<clave>,luigi:<clave>,alan:<clave>,pochano:<clave>
+# La primera es la cuenta principal (nadie le puede quitar el rol de Administrador ni desactivarla)
+CUENTAS_LOCALES = [
+    ('neymi', 'Neymi', 'Administrador'),
+    ('luigi', 'Luigi', 'Administrador'),
+    ('alan', 'Alan', 'Administrador'),
+    ('pochano', 'Pochano', 'Administrador'),
+]
+
+
+def claves_equipo():
+    """{usuario: clave} de CLAVES_EQUIPO (backend/.env). Error claro si falta alguna o no cumple las reglas."""
+    texto = os.getenv('CLAVES_EQUIPO', '')
+    claves = {}
+    for par in texto.split(','):
+        usuario, _, clave = par.strip().partition(':')
+        if usuario.strip():
+            claves[usuario.strip().lower()] = clave.strip()
+    faltan = [u for u, *_ in CUENTAS_LOCALES if not claves.get(u)]
+    if faltan:
+        raise CommandError('Faltan las contraseñas de ' + ', '.join(faltan) + '. Pídelas al equipo y ponlas en backend/.env:\n'
+                           '  CLAVES_EQUIPO=neymi:<clave>,luigi:<clave>,alan:<clave>,pochano:<clave>')
+    for u, *_ in CUENTAS_LOCALES:
+        if _clave_invalida(claves[u]):
+            raise CommandError(f'CLAVES_EQUIPO, {u}: {_clave_invalida(claves[u])}')
+    return claves
+# con --reiniciar no se crean los usuarios de prueba (EQUIPO): los movimientos de cada area
+# los registra alguien del equipo, asi en el historial aparecen ellos
+AREAS_LOCALES = {'direccion': 'neymi', 'secretaria': 'luigi', 'salud': 'alan', 'terapia': 'alan', 'cocina': 'pochano'}
+
 # quien registra cada cosa (se elige uno al azar, siempre igual para los mismos datos)
 QUIEN = {
     ('Alimentos', 'ingreso'): ['secretaria', 'cocina', 'direccion'],
@@ -195,8 +239,13 @@ class Command(BaseCommand):
         parser.add_argument('--si', action='store_true', help='No pedir confirmacion')
         parser.add_argument('--forzar', action='store_true', help='Cargar aunque ya haya productos (los que ya existen se saltan)')
         parser.add_argument('--clave', help='Contraseña de los usuarios de prueba (si no, se genera una y se muestra al final)')
+        parser.add_argument('--reiniciar', action='store_true',
+                            help='SOLO LOCAL (DEBUG=True): borra los datos de la base, crea las cuentas del equipo y carga todo de cero')
 
-    def handle(self, *args, si=False, forzar=False, clave=None, **opciones):
+    def handle(self, *args, si=False, forzar=False, clave=None, reiniciar=False, **opciones):
+        if reiniciar:
+            self._reiniciar(si)
+            si = True  # ya se confirmo al borrar
         productos, status = get_documents_by_type('producto')
         if status != 200:
             raise CommandError(f'No se pudo leer la base ({status}): ¿corrio setup_couch? ¿esta encendida CouchDB?')
@@ -208,7 +257,10 @@ class Command(BaseCommand):
         if clave and _clave_invalida(clave):
             raise CommandError(f'--clave: {_clave_invalida(clave)}')
         self.stdout.write(f'Base: {COUCHDB_URL}')
-        self.stdout.write(f'Administrador: {self.usuario.nombre}. Se agregan {len(EQUIPO)} usuarios de prueba que registran los movimientos.')
+        if reiniciar:
+            self.stdout.write('Los movimientos los registran las cuentas del equipo (no se crean usuarios de prueba).')
+        else:
+            self.stdout.write(f'Administrador: {self.usuario.nombre}. Se agregan {len(EQUIPO)} usuarios de prueba que registran los movimientos.')
         if not si and input('¿Cargar los datos de prueba? [s/N] ').strip().lower() not in ('s', 'si', 'sí'):
             raise CommandError('Cancelado: no se cargo nada')
 
@@ -220,12 +272,15 @@ class Command(BaseCommand):
 
         # el equipo: los que ya existen se usan tal cual (no se les cambia la contraseña)
         clave_generada = None
-        if not clave:
-            clave = clave_generada = f'prueba{secrets.randbelow(9000) + 1000}{secrets.token_hex(2)}'
-        nuevos = [u for u, nombre, rol, _ in EQUIPO
-                  if self._post(UsuariosListCreateView, '/api/usuarios/', {'usuario': u, 'nombre': nombre, 'rol': rol, 'clave': clave}, saltar_repetido=True)]
-        self.stdout.write(f'Usuarios: {len(nuevos)} nuevos')
-        self.equipo = self._equipo()
+        nuevos = []
+        if not reiniciar:
+            if not clave:
+                clave = clave_generada = f'prueba{secrets.randbelow(9000) + 1000}{secrets.token_hex(2)}'
+            nuevos = [u for u, nombre, rol, area in EQUIPO
+                      if self._post(UsuariosListCreateView, '/api/usuarios/',
+                                    {'usuario': u, 'nombre': nombre, 'rol': rol, 'area': NOMBRE_AREA[area], 'clave': clave}, saltar_repetido=True)]
+            self.stdout.write(f'Usuarios: {len(nuevos)} nuevos')
+        self.equipo = self._equipo(AREAS_LOCALES if reiniciar else None)
 
         for vista, nombre, lista in (
             (DonadoresListCreateView, 'donadores', [{'nombre': n, 'telefono': t} for n, t in DONADORES]),
@@ -259,6 +314,48 @@ class Command(BaseCommand):
             if clave_generada:
                 # solo se muestra aqui, en la consola de quien lo corrio
                 self.stdout.write(f'Contraseña de todos ellos: {clave_generada}  (cámbiala desde la app si hace falta)')
+        if reiniciar:
+            self.stdout.write('Cuentas del equipo: ' + ', '.join(u for u, *_ in CUENTAS_LOCALES) + ' (con las contraseñas de CLAVES_EQUIPO)')
+
+    # ---------- --reiniciar (solo local) ----------
+    def _reiniciar(self, si):
+        """Deja la base LOCAL vacia (sin tocar bases, permisos ni indices) y crea las cuentas del equipo."""
+        if not settings.DEBUG:
+            raise CommandError('--reiniciar solo funciona en tu PC (DEBUG=True en backend/.env). '
+                               'Aqui DEBUG es False: puede ser la base real (Railway) y no se borra nada.')
+        # antes de borrar: si faltan las contraseñas no se toca nada
+        claves = claves_equipo()
+        self.stdout.write(f'Base: {COUCHDB_URL}')
+        self.stdout.write(self.style.WARNING('Se BORRAN todos los usuarios, productos, movimientos, donadores, proveedores y compradores de esta base.'))
+        if not si and input('¿Borrar todo y cargar los datos de prueba? [s/N] ').strip().lower() not in ('s', 'si', 'sí'):
+            raise CommandError('Cancelado: no se borro nada')
+
+        for base in DBS.values():
+            datos, status = _request('GET', f'{COUCHDB_URL}/{base}/_all_docs')
+            if status != 200:
+                raise CommandError(f'No se pudo leer {base} ({status}): ¿corrio setup_couch? ¿esta encendida CouchDB?')
+            # los _design son los indices: se quedan
+            borrar = [{'_id': f['id'], '_rev': f['value']['rev'], '_deleted': True}
+                      for f in datos.get('rows', []) if not f['id'].startswith('_design/')]
+            if borrar:
+                _, status = _request('POST', f'{COUCHDB_URL}/{base}/_bulk_docs', json={'docs': borrar})
+                if status not in (200, 201):
+                    raise CommandError(f'No se pudo vaciar {base} ({status})')
+            self.stdout.write(f'  {base}: {len(borrar)} borrados')
+
+        # igual que crear_usuario: la primera cuenta es la principal
+        ahora = datetime.now(ZONA).isoformat()
+        for i, (usuario, nombre, rol) in enumerate(CUENTAS_LOCALES):
+            clave = claves[usuario]
+            _, status = create_document({
+                'tipo': 'usuario', 'usuario': usuario, 'nombre': nombre, 'rol': rol, 'activo': True,
+                # su area: la primera que registra (AREAS_LOCALES)
+                'area': next((NOMBRE_AREA[a] for a, u in AREAS_LOCALES.items() if u == usuario), 'Dirección'),
+                'clave': make_password(clave), 'creado': ahora, 'principal': i == 0,
+            }, f'usuario:{slug(usuario)}')
+            if status not in (200, 201):
+                raise CommandError(f'No se pudo crear la cuenta {usuario} ({status})')
+        self.stdout.write(f'Cuentas del equipo: {len(CUENTAS_LOCALES)} creadas')
 
     # ---------- partes ----------
     def _responsable(self):
@@ -272,11 +369,13 @@ class Command(BaseCommand):
     def _cuenta(c):
         return SimpleNamespace(is_authenticated=True, pk=c['_id'], id=c['_id'], nombre=c.get('nombre') or c.get('usuario'), rol=c.get('rol'))
 
-    def _equipo(self):
-        """area -> cuenta (la de la base: con su id, asi la pestaña Usuarios cuenta sus movimientos)."""
+    def _equipo(self, areas=None):
+        """area -> cuenta (la de la base: con su id, asi la pestaña Usuarios cuenta sus movimientos).
+        areas: {area: usuario} para usar otras cuentas (--reiniciar: las del equipo del proyecto)."""
         cuentas, _ = get_documents_by_type('usuario')
         por_usuario = {str(c.get('usuario', '')).lower(): c for c in cuentas}
-        equipo = {area: self._cuenta(por_usuario[u]) for u, _, _, area in EQUIPO if u in por_usuario}
+        quien = areas or {area: u for u, _, _, area in EQUIPO}
+        equipo = {area: self._cuenta(por_usuario[u]) for area, u in quien.items() if u in por_usuario}
         # si alguno no se pudo crear, lo hace el administrador
         return {area: equipo.get(area, self.usuario) for *_, area in EQUIPO}
 

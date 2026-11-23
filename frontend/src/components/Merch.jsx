@@ -33,11 +33,11 @@ export function CampoPersona({ tipo, obligatorio = false, inicial = {} }) {
       <div className="dos-columnas" hidden={elegido !== 'nuevo'}>
         <div className="campo">
           <label htmlFor={`${tipo}-nombre`}>NOMBRE DEL {p.singular.toUpperCase()}</label>
-          <input id={`${tipo}-nombre`} name={`${tipo}-nombre`} type="text" maxLength={largos.nombreDonador} placeholder={tipo === 'proveedor' ? 'Ej. Distribuidora Lima' : 'Nombre de quien compra'} defaultValue={inicial.nombre} />
+          <input id={`${tipo}-nombre`} name={`${tipo}-nombre`} type="text" maxLength={largos.nombreDonador} placeholder={tipo === 'proveedor' ? 'Ej. Textiles Sur' : 'Ej. Rosa Quispe'} defaultValue={inicial.nombre} />
         </div>
         <div className="campo">
           <label htmlFor={`${tipo}-telefono`}>NÚMERO DE CONTACTO{p.telefonoObligatorio ? '' : ' (OPCIONAL)'}</label>
-          <input id={`${tipo}-telefono`} name={`${tipo}-telefono`} type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" defaultValue={inicial.telefono} />
+          <input id={`${tipo}-telefono`} name={`${tipo}-telefono`} type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="Ej. 987 654 321" defaultValue={inicial.telefono} />
         </div>
       </div>
     </>
@@ -89,7 +89,7 @@ export function CamposIngresoMerch({ item, inicial = {}, onAviso }) {
           <div className="dos-columnas">
             <div className="campo">
               <label htmlFor="costo">COSTO UNITARIO (S/)</label>
-              <CampoNumero id="costo" decimales={2} placeholder="0.00" defaultValue={inicial.costo ?? ''} onAviso={onAviso} />
+              <CampoNumero id="costo" decimales={2} placeholder="Ej. 18.50" defaultValue={inicial.costo ?? ''} onAviso={onAviso} />
               <small>Lo que costó cada {item.unidad === 'unidades' ? 'unidad' : item.unidad.slice(0, -1)}</small>
             </div>
             {lote}
@@ -102,11 +102,11 @@ export function CamposIngresoMerch({ item, inicial = {}, onAviso }) {
         <div className="dos-columnas">
           <div className="campo">
             <label htmlFor="taller">TALLER O GRUPO (OPCIONAL)</label>
-            <input id="taller" name="taller" type="text" maxLength={largos.taller} placeholder="Ej. Taller de manualidades" defaultValue={inicial.taller} />
+            <input id="taller" name="taller" type="text" maxLength={largos.taller} placeholder="Ej. Taller de arte" defaultValue={inicial.taller} />
           </div>
           <div className="campo">
             <label htmlFor="costo-materiales">COSTO DE MATERIALES (OPCIONAL)</label>
-            <CampoNumero id="costo-materiales" decimales={2} placeholder="S/ 0.00" defaultValue={inicial.costoMateriales ?? ''} onAviso={onAviso} />
+            <CampoNumero id="costo-materiales" decimales={2} placeholder="Ej. S/ 15.00" defaultValue={inicial.costoMateriales ?? ''} onAviso={onAviso} />
           </div>
         </div>
       )}
@@ -135,7 +135,7 @@ export function CamposSalidaMerch({ item, cantidad, inicial = {}, onAviso }) {
           <CampoNumero
             id="precio"
             decimales={2}
-            placeholder="0.00"
+            placeholder="Ej. 25.00"
             value={precio}
             onChange={() => {}}
             onAviso={onAviso}
@@ -233,7 +233,7 @@ export function CamposProductoMerch({ modal, onAviso, onNombre }) {
         <div className="dos-columnas">
           <div className="campo">
             <label htmlFor="marca">MARCA</label>
-            <input id="marca" name="marca" type="text" maxLength={largos.marca} placeholder="Ej. D'Onofrio, Todinno, artesanal" onInput={escribir('marca')} />
+            <input id="marca" name="marca" type="text" maxLength={largos.marca} placeholder="Ej. D'Onofrio" onInput={escribir('marca')} />
           </div>
           <div className="campo">
             <label htmlFor="presentacion">PRESENTACIÓN</label>
@@ -252,7 +252,7 @@ export function CamposProductoMerch({ modal, onAviso, onNombre }) {
       {tipo === 'hogar' && sub === 'general' && (
         <div className="campo">
           <label htmlFor="variante">VARIANTE (OPCIONAL)</label>
-          <input id="variante" name="variante" type="text" maxLength={largos.variante} placeholder="Color o modelo. Ej. marrón" onInput={escribir('variante')} />
+          <input id="variante" name="variante" type="text" maxLength={largos.variante} placeholder="Ej. color marrón" onInput={escribir('variante')} />
           <small>Cada variante es un producto distinto</small>
         </div>
       )}
@@ -261,7 +261,7 @@ export function CamposProductoMerch({ modal, onAviso, onNombre }) {
         <div className="dos-columnas">
           <div className="campo">
             <label htmlFor="presentacion">PRESENTACIÓN</label>
-            <input id="presentacion" name="presentacion" type="text" maxLength={largos.presentacionMerch} placeholder="Ej. bolsa 250 g, frasco 300 ml" onInput={escribir('presentacion')} />
+            <input id="presentacion" name="presentacion" type="text" maxLength={largos.presentacionMerch} placeholder="Ej. bolsa 250 g" onInput={escribir('presentacion')} />
           </div>
           <div className="campo">
             <label htmlFor="perecible">¿ES PERECIBLE?</label>
@@ -293,7 +293,7 @@ export function CamposProductoMerch({ modal, onAviso, onNombre }) {
       {tipo === 'promocional' && (
         <div className="campo">
           <label htmlFor="diseno">DISEÑO O PERSONALIZACIÓN (OPCIONAL)</label>
-          <input id="diseno" name="diseno" type="text" maxLength={largos.diseno} placeholder="Logo, frase o color" />
+          <input id="diseno" name="diseno" type="text" maxLength={largos.diseno} placeholder="Ej. logo del hogar" />
         </div>
       )}
 
@@ -311,7 +311,7 @@ export function CamposProductoMerch({ modal, onAviso, onNombre }) {
 
       <div className="campo">
         <label htmlFor="descripcion">DESCRIPCIÓN (OPCIONAL)</label>
-        <textarea id="descripcion" name="descripcion" rows={2} maxLength={largos.descripcion} placeholder="Opcional" />
+        <textarea id="descripcion" name="descripcion" rows={2} maxLength={largos.descripcion} placeholder="Ej. hecho por los niños" />
       </div>
     </>
   );
@@ -323,12 +323,12 @@ function CamposPrecio({ esPaneton, unidad, onAviso, inicial = {} }) {
       <div className="dos-columnas">
         <div className="campo">
           <label htmlFor="precio">PRECIO DE VENTA (S/)</label>
-          <CampoNumero id="precio" decimales={2} placeholder="0.00" defaultValue={inicial.precio ?? ''} onAviso={onAviso} />
+          <CampoNumero id="precio" decimales={2} placeholder="Ej. 25.00" defaultValue={inicial.precio ?? ''} onAviso={onAviso} />
           <small>Por {unidad === 'unidades' ? 'unidad' : unidad.slice(0, -1)}</small>
         </div>
         <div className="campo">
           <label htmlFor="minimo">STOCK MÍNIMO</label>
-          <CampoNumero id="minimo" decimales={decimalesDe(unidad)} placeholder="0" defaultValue={inicial.minimo ?? ''} onAviso={onAviso} />
+          <CampoNumero id="minimo" decimales={decimalesDe(unidad)} placeholder="Ej. 5" defaultValue={inicial.minimo ?? ''} onAviso={onAviso} />
         </div>
       </div>
       {esPaneton && (
@@ -339,7 +339,7 @@ function CamposPrecio({ esPaneton, unidad, onAviso, inicial = {} }) {
           </div>
           <div className="campo">
             <label htmlFor="precio-descuento">PRECIO CON DESCUENTO (S/)</label>
-            <CampoNumero id="precio-descuento" decimales={2} placeholder="0.00" defaultValue={inicial.precioDescuento ?? ''} onAviso={onAviso} />
+            <CampoNumero id="precio-descuento" decimales={2} placeholder="Ej. 22.00" defaultValue={inicial.precioDescuento ?? ''} onAviso={onAviso} />
             <small>Obligatorio si pones desde cuántas</small>
           </div>
         </div>
@@ -395,23 +395,23 @@ export function ModalPersona({ modal }) {
         <div className="modal-cuerpo">
           <div className="campo">
             <label htmlFor="nuevo-nombre">NOMBRE</label>
-            <input id="nuevo-nombre" name="nuevo-nombre" type="text" maxLength={largos.nombreDonador} placeholder={esProveedor ? 'Empresa o persona' : 'Nombre o institución'} autoFocus />
+            <input id="nuevo-nombre" name="nuevo-nombre" type="text" maxLength={largos.nombreDonador} placeholder={esProveedor ? 'Ej. Textiles Arequipa' : 'Ej. Rosa Quispe'} autoFocus />
           </div>
           <div className={esProveedor ? 'dos-columnas' : ''}>
             <div className="campo">
               <label htmlFor="nuevo-telefono">NÚMERO DE CONTACTO{p.telefonoObligatorio ? '' : ' (OPCIONAL)'}</label>
-              <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="987 654 321" />
+              <input id="nuevo-telefono" name="nuevo-telefono" type="tel" maxLength={largos.telefono} inputMode="tel" placeholder="Ej. 987 654 321" />
             </div>
             {esProveedor && (
               <div className="campo">
                 <label htmlFor="nuevo-ruc">RUC (OPCIONAL)</label>
-                <input id="nuevo-ruc" name="nuevo-ruc" type="text" inputMode="numeric" maxLength={largos.ruc} placeholder="20123456789" />
+                <input id="nuevo-ruc" name="nuevo-ruc" type="text" inputMode="numeric" maxLength={largos.ruc} placeholder="Ej. 20123456789" />
               </div>
             )}
           </div>
           <div className="campo">
             <label htmlFor="nuevo-observaciones">OBSERVACIONES (OPCIONAL)</label>
-            <textarea id="nuevo-observaciones" name="nuevo-observaciones" rows={2} maxLength={largos.observaciones} placeholder={esProveedor ? 'Ej. entrega en 3 días, pide adelanto' : 'Ej. compra cada Navidad'} />
+            <textarea id="nuevo-observaciones" name="nuevo-observaciones" rows={2} maxLength={largos.observaciones} placeholder={esProveedor ? 'Ej. pide adelanto' : 'Ej. compra cada Navidad'} />
           </div>
           <MensajeError texto={f.error} />
         </div>

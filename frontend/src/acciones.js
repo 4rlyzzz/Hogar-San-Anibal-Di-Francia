@@ -15,6 +15,7 @@ import {
   actualizarUsuarioAPI,
   getMiCuentaAPI,
   cambiarClaveAPI,
+  cambiarUsuarioAPI,
   getProveedoresAPI,
   guardarProveedorAPI,
   getCompradoresAPI,
@@ -38,7 +39,7 @@ import {
   precioSugerido, pideVence, puedeVence, llevaLote, llevaProveedor, pideProveedor, llevaCosto, merchVacio, textoTipoMovimiento,
 } from './logica/merch.js';
 import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from './logica/dictado.js';
+import { interpretarMezclado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from './logica/dictado.js';
 import { procesarTextoConIA } from './servicios/dictadoIA.js';
 
 // envases (en plural)
@@ -46,12 +47,18 @@ export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes'
 export const envasesSalud = ['cajas', 'blísters', 'frascos', 'sobres', 'ampollas', 'tubos', 'paquetes', 'botellas'];
 // suelto o a granel
 export const medidasSuelto = ['kg', 'g', 'L', 'unidades'];
-// medidas del contenido
+// medicinas sueltas: tabletas de un blíster cortado, jarabe a granel
+export const medidasSueltoSalud = ['unidades', 'tabletas', 'cápsulas', 'ml', 'g'];
+// medidas del contenido ("caja de 10 tabletas", "frasco de 120 ml", "sobre de 500 mg")
 export const medidasAlimentos = ['kg', 'g', 'L', 'ml', 'unidades'];
-export const medidasSalud = ['unidades', 'ml', 'L', 'g'];
+export const medidasSalud = ['unidades', 'tabletas', 'cápsulas', 'mg', 'g', 'ml', 'L'];
+// lo que se cuenta de a uno: no lleva decimales
+export const medidaEntera = medida => ['unidades', 'tabletas', 'cápsulas'].includes(medida);
 
 // roles validos
 export const roles = ['Usuario', 'Administrador'];
+// areas donde trabaja cada cuenta; con "+ Otra área" se agregan mas (salen de las cuentas que ya las tienen)
+export const areasCuenta = ['Almacén', 'Cocina', 'Dirección', 'Limpieza', 'Medicina', 'Repostería', 'Secretaría', 'Terapia'];
 
 // ---------- errores de validacion ----------
 // campo: el input que hay que marcar
@@ -211,7 +218,8 @@ function movimientoDesdeDoc(doc) {
     insumo: doc.insumo || doc.nombre || 'Sin insumo',
     cantidad: Number(doc.cantidad) || 0,
     saldo: Number(doc.saldo) || 0,
-    responsable: doc.responsable || doc.usuario_id || 'admin',
+    // el nombre de la cuenta (no cambia); nunca el usuario con el que se entra, que si puede cambiar
+    responsable: doc.responsable || cuentaPorId(doc.usuario_id)?.nombre || 'Sin responsable',
     donador: nombreDonador(doc.donador),
     ...(doc.proveedor && { proveedor: nombreDonador(doc.proveedor) }),
     ...(doc.comprador && { comprador: nombreDonador(doc.comprador) }),
@@ -397,6 +405,8 @@ function leerVista() {
   }
   if (vista.lote && ['Ingreso', 'Salida'].includes(vista.lote.tipo) && Array.isArray(vista.lote.items)) {
     estado.lote = vista.lote;
+    // listas guardadas antes de poder mezclar: sus filas son del tipo de la lista
+    for (const x of estado.lote.items) if (!['Ingreso', 'Salida'].includes(x.tipo)) x.tipo = vista.lote.tipo;
     // las filas nuevas no repiten id
     siguienteItem = Math.max(siguienteItem, ...vista.lote.items.map(x => Number(x.id) + 1 || 0));
   }
@@ -607,6 +617,7 @@ export function limpiarFiltros(grupo) {
     // el orden se mantiene
     estado.usuarios.rol = 'Todos';
     estado.usuarios.estado = 'Todos';
+    estado.usuarios.area = 'Todos';
   }
   refrescar();
 }
@@ -1014,7 +1025,7 @@ export async function confirmarMovimiento(modal, datos) {
 // aqui solo se define (nombre, presentacion, minimo, codigo); cuanto entra, vence y donador van en su fila
 // desde: { itemId } para completar esa fila (sin itemId se agrega una), nombre y codigoBarras para empezar
 export function abrirProducto(categoria, desde = {}) {
-  if (estado.lote?.tipo !== 'Ingreso' || !permitido(categoria, categorias)) return;
+  if (!creaProductos(desde.itemId) || !permitido(categoria, categorias)) return;
   abrirModal({ ...desde, tipo: 'producto', categoria });
 }
 
@@ -1038,7 +1049,8 @@ function leerCodigoBarras(v, campo, { opcional = false, delProducto = null } = {
 // { unidad, envase, contenido, medida }
 function leerPresentacion(v, categoria) {
   const envase = v.envase ?? '';
-  const envasesPermitidos = [...(categoria === 'Salud' ? envasesSalud : envasesAlimentos), 'otro', ...medidasSuelto.map(m => 'suelto:' + m)];
+  const esSalud = categoria === 'Salud';
+  const envasesPermitidos = [...(esSalud ? envasesSalud : envasesAlimentos), 'otro', ...(esSalud ? medidasSueltoSalud : medidasSuelto).map(m => 'suelto:' + m)];
   if (!permitido(envase, envasesPermitidos)) falla('Elige en qué viene el producto.', 'envase');
   // suelto: se cuenta en la medida
   if (envase.startsWith('suelto:')) return { unidad: envase.slice(7), envase: null, contenido: null, medida: null };
@@ -1047,10 +1059,10 @@ function leerPresentacion(v, categoria) {
   const unidad = envase === 'otro' ? pluralizar(singular) : envase;
 
   const medida = v.medida ?? '';
-  if (!permitido(medida, categoria === 'Salud' ? medidasSalud : medidasAlimentos)) falla('Elige la medida de la lista.', 'medida');
-  // 'unidades' va entero; las demas medidas, 2 decimales
+  if (!permitido(medida, esSalud ? medidasSalud : medidasAlimentos)) falla('Elige la medida de la lista.', 'medida');
+  // unidades, tabletas y capsulas van enteras; las demas medidas, 2 decimales
   const reglaContenido = reglaNumero({
-    min: 0, max: 10000, decimales: medida === 'unidades' ? 0 : 2, minimoExcluido: true,
+    min: 0, max: 10000, decimales: medidaEntera(medida) ? 0 : 2, minimoExcluido: true,
     que: `cuánto trae cada ${singular.toLowerCase()}`,
   });
   const contenido = leer(v, 'contenido-envase', reglaContenido);
@@ -1146,7 +1158,7 @@ async function renombrarProducto(item, categoria, nombre) {
 export function guardarProducto(modal, v) {
   const { categoria } = modal;
   const lote = estado.lote;
-  if (lote?.tipo !== 'Ingreso' || !permitido(categoria, categorias)) return;
+  if (!creaProductos(modal.itemId) || !permitido(categoria, categorias)) return;
   if (esMerch(categoria)) return guardarProductoMerch(modal, v);
 
   const escrito = leer(v, 'nombre', reglas.nombreProducto);
@@ -1514,6 +1526,7 @@ export async function guardarUsuario(v) {
   const nombre = leer(v, 'cuenta-nombre', reglas.nombreCuenta);
   const usuarioTexto = leer(v, 'cuenta-usuario', reglas.nombreUsuario);
   const clave = leerClaveNueva(v);
+  const area = leerArea(v, 'cuenta-area');
   const rol = v['cuenta-rol'] || 'Usuario';
   if (!permitido(rol, roles)) falla('Elige un rol.', 'cuenta-rol');
   if (estado.cuentas.some(c => c.usuario?.toLowerCase() === usuarioTexto)) falla('Ese usuario ya existe.', 'cuenta-usuario');
@@ -1521,7 +1534,7 @@ export async function guardarUsuario(v) {
   const creado = new Date();
   let res;
   try {
-    res = await guardarUsuarioAPI({ nombre, usuario: usuarioTexto, clave, rol, activo: true });
+    res = await guardarUsuarioAPI({ nombre, usuario: usuarioTexto, area, clave, rol, activo: true });
   } catch (err) {
     if (err.response?.status === 409) falla('Ese usuario ya existe.', 'cuenta-usuario');
     errorDelServidor(err, 'clave-nueva');
@@ -1530,7 +1543,7 @@ export async function guardarUsuario(v) {
   // la contraseña no se guarda en la pantalla
   estado.cuentas.push({
     id: res.id || res._id, _rev: res.rev || res._rev,
-    nombre, usuario: usuarioTexto, rol, activo: true, creado, creadoPor: usuario.nombre, creadoPorId: usuario.id, ultimoAcceso: null, cambios: [],
+    nombre, usuario: usuarioTexto, area: res.area ?? area, rol, activo: true, creado, creadoPor: usuario.nombre, creadoPorId: usuario.id, ultimoAcceso: null, cambios: [],
   });
   estado.modal = null;
   refrescar();
@@ -1575,6 +1588,53 @@ export function cambiarRol(id, nuevoRol) {
   actualizarCuenta(c, 'rol', nuevoRol, 'rol');
 }
 
+// ---------- area de la cuenta ----------
+const comparableArea = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+// las de siempre y las que ya tienen las cuentas
+export function opcionesArea() {
+  const agregadas = estado.cuentas.map(c => c.area).filter(a => a && !areasCuenta.some(x => comparableArea(x) === comparableArea(a)));
+  return [...areasCuenta, ...new Set(agregadas)].sort((a, b) => a.localeCompare(b));
+}
+
+// el area elegida o la escrita en "+ Otra área" (si ya existe, con como esta escrita: "cocina" -> "Cocina")
+function leerArea(v, campo) {
+  const elegida = v[campo] ?? '';
+  if (elegida === 'otra') {
+    const escrita = leer(v, `${campo}-otra`, reglas.area);
+    return opcionesArea().find(a => comparableArea(a) === comparableArea(escrita)) ?? escrita.charAt(0).toUpperCase() + escrita.slice(1);
+  }
+  if (!elegida) falla('Elige el área.', campo);
+  if (!permitido(elegida, opcionesArea())) falla('Elige el área de la lista.', campo);
+  return elegida;
+}
+
+// el admin cambia el area de otra cuenta; la suya la cambia cualquiera de los dos (tambien la principal)
+export const puedeCambiarArea = c => Boolean(c) && esAdmin() && (sePuedeAdministrar(c) || mismoId(c.id, usuario.id));
+
+export function abrirArea(cuentaId) {
+  if (!puedeCambiarArea(cuentaPorId(cuentaId))) return;
+  abrirModal({ tipo: 'area-cuenta', cuentaId, volver: estado.modal?.tipo === 'panel-actividad' ? () => verActividad(cuentaId) : null });
+}
+
+export async function guardarArea(modal, v) {
+  const c = cuentaPorId(modal.cuentaId);
+  if (!puedeCambiarArea(c)) return;
+  const area = leerArea(v, 'cuenta-area');
+  if (area !== c.area) {
+    try {
+      const res = await actualizarUsuarioAPI(c.id, { area });
+      c._rev = res.rev || res._rev;
+    } catch (err) {
+      errorDelServidor(err, 'cuenta-area');
+    }
+    c.area = area;
+    c.cambios = [...(c.cambios || []), { accion: 'area', valor: area, quienId: usuario.id, quien: usuario.nombre, fecha: new Date().toISOString() }];
+  }
+  volverOCerrar();
+  mostrarToast(mismoId(c.id, usuario.id) ? `Tu área: ${area}` : `Área de ${c.nombre}: ${area}`);
+}
+
 // ---------- contraseñas ----------
 // contraseña nueva escrita dos veces igual
 function leerClaveNueva(v) {
@@ -1617,6 +1677,41 @@ export async function cambiarMiClave(v) {
   mostrarToast('Contraseña cambiada');
 }
 
+// ---------- mi usuario (con el que entro) ----------
+// el nombre de la cuenta no cambia (es el responsable del historial); el usuario si, desde el menu
+export const miUsuario = () => leerSesion()?.usuario ?? '';
+
+export function abrirMiUsuario() {
+  abrirModal({ tipo: 'mi-usuario' });
+}
+
+export async function cambiarMiUsuario(v) {
+  const nuevo = leer(v, 'mi-usuario', reglas.nombreUsuario);
+  if (nuevo === miUsuario().toLowerCase()) falla('Ese ya es tu usuario: escribe uno distinto.', 'mi-usuario');
+  const clave = v['mi-usuario-clave'] ?? '';
+  if (!clave) falla('Escribe tu contraseña.', 'mi-usuario-clave');
+  let res;
+  try {
+    res = await cambiarUsuarioAPI(nuevo, clave);
+  } catch (err) {
+    const mensaje = err.response?.data?.error ?? '';
+    if (err.response?.status === 400 && /contraseña/i.test(mensaje)) falla('La contraseña no es correcta.', 'mi-usuario-clave');
+    if (err.response?.status === 409) falla('Ese usuario ya lo tiene otra cuenta: elige otro.', 'mi-usuario');
+    if (err.response?.status === 429) falla('Demasiados intentos. Espera un momento antes de volver a intentar.', 'mi-usuario-clave');
+    errorDelServidor(err, 'mi-usuario');
+  }
+  const usuarioNuevo = res?.usuario ?? nuevo;
+  guardarSesion({ ...leerSesion(), usuario: usuarioNuevo });
+  // si es admin, su fila en Usuarios tambien
+  const yo = cuentaPorId(usuario.id);
+  if (yo) {
+    yo.usuario = usuarioNuevo;
+    yo.cambios = [...(yo.cambios || []), { accion: 'usuario', valor: usuarioNuevo, quienId: usuario.id, quien: usuario.nombre, fecha: new Date().toISOString() }];
+  }
+  cerrarModal();
+  mostrarToast(`Listo: ahora entras como ${usuarioNuevo}`);
+}
+
 // el admin le pone una contraseña nueva a otra cuenta (la olvido)
 export async function restablecerClave(modal, v) {
   const c = cuentaPorId(modal.cuentaId);
@@ -1637,6 +1732,11 @@ export async function restablecerClave(modal, v) {
 async function refrescarMiCuenta() {
   const yo = await getMiCuentaAPI();
   const cambioRol = yo.rol !== usuario.rol;
+  // el usuario con el que entra pudo cambiarlo un admin: el menu muestra el nuevo
+  if (yo.usuario && yo.usuario !== miUsuario()) {
+    guardarSesion({ ...leerSesion(), usuario: yo.usuario });
+    refrescar();
+  }
   if (!cambioRol && yo.nombre === usuario.nombre) return false;
   Object.assign(usuario, { nombre: yo.nombre, rol: yo.rol, iniciales: iniciales(yo.nombre) });
   guardarSesion({ ...leerSesion(), id: yo.id, nombre: yo.nombre, usuario: yo.usuario, rol: yo.rol });
@@ -1680,7 +1780,7 @@ let siguienteItem = 1;
 
 function nuevoItem(datos) {
   return {
-    id: siguienteItem++, origen: 'manual', categoria: null, productoId: null, productoNuevo: null, dudas: [], cantidad: null, vence: undefined,
+    id: siguienteItem++, tipo: estado.lote?.tipo ?? 'Ingreso', origen: 'manual', categoria: null, productoId: null, productoNuevo: null, dudas: [], cantidad: null, vence: undefined,
     donador: '', donadorNuevo: null, donadorDicho: '', actividad: '', para: [], observaciones: '', dicho: '', nombreDicho: '', codigoBarras: '', avisos: {},
     ...merchVacioItem(),
     ...datos,
@@ -1743,8 +1843,32 @@ export function donadorDeItem(x) {
   return estado.donadores.find(d => mismoId(d.id, x.donador))?.nombre ?? '';
 }
 
-function filasDelMismo(x) {
-  return estado.lote.items.filter(o => o.productoId != null && !o.productoNuevo && o.categoria === x.categoria && mismoId(o.productoId, x.productoId));
+// ---------- ingresos y salidas en la misma lista ----------
+// cada fila lleva su tipo; estado.lote.tipo es lo que se esta agregando ahora (el boton que se eligio)
+export const tipoDeItem = x => (['Ingreso', 'Salida'].includes(x?.tipo) ? x.tipo : estado.lote?.tipo ?? 'Ingreso');
+export const esIngresoItem = x => tipoDeItem(x) === 'Ingreso';
+export const ingresosDe = lote => lote.items.filter(esIngresoItem);
+export const salidasDe = lote => lote.items.filter(x => !esIngresoItem(x));
+// la lista tiene de los dos
+export const listaMezclada = lote => Boolean(lote && ingresosDe(lote).length && salidasDe(lote).length);
+
+// los productos nuevos se crean desde un ingreso (su fila, o lo que se esta agregando)
+function creaProductos(itemId) {
+  if (!estado.lote) return false;
+  const x = itemId != null ? estado.lote.items.find(i => i.id === itemId) : null;
+  return x ? esIngresoItem(x) : estado.lote.tipo === 'Ingreso';
+}
+
+// filas de la lista del mismo producto (tipo: solo las de ese tipo)
+function filasDelMismo(x, tipo = null) {
+  return estado.lote.items.filter(o => o.productoId != null && !o.productoNuevo && o.categoria === x.categoria && mismoId(o.productoId, x.productoId)
+    && (!tipo || tipoDeItem(o) === tipo));
+}
+
+// cuanto se puede sacar en esta lista: lo que hay mas lo que entra en ella (los ingresos se guardan primero)
+function disponibleEnLista(item, categoria) {
+  const entra = filasDelMismo({ categoria, productoId: item.id }, 'Ingreso').reduce((s, o) => s + (o.cantidad || 0), 0);
+  return redondear(disponible(item) + entra);
 }
 
 // lo que falta corregir en una fila (vacio si esta lista)
@@ -1754,7 +1878,7 @@ export function problemasItem(x) {
 }
 
 function problemasDeFila(x) {
-  const { tipo } = estado.lote;
+  const tipo = tipoDeItem(x);
   const producto = productoDeItem(x);
   // avisos cortos: arriba de la lista se explica que se corrigen con el lapiz
   if (!producto) {
@@ -1782,9 +1906,10 @@ function problemasDeFila(x) {
     if (!x.donador && !x.donadorDicho && x.actividad) problemas.push(`Dijiste "${x.actividad}": falta el donador`);
   }
   if (tipo === 'Salida' && x.cantidad) {
-    const filas = filasDelMismo(x);
+    const filas = filasDelMismo(x, 'Salida');
     const total = redondear(filas.reduce((s, o) => s + (o.cantidad || 0), 0));
-    if (total > disponible(item)) problemas.push(`Solo hay ${disponible(item)} ${item.unidad}${filas.length > 1 ? ` (en la lista suman ${total})` : ''}`);
+    const hay = disponibleEnLista(item, producto.categoria);
+    if (total > hay) problemas.push(`Solo hay ${hay} ${item.unidad}${filas.length > 1 ? ` (en la lista suman ${total})` : ''}`);
   }
   return problemas;
 }
@@ -1806,10 +1931,15 @@ function problemasMerch(x, item, tipo) {
 
 // ---------- abrir y moverse entre pantallas ----------
 // empieza una lista; si ya habia una del mismo tipo, sigue con esa
+// con una lista del otro tipo se sigue en la misma: ingresos y salidas se guardan juntos
 export function empezarLote(tipo) {
   if (!permitido(tipo, ['Ingreso', 'Salida'])) return;
-  if (estado.lote?.tipo !== tipo) estado.lote = { tipo, items: [] };
-  if (estado.lote.items.length) abrirLista();
+  if (!estado.lote) estado.lote = { tipo, items: [] };
+  const cambia = estado.lote.tipo !== tipo;
+  // las filas de antes conservan su tipo
+  for (const x of estado.lote.items) x.tipo = tipoDeItem(x);
+  estado.lote.tipo = tipo;
+  if (!cambia && estado.lote.items.length) abrirLista();
   else abrirBusqueda();
 }
 
@@ -1853,6 +1983,15 @@ export function abrirCodigo() {
   if (estado.lote) abrirModal({ tipo: 'lote-codigo', volver: abrirBusqueda, alCerrar: cerrarLote });
 }
 
+// ingreso o salida que ya se eligio: la lista abierta, aunque todavia no tenga productos
+// (sin lista, por ejemplo con el microfono junto al "+", hay que decirlo)
+export const tipoElegido = () => estado.lote?.tipo ?? null;
+
+// dictar desde "Elige el producto" (tambien al añadir mas productos a una lista abierta)
+export function abrirVozLote() {
+  if (estado.lote) abrirModal({ tipo: 'lote-voz', volver: abrirBusqueda, alCerrar: cerrarLote });
+}
+
 // ---------- agregar a la lista ----------
 // a mano: se agrega y se abre para poner la cantidad
 export function agregarManual(categoria, id) {
@@ -1874,14 +2013,14 @@ export function agregarCodigo(texto) {
   if (!estado.lote) return null;
   const codigo = leer({ codigo: texto }, 'codigo', reglas.codigoBarras);
   const encontrado = productoPorCodigo(codigo);
-  const repetido = estado.lote.items.find(x => x.origen === 'codigo' && x.codigoBarras === codigo);
+  const repetido = estado.lote.items.find(x => x.origen === 'codigo' && x.codigoBarras === codigo && tipoDeItem(x) === estado.lote.tipo);
   const nueva = redondear((repetido?.cantidad ?? 0) + 1);
   if (nueva > cantidadMaxima) falla(`No se puede pasar de ${cantidadMaxima}.`, 'codigo');
   // en una salida no se escanea lo que no hay (cuenta lo que ya va en otras filas de ese producto)
   if (encontrado && estado.lote.tipo === 'Salida') {
     const { item, categoria } = encontrado;
     const hay = disponible(item);
-    const enLista = redondear(filasDelMismo({ categoria, productoId: item.id }).reduce((s, o) => s + (o.cantidad || 0), 0));
+    const enLista = redondear(filasDelMismo({ categoria, productoId: item.id }, 'Salida').reduce((s, o) => s + (o.cantidad || 0), 0));
     if (hay <= 0) falla(`"${item.nombre}" no tiene stock para sacar.`, 'codigo');
     if (enLista + 1 > hay) falla(`Solo hay ${hay} ${item.unidad} de "${item.nombre}" y ya van ${enLista} en la lista.`, 'codigo');
   }
@@ -1915,15 +2054,18 @@ export function cantidadDicha(valor) {
 
 export async function agregarDictado(v) {
   // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
-  const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
-  const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
+  // se pueden decir los dos: "ingreso de 3 kilos de arroz y salida de 2 latas de leche"
+  const texto = leer(v, 'dictado', reglas.dictado);
+  const dicho = tipoDictado(texto);
+  // sin decirlo: el de la lista (el boton que se eligio)
+  const porDefecto = dicho.tipo ?? tipoElegido();
 
-  // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
-  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? abierta));
+  // 2. Parser Local: cada producto con su tipo, donadores y actividades
+  const interpretadoLocal = interpretarMezclado(texto, todosLosProductos(), extraDictado, porDefecto);
 
   // 3. IA (Groq, Gemini... via Django): Parsing de alta precisión para productos, cantidades y fechas ISO
-  // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
-  const itemsProcesados = await procesarTextoConIA(dicho.resto);
+  // el mismo texto que consulto la vista previa: asi se reusa esa respuesta
+  const itemsProcesados = await procesarTextoConIA(textoParaIA(texto));
 
   // --- FILTRO POST-PROCESADO: Anti-alucinaciones y limpieza de ruido ---
   const ruídosComunes = new Set(['eh', 'um', 'ah', 'pantalla', 'ruido', 'undefined', 'null', 'algo', 'cosa']);
@@ -1940,23 +2082,18 @@ export async function agregarDictado(v) {
   // el comprador (o proveedor) y el medio de pago dichos una vez valen para toda la venta
   compartirVentaIA(itemsValidos);
 
-  // Determinar la operación dominante (Ingreso vs Salida)
-  if (dicho.ambos) {
-    falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
-  }
-  // 1. lo dicho, 2. lo que entendio la IA, 3. la lista que ya esta abierta
-  const tipoIA = { salida: 'Salida', ingreso: 'Ingreso' }[itemsValidos[0]?.tipo] ?? null;
-  const tipo = dicho.tipo ?? abierta ?? tipoIA;
-  if (!tipo) {
+  // el tipo de cada producto: 1. con los dos dichos, el que entendio la IA para ese producto (o el local);
+  // 2. lo dicho; 3. la lista abierta o elegida ("Registrar ingreso" > "Hablar"); 4. lo que entendio la IA
+  const tipoDeIA = item => ({ salida: 'Salida', ingreso: 'Ingreso' }[item?.tipo] ?? null);
+  const tipoUnico = porDefecto ?? tipoDeIA(itemsValidos[0]);
+  if (!dicho.ambos && !tipoUnico) {
     falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
   }
-  if (abierta && tipo !== abierta) {
-    falla(`Tienes una lista de ${abierta.toLowerCase()} sin guardar: confírmala o descártala primero.`, 'dictado');
-  }
 
-  if (!abierta) estado.lote = { tipo, items: [] };
+  if (!estado.lote) estado.lote = { tipo: tipoUnico ?? interpretadoLocal[0]?.tipo ?? 'Ingreso', items: [] };
   const lote = estado.lote;
-  const esIngreso = tipo === 'Ingreso';
+  // las filas que ya estaban conservan su tipo
+  for (const x of lote.items) x.tipo = tipoDeItem(x);
 
   // Usar la lista filtrada de la IA como base principal; si falló por completo, usar el parser local
   const listaBase = itemsValidos.length > 0 ? itemsValidos : interpretadoLocal;
@@ -1974,40 +2111,54 @@ export async function agregarDictado(v) {
     // el producto: el nombre que entendio la IA se busca entre los registrados (con su dosis);
     // no se toma el del parser local por su posicion, que puede ser de otro producto
     // si empatan varios ("Paracetamol 100 mg" de cajas de 10 y de 20), vale el que entendio el local
+    // si se dijo el inventario ("ingreso a merchandising de 3 mermeladas"), solo entre los de ese inventario
+    const categoriaDicha = itemsValidos[i] ? categoriaDeIA(itemIA, interpretadoLocal) : r.categoriaDicha ?? null;
     const { producto, dudas } = itemsValidos[i]
-      ? desempatarConLocal(productoDeNombre(itemIA.producto, productos), interpretadoLocal)
+      ? desempatarConLocal(productoDeNombre(itemIA.producto, enInventario(productos, categoriaDicha)), interpretadoLocal)
       : { producto: r.producto, dudas: r.dudas ?? [] };
     // lo que entendio el dictado local de ese mismo producto (sin importar en que orden lo puso)
     const localDelProducto = producto ? interpretadoLocal.find(x => mismoProducto(x.producto, producto)) : null;
+    // el tipo lo decide el orden de lo dicho ("... y salida de ..."): el local lo lee de ahi; la IA a veces se equivoca
+    const tipo = !dicho.ambos
+      ? tipoUnico
+      : (itemsValidos[i] ? localDelProducto?.tipo ?? tipoDeIA(itemIA) : r.tipo) ?? r.tipo ?? lote.tipo;
+    const esIngreso = tipo === 'Ingreso';
     const presentacion = itemsValidos[i] ? localDelProducto?.presentacion : r.presentacion;
     // la cantidad de la IA en la unidad del producto ("5 sacos de 50 kg" no son 50 sacos)
     const cantidad = itemsValidos[i]
       ? cantidadDeLaIA(itemIA.cantidad, itemIA.unidad, producto?.item, localDelProducto ?? null)
       : r.cantidad;
 
-    // 💡 Prioridad de Fecha: 1. Fecha ISO de la IA, 2. Regex del Parser Local
-    const fechaFinal = itemIA.vence || (r.vence && reglas.vencimiento(r.vence).ok ? r.vence : null);
+    // 💡 Prioridad de Fecha: 1. Fecha ISO de la IA, 2. Regex del Parser Local (de ese mismo producto)
+    const delLocal = itemsValidos[i] ? localDelProducto ?? {} : r;
+    const fechaFinal = itemIA.vence || (delLocal.vence && reglas.vencimiento(delLocal.vence).ok ? delLocal.vence : null);
+    // "sin fecha de vencimiento": queda como que no tiene (no como que falta)
+    const vence = fechaFinal ? { vence: fechaFinal } : delLocal.sinVence ? { vence: null } : {};
 
     // 💡 Mapeo de Donador: 1. Donador ID desde la BD local, 2. Texto del donador dicho
-    const donadorId = r.donador ? String(r.donador.id) : '';
-    const donadorTexto = r.donadorDicho || itemIA.donador || '';
-    const actividadTexto = r.actividad || itemIA.actividad || '';
+    // del mismo producto en el local (no por posicion: el local puede haber partido distinto)
+    const donadorId = delLocal.donador ? String(delLocal.donador.id) : '';
+    const donadorTexto = delLocal.donadorDicho || itemIA.donador || '';
+    const actividadTexto = delLocal.actividad || itemIA.actividad || '';
 
     const merch = producto && esMerch(producto.categoria)
       ? merchDictado(producto.item, esIngreso, cantidadDicha(cantidad), { ...r, ...(localDelProducto ?? {}) }, itemIA)
       : null;
 
     lote.items.push(nuevoItem({
+      tipo,
       origen: 'voz',
       dicho: (itemIA.producto || r.dicho || '').slice(0, 100),
       nombreDicho: (itemIA.producto || r.nombreDicho || '').slice(0, largos.nombreProducto),
       cantidad: cantidadDicha(cantidad),
       dudas: dudas.map(d => claveProducto(d.categoria, d.item.id)),
+      // si no existe, se crea en el inventario que se dijo
+      ...(categoriaDicha && { categoriaDicha }),
       // el aviso de presentacion lo calculo el parser local: solo vale si es su mismo producto
       avisos: presentacion ? { presentacion } : {},
       
       // Metadatos adjuntos para rendering visual (previsualización y lista final)
-      ...(esIngreso && fechaFinal && { vence: fechaFinal }),
+      ...(esIngreso && vence),
       ...(producto && { categoria: producto.categoria, productoId: producto.item.id }),
       ...(esIngreso && !merch && {
         donador: donadorId,
@@ -2020,13 +2171,33 @@ export async function agregarDictado(v) {
 
   abrirLista();
 }
+// lo que se manda a la IA: sin "ingreso"/"salida" si se dijo uno solo (ya se sabe);
+// con los dos se manda todo, para que diga de que tipo es cada producto
+export function textoParaIA(texto) {
+  const dicho = tipoDictado(texto);
+  return dicho.ambos ? String(texto).trim() : dicho.resto;
+}
+
+// quien compro (o a quien se le compro) entre lo que dijo la IA y lo que reconocio el dictado local:
+// el que dijo la IA si esta registrado; si no (a veces junta palabras de mas: "Rosa Quispe Estás hogar"),
+// el registrado que reconocio el local; si ninguno esta registrado, como se dijo (para crearlo)
+// -> { registrado: persona o null, dicho: texto }. Lo usan la lista y la vista previa ("Entendí")
+export function personaDictada(tipo, ia = {}, local = {}) {
+  const dichoIA = typeof ia[tipo] === 'string' ? ia[tipo].trim() : '';
+  const registrado = (dichoIA && listaPersona(tipo).find(d => coincideNombre(dichoIA, d.nombre) && coincideNombre(d.nombre, dichoIA)))
+    || local[tipo] || null;
+  const dicho = registrado ? '' : (dichoIA || local[`${tipo}Dicho`] || '').slice(0, largos.nombreDonador);
+  return { registrado, dicho };
+}
+
 function merchDictado(item, esIngreso, cantidad, local, ia) {
   const tipo = esIngreso ? 'proveedor' : 'comprador';
-  const dichoIA = typeof ia[tipo] === 'string' ? ia[tipo].trim() : '';
-  const registrado = dichoIA
-    ? listaPersona(tipo).find(d => coincideNombre(dichoIA, d.nombre) && coincideNombre(d.nombre, dichoIA))
-    : local[tipo];
-  const dicho = registrado ? '' : (dichoIA || local[`${tipo}Dicho`] || '').slice(0, largos.nombreDonador);
+  // lo hecho en el hogar no tiene proveedor (aunque se haya dicho uno para otro producto de la lista)
+  if (esIngreso && !llevaProveedor(item)) {
+    local = { ...local, proveedor: null, proveedorDicho: '' };
+    ia = { ...ia, proveedor: null };
+  }
+  const { registrado, dicho } = personaDictada(tipo, ia, local);
   const precio = cantidadDicha(ia.precio) ?? local.precio ?? null;
   const medio = permitido(ia.medio_pago, mediosPago.map(([m]) => m)) ? ia.medio_pago : local.medioPago || '';
   return {
@@ -2079,7 +2250,7 @@ export function guardarItem(modal, v) {
   const lote = estado.lote;
   const x = lote?.items.find(i => i.id === modal.itemId);
   if (!x) return;
-  const esIngreso = lote.tipo === 'Ingreso';
+  const esIngreso = esIngresoItem(x);
 
   // 'nuevo' deja el producto que se esta creando
   const clave = v.producto ?? '';
@@ -2093,9 +2264,10 @@ export function guardarItem(modal, v) {
 
   const cantidad = leer(v, 'cantidad', cantidadDe(item.unidad));
   if (!esIngreso) {
-    const otras = redondear(filasDelMismo({ categoria, productoId: item.id }).filter(o => o !== x).reduce((s, o) => s + (o.cantidad || 0), 0));
-    if (cantidad + otras > disponible(item)) {
-      falla(`Solo se pueden sacar ${disponible(item)} ${item.unidad}${otras ? ` y en otras filas ya van ${otras}` : ''}.`, 'cantidad');
+    const otras = redondear(filasDelMismo({ categoria, productoId: item.id }, 'Salida').filter(o => o !== x).reduce((s, o) => s + (o.cantidad || 0), 0));
+    const hay = elegido.nuevo ? 0 : disponibleEnLista(item, categoria);
+    if (cantidad + otras > hay) {
+      falla(`Solo se pueden sacar ${hay} ${item.unidad}${otras ? ` y en otras filas ya van ${otras}` : ''}.`, 'cantidad');
     }
   }
   const observaciones = leer(v, 'observaciones', reglas.observaciones);
@@ -2156,7 +2328,6 @@ export function revisarLote() {
 export async function confirmarLote(modal) {
   if (estado.modal !== modal || !estado.lote) return;
   const lote = estado.lote;
-  const { tipo } = lote;
   // donadores, proveedores, compradores y productos nuevos se crean una sola vez aunque esten en varias filas
   const donadoresNuevos = new Map();
   const personasNuevas = { proveedor: new Map(), comprador: new Map() };
@@ -2170,8 +2341,11 @@ export async function confirmarLote(modal) {
   const productosNuevos = new Map();
   const fallidas = [];
   const total = lote.items.length;
+  const ingresos = ingresosDe(lote).length;
 
-  for (const x of [...lote.items]) {
+  // primero los ingresos: lo que entra en esta lista ya se puede sacar en ella
+  for (const x of [...ingresosDe(lote), ...salidasDe(lote)]) {
+    const tipo = tipoDeItem(x);
     try {
       let { item, categoria, nuevo } = productoDeItem(x);
       if (nuevo) {
@@ -2237,7 +2411,11 @@ export async function confirmarLote(modal) {
     estado.lote = null;
     if (estado.modal === modal) estado.modal = null;
     estado.filtro = 'Todos';
-    mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${productos(total)}`);
+    const salidas = total - ingresos;
+    let texto = `Ingreso guardado · ${productos(total)}`;
+    if (ingresos && salidas) texto = `Guardado · ${ingresos} ${ingresos === 1 ? 'ingreso' : 'ingresos'} y ${salidas} ${salidas === 1 ? 'salida' : 'salidas'}`;
+    else if (salidas) texto = `Salida guardada · ${productos(total)}`;
+    mostrarToast(texto);
     return;
   }
   lote.items = fallidas;
@@ -2330,6 +2508,7 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
         nombre: doc.nombre || '',
         usuario: doc.usuario || doc.username || '',
         rol: doc.rol || 'Usuario',
+        area: doc.area || '',
         activo: doc.activo ?? true,
         ultimoAcceso: doc.ultimoAcceso ? new Date(doc.ultimoAcceso) : null,
         creado: doc.creado ? new Date(doc.creado) : null,
@@ -2343,4 +2522,4 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
   } catch (error) {
     console.error('Error al actualizar el estado con datos de CouchDB:', error);
   }
-}
+}

@@ -171,7 +171,7 @@ function digitoControlValido(codigo) {
 export function dictado(entrada) {
   const valor = limpiarTexto(entrada).replace(/[^\p{Script=Latin}0-9 .,;:\-/()%+&'°#¿?¡!]/gu, ' ').replace(/\s+/g, ' ').trim();
   if (!valor) return { ok: false, error: 'No hay nada que revisar: graba o escribe lo que se dijo.' };
-  if (valor.length > 500) return { ok: false, error: 'Es demasiado texto de una vez: graba en partes (hasta 500 caracteres).' };
+  if (valor.length > 1000) return { ok: false, error: 'Es demasiado texto de una vez: graba en partes (hasta 1000 caracteres).' };
   return { ok: true, valor };
 }
 
@@ -248,6 +248,7 @@ export const reglas = {
   notaObligatoria: texto({ min: 3, max: 120, tipo: 'libre', que: 'el detalle' }),
   observaciones: texto({ max: 200, tipo: 'libre', que: 'el texto de observaciones', opcional: true }),
   nombreCuenta: texto({ min: 2, max: 40, tipo: 'nombre', que: 'el nombre' }),
+  area: texto({ min: 2, max: 40, tipo: 'letras', que: 'el área' }),
   nombreUsuario,
   claveNueva,
   claveLogin,
@@ -291,8 +292,9 @@ export const largos = {
   nota: 120,
   observaciones: 200,
   codigoBarras: 32,
-  dictado: 500,
+  dictado: 1000,
   nombreCuenta: 40,
+  area: 40,
   nombreUsuario: 20,
   clave: 64,
   busqueda: 60,

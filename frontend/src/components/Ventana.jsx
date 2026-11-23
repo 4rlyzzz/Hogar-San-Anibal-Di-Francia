@@ -1,7 +1,7 @@
 // la ventana abierta segun estado.modal.tipo
 import { estado } from '../estado.js';
 import { calcularAlertas } from '../logica/alertas.js';
-import { ModalMovimiento, ModalProducto, ModalAjuste, ModalUnir, ModalBaja, ModalElegir, ModalDonador, ModalUsuario, ModalClave, ModalEditarMinimo } from './Modales.jsx';
+import { ModalMovimiento, ModalProducto, ModalAjuste, ModalUnir, ModalBaja, ModalElegir, ModalDonador, ModalUsuario, ModalClave, ModalMiUsuario, ModalArea, ModalEditarMinimo } from './Modales.jsx';
 import { ModalLoteManual, ModalLoteCodigo, ModalLoteVoz, ModalLoteLista, ModalLoteItem } from './Lote.jsx';
 import { PanelProducto, PanelMovimiento, PanelDonador, PanelPersona, PanelActividad, PanelAlertas } from './Paneles.jsx';
 import { ModalEditarMerch, ModalPersona } from './Merch.jsx';
@@ -16,6 +16,8 @@ const ventanas = {
   donador: ModalDonador,
   usuario: ModalUsuario,
   clave: ModalClave,
+  'mi-usuario': ModalMiUsuario,
+  'area-cuenta': ModalArea,
   persona: ModalPersona,
   'editar-merch': ModalEditarMerch,
   'editar-minimo': ModalEditarMinimo,
