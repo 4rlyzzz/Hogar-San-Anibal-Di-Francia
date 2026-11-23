@@ -1,4 +1,6 @@
 import math
+import re
+import uuid
 from datetime import datetime, timezone
 
 from django.contrib.auth.hashers import make_password, check_password
@@ -35,6 +37,9 @@ CAMPOS_PRODUCTO = (
     'envase', 'contenido', 'medida', 'unidos',
 )
 CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo')
+# al editar una cuenta el nombre no va: es el que queda como responsable en el historial y no cambia.
+# el usuario (con el que se entra) si se puede cambiar
+CAMPOS_EDITAR_USUARIO = ('usuario', 'rol', 'activo')
 ROLES = ('Usuario', 'Administrador')
 # cambios de rol/estado que se guardan por cuenta
 MAX_CAMBIOS = 50
@@ -78,6 +83,23 @@ def _clave_invalida(clave):
     if not any(c.isalpha() for c in clave) or not any(c.isdigit() for c in clave):
         return 'La contraseña debe tener letras y números'
     return None
+
+
+USUARIO_VALIDO = re.compile(r'^[a-z0-9._-]{3,20}$')
+
+
+def _leer_usuario(texto):
+    """Mismas reglas que nombreUsuario en validacion.js. -> (usuario en minusculas, error o None)"""
+    usuario = str(texto or '').strip().lower()
+    if not usuario:
+        return usuario, 'Escribe el usuario'
+    if not USUARIO_VALIDO.match(usuario):
+        return usuario, 'El usuario debe tener de 3 a 20 caracteres: letras sin tildes, números y . _ -'
+    return usuario, None
+
+
+def _usuario_de(doc):
+    return str(doc.get('usuario') or doc.get('username') or '').lower()
 
 
 def principal_id(usuarios):
@@ -487,11 +509,13 @@ class UsuariosListCreateView(APIView):
         if doc_data['rol'] not in ROLES:
             return Response({'error': 'Rol no válido'}, status=400)
 
-        nombre_usuario = str(doc_data.get('usuario', '')).strip()
+        nombre_usuario, error_usuario = _leer_usuario(doc_data.get('usuario'))
         raw_password = str(request.data.get('clave') or request.data.get('password') or '').strip()
 
         if not nombre_usuario or not raw_password:
             return Response({'error': 'Usuario y contraseña son obligatorios'}, status=400)
+        if error_usuario:
+            return Response({'error': error_usuario}, status=400)
         error = _clave_invalida(raw_password)
         if error:
             return Response({'error': error}, status=400)
@@ -500,8 +524,7 @@ class UsuariosListCreateView(APIView):
         existentes, status_code = get_documents_by_type('usuario')
         if status_code != 200:
             return Response(existentes, status=status_code)
-        if any((d.get('usuario') or d.get('username') or '').lower() == nombre_usuario.lower()
-               for d in existentes):
+        if any(_usuario_de(d) == nombre_usuario for d in existentes):
             return Response({'error': 'Ese usuario ya existe'}, status=409)
 
         doc_data['usuario'] = nombre_usuario
@@ -514,7 +537,14 @@ class UsuariosListCreateView(APIView):
         # identificador fijo: dos admins creando el mismo usuario a la vez -> CouchDB deja solo uno
         data, status_code = create_document(doc_data, f'usuario:{slug(nombre_usuario)}')
         if status_code == 409:
-            return Response({'error': 'Ese usuario ya existe'}, status=409)
+            # el identificador puede estar ocupado por una cuenta a la que despues le cambiaron el usuario
+            # (el identificador no cambia). Si nadie tiene ese usuario, la nueva va con otro identificador
+            existentes, status_code = get_documents_by_type('usuario')
+            if status_code != 200:
+                return Response(existentes, status=status_code)
+            if any(_usuario_de(d) == nombre_usuario for d in existentes):
+                return Response({'error': 'Ese usuario ya existe'}, status=409)
+            data, status_code = create_document(doc_data, f'usuario:{slug(nombre_usuario)}-{uuid.uuid4().hex[:6]}')
         return Response(data, status=status_code)
 
 
@@ -522,7 +552,7 @@ class UsuarioDetailView(APIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
 
     def put(self, request, doc_id):
-        doc_data = _solo_campos(request.data, CAMPOS_USUARIO)
+        doc_data = _solo_campos(request.data, CAMPOS_EDITAR_USUARIO)
 
         if 'rol' in doc_data and doc_data['rol'] not in ROLES:
             return Response({'error': 'Rol no válido'}, status=400)
@@ -541,6 +571,23 @@ class UsuarioDetailView(APIView):
             return Response(todos, status=status_code)
         if str(doc_id) == str(principal_id(todos)):
             return Response({'error': 'La cuenta principal no se puede modificar'}, status=403)
+        cuenta = next((u for u in todos if str(u.get('_id')) == str(doc_id)), None)
+        if cuenta is None:
+            return Response({'error': 'No se encontró la cuenta'}, status=404)
+
+        # el nombre es el que sale como responsable en el historial: no se cambia
+        if 'nombre' in request.data and str(request.data['nombre'] or '').strip() != str(cuenta.get('nombre') or '').strip():
+            return Response({'error': 'El nombre de la cuenta no se puede cambiar'}, status=400)
+
+        # el usuario con el que se entra si: con las mismas reglas que al crear y sin repetirse
+        if 'usuario' in doc_data:
+            doc_data['usuario'], error = _leer_usuario(doc_data['usuario'])
+            if error:
+                return Response({'error': error}, status=400)
+            if any(_usuario_de(u) == doc_data['usuario'] for u in todos if str(u.get('_id')) != str(doc_id)):
+                return Response({'error': 'Ese usuario ya existe'}, status=409)
+            if doc_data['usuario'] == _usuario_de(cuenta):
+                del doc_data['usuario']
 
         # Solo se cambia la contraseña si llega una nueva (siempre se hashea);
         # si no llega, fusionar=True conserva el hash actual.
@@ -560,6 +607,8 @@ class UsuarioDetailView(APIView):
                 cambios.append({'accion': 'rol', 'valor': doc_data['rol']})
             if 'activo' in doc_data and doc_data['activo'] != actual.get('activo', True):
                 cambios.append({'accion': 'estado', 'valor': doc_data['activo']})
+            if 'usuario' in doc_data and doc_data['usuario'] != _usuario_de(actual):
+                cambios.append({'accion': 'usuario', 'valor': doc_data['usuario']})
             if nueva:
                 # la contraseña no se guarda en el registro, solo que se cambio
                 cambios.append({'accion': 'clave', 'valor': True})

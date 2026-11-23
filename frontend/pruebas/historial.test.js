@@ -96,6 +96,8 @@ test('actividad de una cuenta, de lo mas nuevo a lo mas antiguo', () => {
   // los movimientos viejos solo tienen el nombre
   assert.equal(movimientoDe({ responsable: 'Cocina' }, cocina), true);
   assert.equal(movimientoDe({ responsable: 'Dirección', usuario_id: 'usuario:admin' }, cocina), false);
+  // con id, el texto no cuenta: otra cuenta pudo quedar con el usuario "cocina"
+  assert.equal(movimientoDe({ responsable: 'cocina', usuario_id: 'usuario:otra' }, cocina), false);
 });
 
 test('nombre del dia', () => {

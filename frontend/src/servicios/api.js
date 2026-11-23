@@ -210,4 +210,4 @@ export const actualizarUsuarioAPI = async (id, usuarioDoc) => {
   return response.data;
 };
 
-export default api;
+export default api;
