@@ -5,7 +5,7 @@ from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 
 from api.couchdb_service import create_document, get_documents_by_type
-from api.views import _clave_invalida
+from api.views import _clave_invalida, _leer_area
 
 
 class Command(BaseCommand):
@@ -15,12 +15,16 @@ class Command(BaseCommand):
         parser.add_argument('--usuario', help='nombre para iniciar sesion')
         parser.add_argument('--nombre', help='nombre que se muestra en la app')
         parser.add_argument('--rol', default='Administrador', choices=['Administrador', 'Usuario'])
+        parser.add_argument('--area', default='Dirección', help='area donde trabaja (Cocina, Secretaría...); por defecto Dirección')
 
     def handle(self, *args, **opciones):
         usuario = (opciones['usuario'] or input('Usuario: ')).strip().lower()
         nombre = (opciones['nombre'] or input('Nombre: ')).strip() or usuario
         if not usuario:
             raise CommandError('El usuario es obligatorio')
+        area, error = _leer_area(opciones['area'])
+        if error:
+            raise CommandError(error)
 
         clave = getpass('Contraseña: ')
         error = _clave_invalida(clave)
@@ -40,6 +44,7 @@ class Command(BaseCommand):
             'usuario': usuario,
             'nombre': nombre,
             'rol': opciones['rol'],
+            'area': area,
             'activo': True,
             'clave': make_password(clave),
             'creado': datetime.now(timezone.utc).isoformat(),

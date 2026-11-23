@@ -1,7 +1,7 @@
 import { momento, fechaLarga, meses, textoCambio, mismoId } from './comunes.js';
 
 // color del punto segun lo que se hizo
-export const coloresActividad = { ingreso: 'verde', salida: 'naranja', ajuste: 'morado', donador: 'azul', usuario: 'azul', rol: 'gris', estado: 'rojo', clave: 'gris' };
+export const coloresActividad = { ingreso: 'verde', salida: 'naranja', ajuste: 'morado', donador: 'azul', usuario: 'azul', rol: 'gris', estado: 'rojo', clave: 'gris', area: 'gris' };
 
 // el movimiento lo hizo esa cuenta: por su id; los movimientos viejos solo tienen el nombre
 // o el usuario con el que entro (los primeros se guardaron como 'admin')
@@ -52,8 +52,9 @@ export function actividadDe(estado, cuenta) {
         rol: `Cambió el rol de ${c.nombre}`,
         clave: `Restableció la contraseña de ${c.nombre}`,
         usuario: `Cambió el usuario de ${c.nombre}`,
+        area: `Cambió el área de ${c.nombre}`,
       }[x.accion] ?? `${x.valor ? 'Activó' : 'Desactivó'} a ${c.nombre}`,
-      detalle: { rol: `Ahora es ${x.valor}`, usuario: `Ahora entra como @${x.valor}` }[x.accion] ?? '',
+      detalle: { rol: `Ahora es ${x.valor}`, usuario: `Ahora entra como @${x.valor}`, area: `Ahora en ${x.valor}` }[x.accion] ?? '',
     })));
 
   return [...movimientos, ...donadores, ...personas, ...usuarios, ...cambios]

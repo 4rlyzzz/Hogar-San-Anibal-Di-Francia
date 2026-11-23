@@ -36,10 +36,10 @@ CAMPOS_PRODUCTO = (
     'codigo', 'codigosBarras', 'almacen', 'ubicacion',
     'envase', 'contenido', 'medida', 'unidos',
 )
-CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo')
+CAMPOS_USUARIO = ('nombre', 'usuario', 'rol', 'activo', 'area')
 # al editar una cuenta el nombre no va: es el que queda como responsable en el historial y no cambia.
 # el usuario (con el que se entra) si se puede cambiar
-CAMPOS_EDITAR_USUARIO = ('usuario', 'rol', 'activo')
+CAMPOS_EDITAR_USUARIO = ('usuario', 'rol', 'activo', 'area')
 ROLES = ('Usuario', 'Administrador')
 # cambios de rol/estado que se guardan por cuenta
 MAX_CAMBIOS = 50
@@ -96,6 +96,20 @@ def _leer_usuario(texto):
     if not USUARIO_VALIDO.match(usuario):
         return usuario, 'El usuario debe tener de 3 a 20 caracteres: letras sin tildes, números y . _ -'
     return usuario, None
+
+
+LARGO_AREA = 40
+
+
+def _leer_area(texto):
+    """Area de la cuenta (Cocina, Secretaría...): texto libre de 2 a 40 letras, con mayuscula al inicio.
+    -> (area, error o None). La lista de areas la arma el frontend con las que ya hay."""
+    area = ' '.join(str(texto or '').split())
+    if not area:
+        return area, 'Elige el área'
+    if len(area) < 2 or len(area) > LARGO_AREA or not any(c.isalpha() for c in area):
+        return area, f'El área debe tener de 2 a {LARGO_AREA} caracteres'
+    return area[0].upper() + area[1:], None
 
 
 def _usuario_de(doc):
@@ -184,7 +198,8 @@ class CustomLoginView(APIView):
                 'nombre': user_doc.get('nombre', usuario_input),
                 # el usuario como esta guardado (no como se tecleo: 'Admin' y 'admin' son la misma cuenta)
                 'usuario': user_doc.get('usuario') or user_doc.get('username') or usuario_input,
-                'rol': rol_final
+                'rol': rol_final,
+                'area': user_doc.get('area', ''),
             }
         }, status=200)
 
@@ -232,6 +247,7 @@ class MiCuentaView(APIView):
             'nombre': doc.get('nombre', ''),
             'usuario': doc.get('usuario') or doc.get('username') or '',
             'rol': doc.get('rol', 'Usuario'),
+            'area': doc.get('area', ''),
         }, status=200)
 
 
@@ -519,6 +535,9 @@ class UsuariosListCreateView(APIView):
         error = _clave_invalida(raw_password)
         if error:
             return Response({'error': error}, status=400)
+        doc_data['area'], error = _leer_area(doc_data.get('area'))
+        if error:
+            return Response({'error': error}, status=400)
 
         # Evitar usuarios duplicados (un duplicado podría "tapar" a otro en el login)
         existentes, status_code = get_documents_by_type('usuario')
@@ -569,7 +588,9 @@ class UsuarioDetailView(APIView):
         todos, status_code = get_documents_by_type('usuario')
         if status_code != 200:
             return Response(todos, status=status_code)
-        if str(doc_id) == str(principal_id(todos)):
+        # (solo su area la puede cambiar ella misma)
+        solo_su_area = str(doc_id) == str(request.user.id) and set(request.data) <= {'area'}
+        if str(doc_id) == str(principal_id(todos)) and not solo_su_area:
             return Response({'error': 'La cuenta principal no se puede modificar'}, status=403)
         cuenta = next((u for u in todos if str(u.get('_id')) == str(doc_id)), None)
         if cuenta is None:
@@ -588,6 +609,11 @@ class UsuarioDetailView(APIView):
                 return Response({'error': 'Ese usuario ya existe'}, status=409)
             if doc_data['usuario'] == _usuario_de(cuenta):
                 del doc_data['usuario']
+
+        if 'area' in doc_data:
+            doc_data['area'], error = _leer_area(doc_data['area'])
+            if error:
+                return Response({'error': error}, status=400)
 
         # Solo se cambia la contraseña si llega una nueva (siempre se hashea);
         # si no llega, fusionar=True conserva el hash actual.
@@ -609,6 +635,8 @@ class UsuarioDetailView(APIView):
                 cambios.append({'accion': 'estado', 'valor': doc_data['activo']})
             if 'usuario' in doc_data and doc_data['usuario'] != _usuario_de(actual):
                 cambios.append({'accion': 'usuario', 'valor': doc_data['usuario']})
+            if 'area' in doc_data and doc_data['area'] != actual.get('area'):
+                cambios.append({'accion': 'area', 'valor': doc_data['area']})
             if nueva:
                 # la contraseña no se guarda en el registro, solo que se cambio
                 cambios.append({'accion': 'clave', 'valor': True})

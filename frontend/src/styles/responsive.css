@@ -17,7 +17,7 @@
   }
 
   .usuario-fila {
-    grid-template-columns: 1.5fr 136px 120px 1fr 1.3fr 104px;
+    grid-template-columns: 1.5fr 1fr 136px 120px 1fr 1.3fr 104px;
   }
 
   .uf-movimientos,
@@ -497,6 +497,7 @@
   .uf-actividad { grid-area: actividad; text-align: right; font-size: 12px; min-width: 0; }
 
   .uf-rol,
+  .uf-area,
   .uf-acciones {
     display: none;
   }

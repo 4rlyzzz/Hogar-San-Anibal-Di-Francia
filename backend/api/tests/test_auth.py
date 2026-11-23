@@ -12,7 +12,7 @@ class LoginTests(PruebaAPI):
         self.assertEqual(r.status_code, 200)
         self.assertIn('access', r.data)
         self.assertIn('refresh', r.data)
-        self.assertEqual(r.data['usuario'], {'id': 'usuario:admin', 'nombre': 'Dirección', 'usuario': 'admin', 'rol': 'Administrador'})
+        self.assertEqual(r.data['usuario'], {'id': 'usuario:admin', 'nombre': 'Dirección', 'usuario': 'admin', 'rol': 'Administrador', 'area': ''})
 
     def test_login_no_distingue_mayusculas_en_el_usuario(self):
         r = self.entrar('ADMIN', CLAVE)
@@ -64,7 +64,7 @@ class TokenTests(PruebaAPI):
         self.entrar_como(self.usuario)
         r = self.client.get('/api/auth/yo/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data, {'id': 'usuario:cocina', 'nombre': 'Cocina', 'usuario': 'cocina', 'rol': 'Usuario'})
+        self.assertEqual(r.data, {'id': 'usuario:cocina', 'nombre': 'Cocina', 'usuario': 'cocina', 'rol': 'Usuario', 'area': ''})
 
     def test_el_rol_sale_de_la_base_y_no_del_token(self):
         # el token dice Administrador, pero en la base ya es Usuario

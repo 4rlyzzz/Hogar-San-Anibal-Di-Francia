@@ -8,7 +8,7 @@ import {
   abrirModal, abrirProducto, abrirUsuario, esAdmin, opcionesActividad, opcionesNinos, productosParecidos,
   revisarMovimiento, confirmarMovimiento, guardarProducto, revisarAjuste, confirmarAjuste, guardarUnion, confirmarBaja,
   guardarDonador, guardarUsuario, cambiarMiClave, restablecerClave, roles, empezarLote, abrirLista, usarExistente, nombreDisponible, envasesAlimentos, envasesSalud, medidasSuelto, medidasSueltoSalud, medidasAlimentos, medidasSalud, medidaEntera,
-  categorias, abrirPersona, guardarMinimo, miUsuario, cambiarMiUsuario,
+  categorias, abrirPersona, guardarMinimo, miUsuario, cambiarMiUsuario, opcionesArea, guardarArea,
 } from '../acciones.js';
 import { esMerch, soles, totalVenta, nombreMedio, nombreComprobante, textoTipo, puedeVence, precioSugerido } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CamposProductoMerch, CampoVenceMerch } from './Merch.jsx';
@@ -16,7 +16,7 @@ import {
   nombreCategoria, colorVencimiento, motivosAjuste, motivoCorreccion, stockAntes, textoPresentacion, envaseSingular, pluralizar, redondear, fechaActual, textoPara, formatoNombre,
 } from '../logica/comunes.js';
 import { cantidadVencida, disponible, lotesVencidos, fechaLote, fechaVence } from '../logica/lotes.js';
-import { useFormulario, CampoNumero, CampoClave, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
+import { useFormulario, CampoNumero, CampoClave, CampoArea, Fondo, Cabecera, Botones, MensajeError, sobreProducto, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones, filtrarNumero } from './Formulario.jsx';
 import { Desplegable } from './Desplegable.jsx';
 import { MovimientosEntre } from './Comunes.jsx';
 import { LotesSalida } from './Lotes.jsx';
@@ -808,6 +808,26 @@ export function ModalClave({ modal }) {
   );
 }
 
+// ---------- area de una cuenta (o la propia) ----------
+export function ModalArea({ modal }) {
+  const f = useFormulario();
+  const cuenta = estado.cuentas.find(c => String(c.id) === String(modal.cuentaId));
+  if (!cuenta) return null;
+  const propia = String(cuenta.id) === String(usuario.id);
+  return (
+    <Fondo>
+      <form className="modal" id="form-area" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarArea(modal, v))}>
+        <Cabecera codigo={<IconoUsuarios />} color="azul" titulo={propia ? 'Cambiar mi área' : 'Cambiar área'} subtitulo={`${cuenta.nombre} · @${cuenta.usuario}`} />
+        <div className="modal-cuerpo">
+          <CampoArea areas={opcionesArea()} inicial={cuenta.area} autoFocus />
+          <MensajeError texto={f.error} />
+        </div>
+        <Botones textoGuardar="Guardar área" enviando={f.enviando} />
+      </form>
+    </Fondo>
+  );
+}
+
 // ---------- mi usuario (con el que entro), desde el menu de arriba ----------
 // el nombre no se cambia: es el que sale como responsable en el historial
 export function ModalMiUsuario() {
@@ -856,6 +876,8 @@ export function ModalUsuario() {
             <input id="cuenta-usuario" name="cuenta-usuario" type="text" maxLength={largos.nombreUsuario} autoCapitalize="none" autoComplete="off" placeholder="Ej. cocina" />
             <small>Con este nombre entra a la app: sin espacios ni tildes</small>
           </div>
+
+          <CampoArea areas={opcionesArea()} />
 
           <CamposClaveNueva />
 

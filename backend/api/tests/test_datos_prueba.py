@@ -46,6 +46,9 @@ class DatosPruebaTests(PruebaAPI):
         self.assertEqual({m['tipo_movimiento'] for m in movs}, {'ingreso', 'salida', 'ajuste'})
         # los hace el equipo de prueba (cada uno en su area), repartidos en varias semanas
         self.assertEqual({m['responsable'] for m in movs}, {nombre for _, nombre, _, _ in dp.EQUIPO})
+        # cada usuario de prueba con su area
+        areas = {u['usuario']: u.get('area') for u in self.couch.todos('usuario')}
+        self.assertEqual({u: areas[u] for u, *_ in dp.EQUIPO}, {u: dp.NOMBRE_AREA[a] for u, _, _, a in dp.EQUIPO})
         salud = {m['responsable'] for m in movs if m['categoria'] == 'Salud' and m['tipo_movimiento'] == 'salida'}
         self.assertLessEqual(salud, {'Ruth', 'Revel'})
         self.assertGreater(len({m['creado'][:10] for m in movs}), 30)
@@ -178,6 +181,7 @@ class DatosPruebaTests(PruebaAPI):
         # solo las cuentas del equipo: sin los usuarios de prueba
         self.assertEqual(set(usuarios), {u for u, *_ in dp.CUENTAS_LOCALES})
         self.assertTrue(usuarios['neymi']['principal'])
+        self.assertTrue(all(u.get('area') for u in usuarios.values()))
         self.assertEqual(sum(1 for u in usuarios.values() if u.get('principal')), 1)
 
         # cada uno entra con la contraseña de CLAVES_EQUIPO
