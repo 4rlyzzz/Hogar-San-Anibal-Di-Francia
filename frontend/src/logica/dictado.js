@@ -973,11 +973,79 @@ export function corregirNombres(texto, productos) {
 
 // todo el dictado
 // una parte que solo dice quien dono o la actividad ("que es donación libre") se suma a la anterior
+// ---------- el inventario dicho ----------
+// un mismo producto puede estar en dos inventarios ("Mermelada de fresa" en Alimentos y en Merchandising):
+// "ingreso a alimentos de 3 mermeladas" o "3 mermeladas de merchandising" dice cual es
+// (el reconocedor escribe "merchandising" de varias formas: "merch", "merchan", "marchandising")
+const inventarioDicho = new RegExp(String.raw`(?:\b(?:a|al|en|de|del|para)\s+)?(?:\b(?:el|la|los)\s+)?(?:\b(?:inventario|seccion|categoria|parte)\s+(?:de\s+|del\s+)?)?\b(alimentos|salud(?:\s+(?:e|y)\s+higiene)?|merch[a-z]*|march[a-z]*ising)\b(?:\s*[:,.])?`, 'g');
+const conConector = /^(?:a|al|en|de|del|para|el|la|los|inventario|seccion|categoria|parte)\s/;
+// lo que va antes del inventario: nada, o termina en coma o "y": vale para lo que sigue
+const empiezaParte = /(?:^|[,.;:]|\b(?:y|e|ademas|tambien|luego|despues|aparte))\s*$/;
+
+export function categoriaDe(palabra) {
+  const p = plano(String(palabra ?? '')).trim();
+  if (p.startsWith('alimento')) return 'Alimentos';
+  if (p.startsWith('salud')) return 'Salud';
+  if (p.startsWith('merch') || p.startsWith('march')) return 'Merchandising';
+  return null;
+}
+
+// el texto en trozos: [{ texto, categoria, alFinal }]
+// categoria: el inventario dicho antes ("ingreso a alimentos de ..."), vale para todos los productos del trozo
+// alFinal: el dicho despues de un producto ("3 mermeladas de merchandising"), solo para el ultimo producto del trozo
+// una palabra que es parte del nombre de un producto ("Kit Salud Bucal") solo cuenta con "a", "de", "en"... delante
+export function partirPorInventario(texto, productos = []) {
+  const original = String(texto ?? '');
+  const guia = plano(original);
+  const deNombres = new Set(productos.flatMap(p => plano(p.item.nombre).split(/[^a-z0-9ñ]+/)));
+  const trozos = [];
+  let actual = { texto: '', categoria: null, alFinal: null };
+  let adelante = null;
+  let desde = 0;
+  for (const m of guia.matchAll(inventarioDicho)) {
+    const categoria = categoriaDe(m[1]);
+    if (!categoria || (deNombres.has(m[1].split(/\s+/)[0]) && !conConector.test(m[0]))) continue;
+    const antes = guia.slice(desde, m.index);
+    actual.texto += original.slice(desde, m.index);
+    if (empiezaParte.test(antes) || !/[a-z0-9ñ]/.test(actual.texto.replace(/\b(?:y|e|de|del)\b/gi, ''))) {
+      // "a alimentos de 3 mermeladas": para lo que sigue
+      if (/[a-z0-9ñ]/i.test(actual.texto)) trozos.push(actual);
+      adelante = categoria;
+      actual = { texto: '', categoria, alFinal: null };
+    } else {
+      // "3 mermeladas de merchandising": para el producto de antes
+      trozos.push({ ...actual, alFinal: categoria });
+      actual = { texto: '', categoria: adelante, alFinal: null };
+    }
+    desde = m.index + m[0].length;
+  }
+  actual.texto += original.slice(desde);
+  if (/[a-z0-9ñ]/i.test(actual.texto) || !trozos.length) trozos.push(actual);
+  return trozos.map(t => ({ ...t, texto: t.texto.replace(/^[\s,.;:]*(?:(?:de|del)\s+)?/i, '').trim() }));
+}
+
+export const enInventario = (productos, categoria) => (categoria ? productos.filter(p => p.categoria === categoria) : productos);
+
+// el inventario de un producto que entendio la IA: el que ella dijo ("categoria") o, si no lo dio,
+// el que entendio el dictado local cuando vale para todo lo dicho ("ingreso a merchandising de ...")
+export function categoriaDeIA(itemIA, locales = []) {
+  const dicha = categoriaDe(itemIA?.categoria);
+  if (dicha) return dicha;
+  const dichas = new Set(locales.map(r => r.categoriaDicha ?? null));
+  return dichas.size === 1 ? [...dichas][0] : null;
+}
+
 export function interpretarDictado(texto, productos, extra = {}) {
   const resultado = [];
   let paraTodos = null;
-  for (const parte of separarDictado(corregirNombres(escribirTallas(texto), productos)).flatMap(p => dividirPorCantidades(p, productos))) {
-    let r = interpretarParte(parte, productos, extra);
+  // cada parte con el inventario dicho para ella (si se dijo, solo se busca entre sus productos)
+  const partes = partirPorInventario(texto, productos).flatMap(t => {
+    const suyas = separarDictado(corregirNombres(escribirTallas(t.texto), productos)).flatMap(p => dividirPorCantidades(p, productos));
+    return suyas.map((parte, k) => ({ parte, categoria: (k === suyas.length - 1 && t.alFinal) || t.categoria }));
+  });
+  for (const { parte, categoria } of partes) {
+    const deAqui = enInventario(productos, categoria);
+    let r = interpretarParte(parte, deAqui, extra);
     // "10 kg de avena. En 10 bolsas. Donado por la parroquia. Vence en octubre.": el reconocedor pone un punto
     // en cada pausa; lo que no nombra un producto es del anterior (salvo "todo esto lo donó...", que es para todos)
     const anterior = resultado.at(-1);
@@ -986,9 +1054,11 @@ export function interpretarDictado(texto, productos, extra = {}) {
     // "... Rosa Quispe con Yape" ya dice quien compro: no se vuelve a leer junto con lo anterior
     const soloPersona = r.comprador || r.proveedor;
     if (anterior && sinProducto && !paraTodosSolo && !soloPersona) {
-      r = interpretarParte(`${anterior.dicho} ${parte}`, productos, extra);
+      r = interpretarParte(`${anterior.dicho} ${parte}`, enInventario(productos, categoria ?? anterior.categoriaDicha), extra);
+      if (!categoria && anterior.categoriaDicha) r.categoriaDicha = anterior.categoriaDicha;
       resultado.pop();
     }
+    if (categoria) r.categoriaDicha = categoria;
     const esProducto = r.producto || r.dudas.length || r.cantidad != null;
     const tieneDonador = r.donador || r.donadorDicho || r.actividad;
     const tieneVenta = r.comprador || r.compradorDicho || r.proveedor || r.proveedorDicho || r.medioPago || r.precio != null;

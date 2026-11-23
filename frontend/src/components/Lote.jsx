@@ -14,7 +14,7 @@ import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coi
 import { CATEGORIA as MERCH, esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from '../logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -465,7 +465,8 @@ export function ModalLoteVoz() {
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
         .map(i => {
           // si empatan varios, vale el que entendio el local por el tamaño dicho ("cajas de 20 unidades")
-          const { producto, dudas } = desempatarConLocal(productoDeNombre(i.producto, productos), local);
+          // con el inventario dicho ("a merchandising"), solo entre sus productos
+          const { producto, dudas } = desempatarConLocal(productoDeNombre(i.producto, enInventario(productos, categoriaDeIA(i, local))), local);
           const suyo = producto && local.find(x => mismoProducto(x.producto, producto));
           return {
             cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo || null)),
@@ -850,7 +851,8 @@ function ElegirProducto({ clave, onElegir, x, esSalida }) {
 
   const posibles = x.dudas.map(c => productoPorClave(c)).filter(Boolean);
   // empieza en la pestaña del producto elegido; con dudas ("¿cuál de estos?") se ven todas
-  const [categoria, setCategoria] = useState(() => (!posibles.length && elegido && !elegido.nuevo ? elegido.categoria : 'Todos'));
+  // o en la del inventario que se dijo ("ingreso a merchandising de ...")
+  const [categoria, setCategoria] = useState(() => (!posibles.length && elegido && !elegido.nuevo ? elegido.categoria : x.categoriaDicha ?? 'Todos'));
   const todos = todosLosProductos();
   const encontrados = texto.trim() ? todos.filter(({ item }) => coincideNombre(texto, item.nombre)) : posibles.length ? posibles : todos;
   const enPestana = enCategoria(encontrados, categoria);
@@ -961,7 +963,7 @@ export function ModalLoteItem({ modal }) {
   const dicho = productoDeItem(x);
   // el nombre sin su presentacion del final: "Leche Evaporada Gloria lata 400 g" -> "Leche Evaporada Gloria"
   const nombreBase = dicho ? baseDe(dicho.item.nombre, dicho.item) : x.nombreDicho;
-  const crearProducto = () => abrirProducto(elegido?.categoria ?? x.categoria ?? 'Alimentos', {
+  const crearProducto = () => abrirProducto(elegido?.categoria ?? x.categoria ?? x.categoriaDicha ?? 'Alimentos', {
     itemId: x.id,
     nombre: nombreBase,
     codigoBarras: x.codigoBarras,

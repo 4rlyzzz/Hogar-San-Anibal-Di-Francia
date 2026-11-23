@@ -59,11 +59,17 @@ REGLAS DE PRECISIÓN Y ANTI-ALUCINACIÓN:
    - medio_pago: "efectivo", "yape-plin" (Yape o Plin) o "transferencia", solo si se dijo. Si no, null.
    - La talla y el color de una prenda SON PARTE DEL PRODUCTO: "dos polos talla M azules" -> producto "Polo talla M azul", cantidad 2.
    - La talla se escribe con sus letras aunque se diga por su nombre: "talla eme" -> "talla M", "talla ese" -> "talla S", "talla ele" -> "talla L", "talla equis ele" -> "talla XL", "talla doble equis ele" -> "talla XXL".
+8. INVENTARIO ('categoria'): hay tres inventarios y un mismo producto puede estar en varios ("Mermelada de fresa" en Alimentos y en Merchandising).
+   - Si se dijo a cuál va: "alimentos" -> "alimentos"; "salud" o "salud e higiene" -> "salud"; "merchandising" o "merch" -> "merchandising".
+   - Dicho al inicio ("ingreso a alimentos de 3 mermeladas y 2 panetones") vale para todos los productos que siguen; dicho junto a un producto ("3 mermeladas de merchandising") solo para ese.
+   - El nombre del inventario NO es parte del producto: "ingreso a merchandising de 3 mermeladas de fresa" -> producto "Mermelada de fresa", categoria "merchandising".
+   - Si no se dijo, null.
 
 Responde SOLO el JSON plano, sin markdown:
-[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null","comprador":"nombre|null","proveedor":"nombre|null","precio":"número|null","medio_pago":"efectivo|yape-plin|transferencia|null"}]"""
+[{"tipo":"ingreso|salida","producto":"nombre con su dosis o tamaño","cantidad":"número|null","unidad":"palabra tras el número|null","vence":"YYYY-MM-DD|null","comprador":"nombre|null","proveedor":"nombre|null","precio":"número|null","medio_pago":"efectivo|yape-plin|transferencia|null","categoria":"alimentos|salud|merchandising|null"}]"""
 
 MEDIOS_PAGO = ('efectivo', 'yape-plin', 'transferencia')
+CATEGORIAS = ('alimentos', 'salud', 'merchandising')
 
 
 def _texto(valor, maximo):
@@ -111,6 +117,7 @@ def limpiar_items(contenido):
                 'proveedor': _texto(d.get('proveedor'), 60),
                 'precio': precio if _precio_valido(precio) else None,
                 'medio_pago': d.get('medio_pago') if d.get('medio_pago') in MEDIOS_PAGO else None,
+                'categoria': d.get('categoria') if d.get('categoria') in CATEGORIAS else None,
             }.items() if v},
         })
     return items
