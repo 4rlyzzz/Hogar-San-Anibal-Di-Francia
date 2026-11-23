@@ -46,9 +46,13 @@ export const envasesAlimentos = ['bolsas', 'latas', 'sacos', 'cajas', 'paquetes'
 export const envasesSalud = ['cajas', 'blísters', 'frascos', 'sobres', 'ampollas', 'tubos', 'paquetes', 'botellas'];
 // suelto o a granel
 export const medidasSuelto = ['kg', 'g', 'L', 'unidades'];
-// medidas del contenido
+// medicinas sueltas: tabletas de un blíster cortado, jarabe a granel
+export const medidasSueltoSalud = ['unidades', 'tabletas', 'cápsulas', 'ml', 'g'];
+// medidas del contenido ("caja de 10 tabletas", "frasco de 120 ml", "sobre de 500 mg")
 export const medidasAlimentos = ['kg', 'g', 'L', 'ml', 'unidades'];
-export const medidasSalud = ['unidades', 'ml', 'L', 'g'];
+export const medidasSalud = ['unidades', 'tabletas', 'cápsulas', 'mg', 'g', 'ml', 'L'];
+// lo que se cuenta de a uno: no lleva decimales
+export const medidaEntera = medida => ['unidades', 'tabletas', 'cápsulas'].includes(medida);
 
 // roles validos
 export const roles = ['Usuario', 'Administrador'];
@@ -1038,7 +1042,8 @@ function leerCodigoBarras(v, campo, { opcional = false, delProducto = null } = {
 // { unidad, envase, contenido, medida }
 function leerPresentacion(v, categoria) {
   const envase = v.envase ?? '';
-  const envasesPermitidos = [...(categoria === 'Salud' ? envasesSalud : envasesAlimentos), 'otro', ...medidasSuelto.map(m => 'suelto:' + m)];
+  const esSalud = categoria === 'Salud';
+  const envasesPermitidos = [...(esSalud ? envasesSalud : envasesAlimentos), 'otro', ...(esSalud ? medidasSueltoSalud : medidasSuelto).map(m => 'suelto:' + m)];
   if (!permitido(envase, envasesPermitidos)) falla('Elige en qué viene el producto.', 'envase');
   // suelto: se cuenta en la medida
   if (envase.startsWith('suelto:')) return { unidad: envase.slice(7), envase: null, contenido: null, medida: null };
@@ -1047,10 +1052,10 @@ function leerPresentacion(v, categoria) {
   const unidad = envase === 'otro' ? pluralizar(singular) : envase;
 
   const medida = v.medida ?? '';
-  if (!permitido(medida, categoria === 'Salud' ? medidasSalud : medidasAlimentos)) falla('Elige la medida de la lista.', 'medida');
-  // 'unidades' va entero; las demas medidas, 2 decimales
+  if (!permitido(medida, esSalud ? medidasSalud : medidasAlimentos)) falla('Elige la medida de la lista.', 'medida');
+  // unidades, tabletas y capsulas van enteras; las demas medidas, 2 decimales
   const reglaContenido = reglaNumero({
-    min: 0, max: 10000, decimales: medida === 'unidades' ? 0 : 2, minimoExcluido: true,
+    min: 0, max: 10000, decimales: medidaEntera(medida) ? 0 : 2, minimoExcluido: true,
     que: `cuánto trae cada ${singular.toLowerCase()}`,
   });
   const contenido = leer(v, 'contenido-envase', reglaContenido);
@@ -1853,6 +1858,15 @@ export function abrirCodigo() {
   if (estado.lote) abrirModal({ tipo: 'lote-codigo', volver: abrirBusqueda, alCerrar: cerrarLote });
 }
 
+// ingreso o salida que ya se eligio: la lista abierta, aunque todavia no tenga productos
+// (sin lista, por ejemplo con el microfono junto al "+", hay que decirlo)
+export const tipoElegido = () => estado.lote?.tipo ?? null;
+
+// dictar desde "Elige el producto" (tambien al añadir mas productos a una lista abierta)
+export function abrirVozLote() {
+  if (estado.lote) abrirModal({ tipo: 'lote-voz', volver: abrirBusqueda, alCerrar: cerrarLote });
+}
+
 // ---------- agregar a la lista ----------
 // a mano: se agrega y se abre para poner la cantidad
 export function agregarManual(categoria, id) {
@@ -1916,10 +1930,11 @@ export function cantidadDicha(valor) {
 export async function agregarDictado(v) {
   // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
   const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
+  // abierta: la lista que ya tiene productos (no se puede mezclar con el otro tipo)
   const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
 
   // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
-  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? abierta));
+  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? tipoElegido()));
 
   // 3. IA (Groq, Gemini... via Django): Parsing de alta precisión para productos, cantidades y fechas ISO
   // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
@@ -1944,9 +1959,9 @@ export async function agregarDictado(v) {
   if (dicho.ambos) {
     falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
   }
-  // 1. lo dicho, 2. lo que entendio la IA, 3. la lista que ya esta abierta
+  // 1. lo dicho, 2. la lista abierta o elegida ("Registrar ingreso" > "Hablar"), 3. lo que entendio la IA
   const tipoIA = { salida: 'Salida', ingreso: 'Ingreso' }[itemsValidos[0]?.tipo] ?? null;
-  const tipo = dicho.tipo ?? abierta ?? tipoIA;
+  const tipo = dicho.tipo ?? tipoElegido() ?? tipoIA;
   if (!tipo) {
     falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
   }

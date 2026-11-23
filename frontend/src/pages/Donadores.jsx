@@ -40,7 +40,7 @@ export function Donadores() {
         <div className="tabla">
           <div className="tabla-header barra-tabla">
             <span className="barra-tabla-resumen">
-              <b>{lista.length}</b> donadores · {totalDonaciones} donaciones
+              <span className="sin-cortar"><b>{lista.length}</b> donadores ·</span> <span className="sin-cortar">{totalDonaciones} donaciones</span>
             </span>
             <BotonFiltros grupo="donadoresFiltros" activos={chips.length} abierto={abierto} />
             <BotonExcel hay={lista.length > 0} titulo="Descargar la lista en Excel" accion="descargar-donadores" descargar={descargarExcelDonadores} />

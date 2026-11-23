@@ -81,6 +81,8 @@ Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**.
 
 > **Datos de prueba (opcional):** si tu base no tiene productos y quieres probar con algo realista, ejecuta `python manage.py datos_prueba --clave <contraseña>`. Crea productos, donadores, proveedores, compradores, un equipo de usuarios de prueba (todos con esa contraseña) y movimientos de las últimas 8 semanas.
 
+> **Misma base para todo el equipo (manual, fotos, pruebas):** `python manage.py datos_prueba --reiniciar` **borra los datos de tu base local** y la deja igual que la de los demás: los datos de prueba y las cuentas del equipo (`neymi`, `luigi`, `alan`, `pochano`), con los movimientos registrados a nombre de ellos. Las contraseñas **no están en el repositorio**: pídelas al equipo y agrégalas a tu `backend/.env` en una línea `CLAVES_EQUIPO=neymi:<clave>,luigi:<clave>,alan:<clave>,pochano:<clave>`. Solo funciona con `DEBUG=True` en tu `backend/.env`: en Railway se niega y no borra nada.
+
 Para inicializar el servicio Django ejecutar (**1ra terminal**):
 
 ```powershell

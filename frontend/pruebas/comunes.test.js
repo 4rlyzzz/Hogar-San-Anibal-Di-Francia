@@ -24,6 +24,15 @@ test('presentacion y total', () => {
   assert.equal(c.pluralizar('Caja'), 'cajas');
 });
 
+test('medidas de medicinas', () => {
+  const cajas = { unidad: 'cajas', cantidad: 3, contenido: 10, medida: 'tabletas' };
+  assert.equal(c.textoPresentacion(cajas), 'Caja x 10 tabletas');
+  assert.equal(c.textoTotal(cajas), '30 tabletas en total');
+  // 10 sobres de 500 mg son 5 g
+  const sobres = { unidad: 'sobres', cantidad: 10, contenido: 500, medida: 'mg' };
+  assert.equal(c.textoTotal(sobres), '5 g en total');
+});
+
 test('busqueda parecida tolera errores de escritura', () => {
   assert.equal(c.coincideNombre('lecge', 'Leche Gloria'), true);
   // hasta 7 letras se tolera 1 error; desde 8, dos

@@ -1,5 +1,5 @@
 // desktop: menu lateral fijo; celular: barra de iconos abajo
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEstado } from '../estado.js';
 import { usuario } from '../data/datos.js';
 import { largos } from '../validacion.js';
@@ -116,16 +116,51 @@ function Menu({ seccion }) {
   ]);
 }
 
+// se ven 5 iconos; el resto se desliza. Los puntitos de abajo dicen que hay otra "pagina" y cual se ve
+const ICONOS_POR_PAGINA = 5;
+
 function MenuMovil({ seccion }) {
   const activo = useRef(null);
+  const iconos = useRef(null);
+  const [pagina, setPagina] = useState(0);
+  const secciones = seccionesVisibles();
+  const paginas = Math.ceil(secciones.length / ICONOS_POR_PAGINA);
+
+  // la ultima pagina puede tener menos iconos: se cuenta por lo que falta deslizar
+  const revisarPagina = () => {
+    const el = iconos.current;
+    const maximo = el ? el.scrollWidth - el.clientWidth : 0;
+    setPagina(maximo > 0 ? Math.round((el.scrollLeft / maximo) * (paginas - 1)) : 0);
+  };
+
   useEffect(() => {
     activo.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    revisarPagina();
   }, [seccion]);
-  return seccionesVisibles().map(s => (
-    <button key={s.nombre} ref={s.nombre === seccion ? activo : null} className={s.nombre === seccion ? 'activo' : ''} data-accion="seccion" data-seccion={s.nombre} aria-label={s.etiqueta || s.nombre} onClick={() => irA(s.nombre)}>
-      <s.Icono />
-    </button>
-  ));
+
+  const irAPagina = i => {
+    const el = iconos.current;
+    el?.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+  };
+
+  return (
+    <>
+      <div className="menu-movil-iconos" ref={iconos} onScroll={revisarPagina}>
+        {secciones.map(s => (
+          <button key={s.nombre} ref={s.nombre === seccion ? activo : null} className={s.nombre === seccion ? 'activo' : ''} data-accion="seccion" data-seccion={s.nombre} aria-label={s.etiqueta || s.nombre} onClick={() => irA(s.nombre)}>
+            <s.Icono />
+          </button>
+        ))}
+      </div>
+      {paginas > 1 && (
+        <div className="menu-movil-puntos" role="tablist" aria-label="Más secciones: desliza la barra">
+          {Array.from({ length: paginas }, (_, i) => (
+            <button key={i} type="button" role="tab" aria-selected={i === pagina} aria-label={`Página ${i + 1} de ${paginas}`} className={i === pagina ? 'activo' : ''} onClick={() => irAPagina(i)} />
+          ))}
+        </div>
+      )}
+    </>
+  );
 }
 
 function MenuUsuario({ abierto }) {
@@ -207,7 +242,7 @@ export function Layout() {
         <main className="contenedor" id="contenido">{paginas[seccion]()}</main>
       </div>
 
-      <nav className="menu-movil" id="menu-movil"><MenuMovil seccion={seccion} /></nav>
+      <nav className="menu-movil" id="menu-movil" aria-label="Secciones"><MenuMovil seccion={seccion} /></nav>
       {/* en Donadores, Proveedores, Compradores y Usuarios el "+" no registra movimientos */}
       {!['Donadores', 'Proveedores', 'Compradores', 'Usuarios'].includes(seccion) && (
         <button className="btn-flotante btn-flotante-voz" data-accion="dictar" aria-label="Registrar por voz" title="Registrar por voz" onClick={empezarDictado}>

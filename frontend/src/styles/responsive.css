@@ -25,9 +25,18 @@
     display: none;
   }
 
-  /* inicio: todo en una columna */
+  /* inicio: los 5 recuadros en 3 + 2 (ninguno queda solo):
+     arriba los inventarios (Alimentos, Salud, Merch), abajo las alertas (Por vencer, Bajo stock) */
   .panel-recuadros {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .panel-recuadros > :nth-child(-n + 3) {
+    grid-column: span 2;
+  }
+
+  .panel-recuadros > :nth-child(n + 4) {
+    grid-column: span 3;
   }
 
   .panel-medio,
@@ -86,15 +95,16 @@
     height: 36px;
   }
 
+  /* arriba poco espacio: el buscador ya separa el titulo de la marca (abajo queda lugar para la barra) */
   .contenedor {
-    padding: 18px 16px 120px;
+    padding: 6px 16px 120px;
   }
 
   .encabezado {
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
-    margin-bottom: 16px;
+    gap: 8px;
+    margin-bottom: 12px;
   }
 
   .encabezado h1 {
@@ -131,7 +141,7 @@
 
   .filtros button {
     flex: 1;
-    padding: 10px 8px;
+    padding: 7px 8px;
   }
 
   .grilla {
@@ -376,12 +386,23 @@
     max-height: 52vh;
   }
 
+  /* lo que se escribe va en 16px: con menos, el iPhone hace zoom al tocar el campo */
   .campo input,
-  .campo textarea,
+  .campo textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* el ejemplo y lo que no se escribe (desplegables, totales) pueden ir mas chicos: no hacen zoom */
+  .campo input::placeholder,
+  .campo textarea::placeholder {
+    font-size: 14px;
+  }
+
   .desplegable-campo,
   .input-fijo {
-    min-height: 46px;
-    font-size: 16px;
+    min-height: 44px;
+    font-size: 14px;
   }
 
   .dos-columnas + .dos-columnas {
@@ -499,7 +520,11 @@
     gap: 8px;
   }
 
+  /* el resumen ("5 donadores · 14 donaciones") se encoge y baja de linea si hace falta:
+     asi Filtros y Excel quedan en la misma fila que el */
   .barra-tabla-resumen {
+    flex: 1 1 0;
+    min-width: 0;
     font-size: 12px;
   }
 
@@ -580,47 +605,15 @@
     min-height: 42px;
   }
 
-  /* inicio */
+  /* inicio: en celular los recuadros van mas juntos y con menos relleno.
+     Como se acomodan por dentro lo decide cada recuadro segun su ancho (@container en componentes.css) */
   .panel-recuadros {
-    gap: 12px;
+    gap: 8px;
   }
 
   .recuadro {
-    padding: 14px;
-  }
-
-  .recuadro-cabecera {
-    gap: 9px;
-    margin-bottom: 12px;
-  }
-
-  .recuadro-icono {
-    width: 36px;
-    height: 36px;
-  }
-
-  .recuadro-icono svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .recuadro-titulo {
-    font-size: 12px;
-  }
-
-  .recuadro-numero {
-    font-size: 24px;
-  }
-
-  /* en celular el detalle va debajo del titulo */
-  .recuadro-fila {
-    flex-wrap: wrap;
-    gap: 3px 6px;
-  }
-
-  .recuadro-detalle {
-    flex-basis: 100%;
-    margin-left: 0;
+    padding: 12px 11px;
+    border-radius: 16px;
   }
 
   .panel {
@@ -679,61 +672,101 @@
   .alerta-fila-categoria { grid-area: categoria; justify-self: end; }
 
   /* menu de abajo: flotante, solo iconos, siempre visible */
+  /* la barra (fija abajo): arriba los iconos, debajo los puntitos de pagina */
   .menu-movil {
     display: flex;
+    flex-direction: column;
     position: fixed;
     left: 12px;
     right: 12px;
     bottom: calc(12px + env(safe-area-inset-bottom));
     z-index: 60;
-    justify-content: space-between;
-    gap: 4px;
-    padding: 8px;
+    padding: 5px 6px 4px;
     background: rgba(255, 255, 255, 0.97);
     border: 1px solid #e4eae8;
-    border-radius: 24px;
+    border-radius: 22px;
     box-shadow: 0 12px 30px -12px rgba(23, 33, 31, 0.28);
   }
 
-  .menu-movil {
+  /* se ven 5 iconos enteros y el resto se desliza (ninguno queda partido en el borde) */
+  .menu-movil-iconos {
+    display: flex;
+    gap: 4px;
     overflow-x: auto;
     scrollbar-width: none;
-    scroll-snap-type: x proximity;
+    scroll-snap-type: x mandatory;
   }
 
-  .menu-movil::-webkit-scrollbar {
+  .menu-movil-iconos::-webkit-scrollbar {
     display: none;
   }
 
-  .menu-movil button {
-    flex: 1 0 44px;
-    scroll-snap-align: center;
-    height: 52px;
-    max-width: 72px;
+  /* ● ○: hay otra pagina de iconos; tocar un puntito lleva a esa pagina */
+  .menu-movil-puntos {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 3px;
+  }
+
+  .menu-movil .menu-movil-puntos button {
+    flex: none;
+    width: 4px;
+    height: 4px;
+    padding: 0;
     border: 0;
-    border-radius: 16px;
+    border-radius: 50%;
+    background: #cfd8d5;
+    transition: width 0.2s, background 0.2s;
+  }
+
+  /* el de la pagina que se ve: mas largo y verde */
+  .menu-movil .menu-movil-puntos button.activo {
+    width: 12px;
+    border-radius: 2px;
+    background: #3fb98f;
+  }
+
+  /* merchandising: las 4 pestañas no entran en una fila ("Promocionales" quedaba cortada): van de 2 en 2 */
+  .merch-barra .pestanas-merch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .merch-barra .pestanas-merch button {
+    white-space: normal;
+  }
+
+  .menu-movil-iconos button {
+    flex: 0 0 calc((100% - 4 * 4px) / 5);
+    scroll-snap-align: start;
+    height: 40px;
+    border: 0;
+    border-radius: 14px;
     background: transparent;
     color: #8b9a95;
     display: grid;
     place-items: center;
   }
 
-  .menu-movil button svg {
-    width: 24px;
-    height: 24px;
+  .menu-movil-iconos button svg {
+    width: 22px;
+    height: 22px;
   }
 
-  /* agregar producto: el "+" flota encima de la barra de abajo */
+  /* agregar producto: el "+" flota encima de la barra de abajo (que mide unos 58px) */
   .btn-flotante {
     right: 18px;
-    bottom: calc(94px + env(safe-area-inset-bottom));
+    bottom: calc(82px + env(safe-area-inset-bottom));
   }
 
   .btn-flotante-voz {
-    bottom: calc(164px + env(safe-area-inset-bottom));
+    bottom: calc(152px + env(safe-area-inset-bottom));
   }
 
-  .menu-movil button.activo {
+  .menu-movil-iconos button.activo {
     background: #e6f5ee;
     color: #2d8e6c;
   }
@@ -749,6 +782,11 @@
 /* celular angosto: en el inventario no entra la palabra, queda el icono (y el numero de filtros puestos) */
 @media (max-width: 430px) {
   .encabezado-derecha .btn-filtros-texto {
+    display: none;
+  }
+
+  /* "Elige el producto": el buscador necesita el ancho; Escanear y Hablar quedan solo con su icono */
+  .lote-boton-texto {
     display: none;
   }
 

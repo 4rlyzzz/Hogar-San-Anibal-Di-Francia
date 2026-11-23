@@ -44,7 +44,7 @@ export function Personas({ tipo }) {
         <div className="tabla">
           <div className="tabla-header barra-tabla">
             <span className="barra-tabla-resumen">
-              <b>{lista.length}</b> {p.plural} · {operaciones} {operaciones === 1 ? 'compra' : 'compras'}<span className="solo-desktop"> · {soles(total)}</span>
+              <span className="sin-cortar"><b>{lista.length}</b> {p.plural} ·</span> <span className="sin-cortar">{operaciones} {operaciones === 1 ? 'compra' : 'compras'}</span><span className="solo-desktop"> · {soles(total)}</span>
             </span>
             <BotonFiltros grupo={p.filtros} activos={chips.length} abierto={abierto} />
             <BotonExcel hay={lista.length > 0} titulo="Descargar la lista en Excel" accion={`descargar-${p.lista}`} descargar={() => descargarExcelPersonas(tipo)} />
