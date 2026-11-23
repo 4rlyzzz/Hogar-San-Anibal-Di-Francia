@@ -71,6 +71,8 @@ EQUIPO = [
     ('cocina', 'Kenny', 'Usuario', 'cocina'),
     ('terapia', 'Revel', 'Usuario', 'terapia'),
 ]
+# como se ve el area de cada uno en la app (campo "area" de la cuenta)
+NOMBRE_AREA = {'direccion': 'Dirección', 'secretaria': 'Secretaría', 'salud': 'Medicina', 'cocina': 'Cocina', 'terapia': 'Terapia'}
 # cuentas del equipo que hace el proyecto: solo con --reiniciar (en la PC de cada uno, nunca en Railway).
 # Las contraseñas NO van aqui (el repositorio lo puede ver cualquiera): van en el backend/.env de cada uno,
 # que no se sube a git:   CLAVES_EQUIPO=neymi:<clave>,luigi:<clave>,alan:<clave>,pochano:<clave>
@@ -274,8 +276,9 @@ class Command(BaseCommand):
         if not reiniciar:
             if not clave:
                 clave = clave_generada = f'prueba{secrets.randbelow(9000) + 1000}{secrets.token_hex(2)}'
-            nuevos = [u for u, nombre, rol, _ in EQUIPO
-                      if self._post(UsuariosListCreateView, '/api/usuarios/', {'usuario': u, 'nombre': nombre, 'rol': rol, 'clave': clave}, saltar_repetido=True)]
+            nuevos = [u for u, nombre, rol, area in EQUIPO
+                      if self._post(UsuariosListCreateView, '/api/usuarios/',
+                                    {'usuario': u, 'nombre': nombre, 'rol': rol, 'area': NOMBRE_AREA[area], 'clave': clave}, saltar_repetido=True)]
             self.stdout.write(f'Usuarios: {len(nuevos)} nuevos')
         self.equipo = self._equipo(AREAS_LOCALES if reiniciar else None)
 
@@ -346,6 +349,8 @@ class Command(BaseCommand):
             clave = claves[usuario]
             _, status = create_document({
                 'tipo': 'usuario', 'usuario': usuario, 'nombre': nombre, 'rol': rol, 'activo': True,
+                # su area: la primera que registra (AREAS_LOCALES)
+                'area': next((NOMBRE_AREA[a] for a, u in AREAS_LOCALES.items() if u == usuario), 'Dirección'),
                 'clave': make_password(clave), 'creado': ahora, 'principal': i == 0,
             }, f'usuario:{slug(usuario)}')
             if status not in (200, 201):

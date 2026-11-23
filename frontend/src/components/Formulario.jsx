@@ -255,6 +255,24 @@ export function CampoDonador({ donadores, actividades = [], inicial = {} }) {
   );
 }
 
+// area donde trabaja la cuenta (Cocina, Secretaría...) o una nueva con "+ Otra área"
+export function CampoArea({ areas, inicial = '', autoFocus = false }) {
+  const [area, setArea] = useState(inicial);
+  const otra = useRef(null);
+  useEffect(() => {
+    if (area === 'otra') otra.current.focus();
+  }, [area]);
+  const opciones = [['', 'Elige el área'], ...areas.map(a => [a, a]), ['otra', '+ Otra área…']];
+  return (
+    <div className="campo">
+      <label htmlFor="cuenta-area">ÁREA</label>
+      <Desplegable id="cuenta-area" name="cuenta-area" opciones={opciones} valor={area} onChange={setArea} autoFocus={autoFocus} />
+      <input id="cuenta-area-otra" name="cuenta-area-otra" type="text" maxLength={largos.area} placeholder="Ej. Lavandería" hidden={area !== 'otra'} ref={otra} />
+      <small>Dónde trabaja: cocina, secretaría, repostería…</small>
+    </div>
+  );
+}
+
 // solo en salidas de Salud: a quien o a quienes se les dio
 // sin nadie elegido es uso general
 // inicial: nombres ya elegidos (al editar); uno que no esta en la lista va como "otro"

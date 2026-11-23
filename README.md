@@ -77,7 +77,7 @@ Crear el primer administrador (pide usuario, nombre y contraseña; solo se hace 
 python manage.py crear_usuario
 ```
 
-Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**.
+Su área queda como *Dirección*; para otra: `python manage.py crear_usuario --area Secretaría`. Los demás usuarios se agregan desde la app, en la pestaña **Usuarios**. Cada cuenta tiene un **área** (Cocina, Secretaría, Repostería...) que se elige al crearla y se puede cambiar después.
 
 > **Datos de prueba (opcional):** si tu base no tiene productos y quieres probar con algo realista, ejecuta `python manage.py datos_prueba --clave <contraseña>`. Crea productos, donadores, proveedores, compradores, un equipo de usuarios de prueba (todos con esa contraseña) y movimientos de las últimas 8 semanas.
 

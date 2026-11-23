@@ -57,6 +57,8 @@ export const medidaEntera = medida => ['unidades', 'tabletas', 'cápsulas'].incl
 
 // roles validos
 export const roles = ['Usuario', 'Administrador'];
+// areas donde trabaja cada cuenta; con "+ Otra área" se agregan mas (salen de las cuentas que ya las tienen)
+export const areasCuenta = ['Almacén', 'Cocina', 'Dirección', 'Limpieza', 'Medicina', 'Repostería', 'Secretaría', 'Terapia'];
 
 // ---------- errores de validacion ----------
 // campo: el input que hay que marcar
@@ -613,6 +615,7 @@ export function limpiarFiltros(grupo) {
     // el orden se mantiene
     estado.usuarios.rol = 'Todos';
     estado.usuarios.estado = 'Todos';
+    estado.usuarios.area = 'Todos';
   }
   refrescar();
 }
@@ -1521,6 +1524,7 @@ export async function guardarUsuario(v) {
   const nombre = leer(v, 'cuenta-nombre', reglas.nombreCuenta);
   const usuarioTexto = leer(v, 'cuenta-usuario', reglas.nombreUsuario);
   const clave = leerClaveNueva(v);
+  const area = leerArea(v, 'cuenta-area');
   const rol = v['cuenta-rol'] || 'Usuario';
   if (!permitido(rol, roles)) falla('Elige un rol.', 'cuenta-rol');
   if (estado.cuentas.some(c => c.usuario?.toLowerCase() === usuarioTexto)) falla('Ese usuario ya existe.', 'cuenta-usuario');
@@ -1528,7 +1532,7 @@ export async function guardarUsuario(v) {
   const creado = new Date();
   let res;
   try {
-    res = await guardarUsuarioAPI({ nombre, usuario: usuarioTexto, clave, rol, activo: true });
+    res = await guardarUsuarioAPI({ nombre, usuario: usuarioTexto, area, clave, rol, activo: true });
   } catch (err) {
     if (err.response?.status === 409) falla('Ese usuario ya existe.', 'cuenta-usuario');
     errorDelServidor(err, 'clave-nueva');
@@ -1537,7 +1541,7 @@ export async function guardarUsuario(v) {
   // la contraseña no se guarda en la pantalla
   estado.cuentas.push({
     id: res.id || res._id, _rev: res.rev || res._rev,
-    nombre, usuario: usuarioTexto, rol, activo: true, creado, creadoPor: usuario.nombre, creadoPorId: usuario.id, ultimoAcceso: null, cambios: [],
+    nombre, usuario: usuarioTexto, area: res.area ?? area, rol, activo: true, creado, creadoPor: usuario.nombre, creadoPorId: usuario.id, ultimoAcceso: null, cambios: [],
   });
   estado.modal = null;
   refrescar();
@@ -1580,6 +1584,53 @@ export function cambiarRol(id, nuevoRol) {
   const c = cuentaPorId(id);
   if (!sePuedeAdministrar(c) || !permitido(nuevoRol, roles) || c.rol === nuevoRol) return;
   actualizarCuenta(c, 'rol', nuevoRol, 'rol');
+}
+
+// ---------- area de la cuenta ----------
+const comparableArea = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+// las de siempre y las que ya tienen las cuentas
+export function opcionesArea() {
+  const agregadas = estado.cuentas.map(c => c.area).filter(a => a && !areasCuenta.some(x => comparableArea(x) === comparableArea(a)));
+  return [...areasCuenta, ...new Set(agregadas)].sort((a, b) => a.localeCompare(b));
+}
+
+// el area elegida o la escrita en "+ Otra área" (si ya existe, con como esta escrita: "cocina" -> "Cocina")
+function leerArea(v, campo) {
+  const elegida = v[campo] ?? '';
+  if (elegida === 'otra') {
+    const escrita = leer(v, `${campo}-otra`, reglas.area);
+    return opcionesArea().find(a => comparableArea(a) === comparableArea(escrita)) ?? escrita.charAt(0).toUpperCase() + escrita.slice(1);
+  }
+  if (!elegida) falla('Elige el área.', campo);
+  if (!permitido(elegida, opcionesArea())) falla('Elige el área de la lista.', campo);
+  return elegida;
+}
+
+// el admin cambia el area de otra cuenta; la suya la cambia cualquiera de los dos (tambien la principal)
+export const puedeCambiarArea = c => Boolean(c) && esAdmin() && (sePuedeAdministrar(c) || mismoId(c.id, usuario.id));
+
+export function abrirArea(cuentaId) {
+  if (!puedeCambiarArea(cuentaPorId(cuentaId))) return;
+  abrirModal({ tipo: 'area-cuenta', cuentaId, volver: estado.modal?.tipo === 'panel-actividad' ? () => verActividad(cuentaId) : null });
+}
+
+export async function guardarArea(modal, v) {
+  const c = cuentaPorId(modal.cuentaId);
+  if (!puedeCambiarArea(c)) return;
+  const area = leerArea(v, 'cuenta-area');
+  if (area !== c.area) {
+    try {
+      const res = await actualizarUsuarioAPI(c.id, { area });
+      c._rev = res.rev || res._rev;
+    } catch (err) {
+      errorDelServidor(err, 'cuenta-area');
+    }
+    c.area = area;
+    c.cambios = [...(c.cambios || []), { accion: 'area', valor: area, quienId: usuario.id, quien: usuario.nombre, fecha: new Date().toISOString() }];
+  }
+  volverOCerrar();
+  mostrarToast(mismoId(c.id, usuario.id) ? `Tu área: ${area}` : `Área de ${c.nombre}: ${area}`);
 }
 
 // ---------- contraseñas ----------
@@ -2387,6 +2438,7 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
         nombre: doc.nombre || '',
         usuario: doc.usuario || doc.username || '',
         rol: doc.rol || 'Usuario',
+        area: doc.area || '',
         activo: doc.activo ?? true,
         ultimoAcceso: doc.ultimoAcceso ? new Date(doc.ultimoAcceso) : null,
         creado: doc.creado ? new Date(doc.creado) : null,
