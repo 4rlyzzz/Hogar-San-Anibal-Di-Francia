@@ -108,6 +108,15 @@ class DictadoTests(PruebaAPI):
         ]))
         self.assertEqual(items, [{'tipo': None, 'producto': 'Avena', 'cantidad': None, 'unidad': '', 'vence': None}])
 
+    def test_inventario_dicho(self):
+        # "ingreso a merchandising de 3 mermeladas": solo los tres inventarios; otro valor se descarta
+        items = dictado.limpiar_items(json.dumps([
+            {'producto': 'Mermelada de fresa', 'cantidad': 3, 'categoria': 'merchandising'},
+            {'producto': 'Arroz', 'cantidad': 2, 'categoria': 'cocina'},
+        ]))
+        self.assertEqual(items[0]['categoria'], 'merchandising')
+        self.assertNotIn('categoria', items[1])
+
 
 class ProveedoresIATests(PruebaAPI):
     """Como se leen IA_1_*, IA_2_*... de las variables de entorno."""

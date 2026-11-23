@@ -39,7 +39,7 @@ import {
   precioSugerido, pideVence, puedeVence, llevaLote, llevaProveedor, pideProveedor, llevaCosto, merchVacio, textoTipoMovimiento,
 } from './logica/merch.js';
 import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA } from './logica/dictado.js';
+import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from './logica/dictado.js';
 import { procesarTextoConIA } from './servicios/dictadoIA.js';
 
 // envases (en plural)
@@ -2082,8 +2082,10 @@ export async function agregarDictado(v) {
     // el producto: el nombre que entendio la IA se busca entre los registrados (con su dosis);
     // no se toma el del parser local por su posicion, que puede ser de otro producto
     // si empatan varios ("Paracetamol 100 mg" de cajas de 10 y de 20), vale el que entendio el local
+    // si se dijo el inventario ("ingreso a merchandising de 3 mermeladas"), solo entre los de ese inventario
+    const categoriaDicha = itemsValidos[i] ? categoriaDeIA(itemIA, interpretadoLocal) : r.categoriaDicha ?? null;
     const { producto, dudas } = itemsValidos[i]
-      ? desempatarConLocal(productoDeNombre(itemIA.producto, productos), interpretadoLocal)
+      ? desempatarConLocal(productoDeNombre(itemIA.producto, enInventario(productos, categoriaDicha)), interpretadoLocal)
       : { producto: r.producto, dudas: r.dudas ?? [] };
     // lo que entendio el dictado local de ese mismo producto (sin importar en que orden lo puso)
     const localDelProducto = producto ? interpretadoLocal.find(x => mismoProducto(x.producto, producto)) : null;
@@ -2111,6 +2113,8 @@ export async function agregarDictado(v) {
       nombreDicho: (itemIA.producto || r.nombreDicho || '').slice(0, largos.nombreProducto),
       cantidad: cantidadDicha(cantidad),
       dudas: dudas.map(d => claveProducto(d.categoria, d.item.id)),
+      // si no existe, se crea en el inventario que se dijo
+      ...(categoriaDicha && { categoriaDicha }),
       // el aviso de presentacion lo calculo el parser local: solo vale si es su mismo producto
       avisos: presentacion ? { presentacion } : {},
       
