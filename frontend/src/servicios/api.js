@@ -121,6 +121,12 @@ export const cambiarClaveAPI = async (actual, nueva) => {
   return response.data;
 };
 
+// cambia el usuario propio con el que se entra (pide la contraseña); el nombre no cambia
+export const cambiarUsuarioAPI = async (usuario, clave) => {
+  const response = await api.post('auth/usuario/', { usuario, clave });
+  return response.data;
+};
+
 // --- INVENTARIO ---
 export const getInventario = async () => {
   const response = await api.get('inventario/');

@@ -649,3 +649,42 @@ class CambiarClaveView(APIView):
         if status_code not in (200, 201):
             return Response(data, status=status_code)
         return Response({'ok': True}, status=200)
+
+
+class CambiarUsuarioView(APIView):
+    """Cada uno cambia su propio usuario (con el que entra) sabiendo su contraseña.
+    El nombre de la cuenta no cambia: es el que sale como responsable en el historial."""
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
+    def post(self, request):
+        clave = str(request.data.get('clave') or '')
+        nuevo, error = _leer_usuario(request.data.get('usuario'))
+
+        doc, status_code = get_document_con_secretos(request.user.id, 'usuario')
+        if status_code != 200:
+            return Response({'error': 'No se encontró tu cuenta'}, status=status_code)
+        if not check_password(clave.strip(), doc.get('clave') or doc.get('password') or DUMMY_HASH):
+            return Response({'error': 'La contraseña no es correcta'}, status=400)
+        if error:
+            return Response({'error': error}, status=400)
+        if nuevo == _usuario_de(doc):
+            return Response({'error': 'Ese ya es tu usuario'}, status=400)
+
+        todos, status_code = get_documents_by_type('usuario')
+        if status_code != 200:
+            return Response(todos, status=status_code)
+        if any(_usuario_de(u) == nuevo for u in todos if str(u.get('_id')) != str(doc['_id'])):
+            return Response({'error': 'Ese usuario ya existe'}, status=409)
+
+        # queda en sus cambios (sale en su actividad)
+        def aplicar(actual):
+            cambio = {'accion': 'usuario', 'valor': nuevo, 'quienId': request.user.id, 'quien': request.user.nombre, 'fecha': _ahora()}
+            return {'usuario': nuevo, 'cambios': (actual.get('cambios') or [])[-(MAX_CAMBIOS - 1):] + [cambio]}
+
+        data, status_code = actualizar_con_reintento(doc['_id'], 'usuario', aplicar)
+        if status_code not in (200, 201):
+            return Response(data, status=status_code)
+        cache.delete(f"couch_user:{doc['_id']}")
+        return Response({'ok': True, 'usuario': nuevo}, status=200)

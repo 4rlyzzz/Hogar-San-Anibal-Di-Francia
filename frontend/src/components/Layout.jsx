@@ -7,7 +7,7 @@ import {
   IconoBuscar, IconoCampana, IconoInicio, IconoAlimentos, IconoSalud, IconoHistorial, IconoDonadores, IconoFijar, IconoSalir, IconoUsuarios, IconoMicrofono,
   IconoMerch, IconoProveedores, IconoCompradores,
 } from '../assets/iconos.jsx';
-import { irA, buscar, fijarMenu, agregar, empezarDictado, abrirModal, verActividad, abrirClave, salir, cambiar } from '../acciones.js';
+import { irA, buscar, fijarMenu, agregar, empezarDictado, abrirModal, verActividad, abrirClave, abrirMiUsuario, miUsuario, salir, cambiar } from '../acciones.js';
 import { calcularAlertas } from '../logica/alertas.js';
 import logo from '../assets/logo.png';
 import { Ventana } from './Ventana.jsx';
@@ -177,9 +177,10 @@ function MenuUsuario({ abierto }) {
       <div className="usuario-menu" id="usuario-menu" hidden={!abierto}>
         <div className="usuario-menu-datos">
           <b>{usuario.nombre}</b>
-          <span>{usuario.rol}</span>
+          <span>{usuario.rol}{miUsuario() ? ` · @${miUsuario()}` : ''}</span>
         </div>
         <button className="usuario-menu-opcion" data-accion="mi-actividad" onClick={() => verActividad(usuario.id)}><IconoHistorial /> Mi actividad</button>
+        <button className="usuario-menu-opcion" data-accion="cambiar-mi-usuario" onClick={abrirMiUsuario}><IconoUsuarios /> Cambiar mi usuario</button>
         <button className="usuario-menu-opcion" data-accion="cambiar-mi-clave" onClick={() => abrirClave()}><IconoLlave /> Cambiar mi contraseña</button>
         <button data-accion="salir" onClick={salir}><IconoSalir /> Cerrar sesión</button>
       </div>
