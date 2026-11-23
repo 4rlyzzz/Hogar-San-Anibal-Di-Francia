@@ -9,12 +9,13 @@ import {
   abrirBusqueda, abrirCodigo, abrirVozLote, tipoElegido, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
   opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe, categorias, personaDeItem, extraDictado,
+  tipoDeItem, esIngresoItem, ingresosDe, salidasDe, listaMezclada, textoParaIA,
 } from '../acciones.js';
 import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
 import { CATEGORIA as MERCH, esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from '../logica/dictado.js';
+import { interpretarMezclado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from '../logica/dictado.js';
 import { reconocedorNavegador, crearLector } from '../servicios/captura.js';
 import {
   useFormulario, filtrarNumero, CampoNumero, Fondo, Cabecera, Botones, MensajeError, CampoVencimiento, CampoDonador, CampoPara, CampoObservaciones,
@@ -25,10 +26,13 @@ import {
 const tipos = {
   Ingreso: { titulo: 'Registrar ingreso', color: 'verde', Icono: IconoIngreso, signo: '+' },
   Salida: { titulo: 'Registrar salida', color: 'naranja', Icono: IconoSalida, signo: '−' },
+  // la lista tiene de los dos
+  Mezcla: { titulo: 'Registrar ingresos y salidas', color: 'azul', Icono: IconoIngreso, signo: '' },
 };
 
-function CabeceraLote({ titulo, subtitulo, onVolver }) {
-  const t = tipos[estado.lote.tipo];
+// tipo: el de una fila o 'Mezcla'; sin el, lo que se esta agregando
+function CabeceraLote({ titulo, subtitulo, onVolver, tipo }) {
+  const t = tipos[tipo ?? estado.lote.tipo];
   return <Cabecera codigo={<t.Icono />} color={t.color} titulo={titulo ?? t.titulo} subtitulo={subtitulo} onVolver={onVolver} />;
 }
 
@@ -365,7 +369,7 @@ export function ModalLoteCodigo() {
 const ESPERA_AL_ESCRIBIR = 300;
 
 // una linea de "Entendí": arriba cuanto y que; abajo, en pequeño, lo que hay que saber
-function LineaEntendida({ r }) {
+function LineaEntendida({ r, conTipo = false }) {
   const item = r.producto?.item;
   // con una presentacion no registrada se muestra la unidad tal como se dijo ("10 bolsas")
   const unidad = r.presentacion?.unidad ?? (item ? item.unidad : r.unidadDicha ?? '');
@@ -379,6 +383,7 @@ function LineaEntendida({ r }) {
   if (item && r.cantidad == null) avisos.push('falta la cantidad');
   const datos = [];
   if (r.vence) datos.push(`vence ${fechaVence(r.vence)}`);
+  else if (r.sinVence) datos.push('sin fecha de vencimiento');
   if (r.donador || r.donadorDicho) datos.push(`donó ${r.donador?.nombre ?? r.donadorDicho}`);
   if (r.actividad) datos.push(r.actividad);
   if (r.comprador || r.compradorDicho) datos.push(`compra ${r.comprador?.nombre ?? r.compradorDicho}`);
@@ -388,6 +393,7 @@ function LineaEntendida({ r }) {
 
   return (
     <li className={avisos.length ? 'con-duda' : ''}>
+      {conTipo && r.tipo && <span className={`pastilla ${r.tipo === 'Salida' ? 'naranja' : 'verde'} entendido-tipo`}>{r.tipo}</span>}
       <b>{r.cantidad != null ? `${r.cantidad} ${unidad}` : '—'}</b> · {nombre}
       {avisos.length > 0 && <small className="entendido-aviso">{avisos.join(' · ')}</small>}
       {datos.length > 0 && <small>{datos.join(' · ')}</small>}
@@ -430,11 +436,11 @@ export function ModalLoteVoz() {
     setCargandoIA(false);
     setAviso('');
     const dichoTipo = tipoDictado(textoCompleto);
-    const textoDictado = dichoTipo.resto;
     // igual que procesarConOmni: con el tipo se sabe si "a María López" compra o vende
     const tipoVoz = dichoTipo.tipo ?? tipoElegido();
-    if (!textoDictado.trim()) return setItemsEntendidos([]);
-    const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
+    if (!dichoTipo.resto.trim()) return setItemsEntendidos([]);
+    // cada producto con su tipo ("ingreso de arroz y salida de leche")
+    const local = interpretarMezclado(textoCompleto, todosLosProductos(), extraDictado, tipoVoz);
     setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
   };
 
@@ -443,16 +449,16 @@ export function ModalLoteVoz() {
     const numero = ++consulta.current;
     // "ingreso" o "salida" no son productos
     const dichoTipo = tipoDictado(textoCompleto);
-    const textoDictado = dichoTipo.resto;
     // con el tipo, "a María López" es quien compra (venta) o a quien se le compro (ingreso)
     const tipoVoz = dichoTipo.tipo ?? tipoElegido();
-    if (!textoDictado.trim()) return setItemsEntendidos([]);
+    if (!dichoTipo.resto.trim()) return setItemsEntendidos([]);
     setCargandoIA(true);
     setAviso('');
 
     try {
       // 1. Petición a la IA (por Django)
-      const json = await procesarTextoConIA(textoDictado);
+      // con ingreso y salida dichos va todo el texto: la IA dice de que tipo es cada producto
+      const json = await procesarTextoConIA(textoParaIA(textoCompleto));
       if (numero !== consulta.current) return;
 
       // 2. Mapeo para previsualización gráfica en UI
@@ -460,7 +466,7 @@ export function ModalLoteVoz() {
       // el nombre que entendio la IA se busca entre los registrados (con su dosis: 100 mg no es 50 mg)
       const productos = todosLosProductos();
       // el dictado local sirve para revisar la cantidad ("5 sacos de 50 kg" no son 50 sacos)
-      const local = interpretarDictado(textoDictado, productos, extraDictado(tipoVoz));
+      const local = interpretarMezclado(textoCompleto, productos, extraDictado, tipoVoz);
       const mapeados = compartirVentaIA(Array.isArray(json) ? json.filter(i => i && typeof i === 'object') : [])
         .filter(i => i && typeof i.producto === 'string' && i.producto.trim())
         .map(i => {
@@ -469,6 +475,10 @@ export function ModalLoteVoz() {
           const { producto, dudas } = desempatarConLocal(productoDeNombre(i.producto, enInventario(productos, categoriaDeIA(i, local))), local);
           const suyo = producto && local.find(x => mismoProducto(x.producto, producto));
           return {
+            // con los dos dichos, el tipo sale del orden de lo dicho (el local); la IA a veces se equivoca
+            tipo: dichoTipo.ambos ? (suyo?.tipo ?? { salida: 'Salida', ingreso: 'Ingreso' }[i.tipo] ?? null) : tipoVoz,
+            vence: i.vence || suyo?.vence || null,
+            sinVence: !i.vence && Boolean(suyo?.sinVence),
             cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo || null)),
             unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
             nombreDicho: i.producto.trim().slice(0, largos.nombreProducto),
@@ -487,8 +497,8 @@ export function ModalLoteVoz() {
     } catch {
       if (numero !== consulta.current) return;
       // Fallback: si la IA da error, usamos la interpretación local nativa
-      if (typeof interpretarDictado === 'function') {
-        const local = interpretarDictado(textoDictado, todosLosProductos(), extraDictado(tipoVoz));
+      if (typeof interpretarMezclado === 'function') {
+        const local = interpretarMezclado(textoCompleto, todosLosProductos(), extraDictado, tipoVoz);
         // igual que al agregar a la lista (agregarDictado)
         setItemsEntendidos(local.map(r => ({ ...r, cantidad: cantidadDicha(r.cantidad) })));
       } else {
@@ -574,11 +584,11 @@ export function ModalLoteVoz() {
   }
 
   // ingreso o salida: lo que se dijo o, si no se dijo, el de la lista que ya esta abierta
+  // con los dos dichos ("ingreso de arroz y salida de leche") van juntos a la lista
   const dicho = tipoDictado(texto);
-  const tipo = tipos[dicho.tipo ?? tipoElegido()];
+  const tipo = tipos[dicho.ambos ? 'Mezcla' : dicho.tipo ?? tipoElegido()];
   let falta = '';
-  if (dicho.ambos) falta = 'Dijiste ingreso y salida: registra uno a la vez.';
-  else if (texto.trim() && !tipo) falta = 'Falta decir si es ingreso o salida.';
+  if (texto.trim() && !tipo) falta = 'Falta decir si es ingreso o salida.';
 
   return (
     <Fondo>
@@ -598,7 +608,7 @@ export function ModalLoteVoz() {
           codigo={tipo ? <tipo.Icono /> : <IconoMicrofono />}
           color={tipo?.color ?? 'gris'}
           titulo={tipo?.titulo ?? 'Registrar por voz'}
-          subtitulo='Di "ingreso" o "salida" y los productos'
+          subtitulo='Di "ingreso" o "salida" y los productos (pueden ir los dos)'
         />
         <div className="modal-cuerpo">
           <div className="voz">
@@ -643,7 +653,7 @@ export function ModalLoteVoz() {
               <span>ENTENDÍ</span>
               <ul>
                 {itemsEntendidos.map((r, idx) => (
-                  <LineaEntendida key={idx} r={r} />
+                  <LineaEntendida key={idx} r={r} conTipo={dicho.ambos} />
                 ))}
               </ul>
             </div>
@@ -721,17 +731,25 @@ export function ModalLoteLista({ modal }) {
   const [descartar, setDescartar] = useState(false);
   const lote = estado.lote;
   if (!lote) return null;
-  const { tipo, items } = lote;
+  const { items } = lote;
   const conProblemas = items.filter(x => problemasItem(x).length).length;
+  // ingresos y salidas en la misma lista: cada uno en su seccion
+  const mezcla = listaMezclada(lote);
+  const tipo = mezcla ? 'Mezcla' : items.length ? tipoDeItem(items[0]) : lote.tipo;
+  const secciones = mezcla
+    ? [['Ingreso', 'Ingresos', ingresosDe(lote)], ['Salida', 'Salidas', salidasDe(lote)]]
+    : [[tipo, null, items]];
 
   let subtitulo = 'Puedes editar o quitar cada producto';
   if (items.length === 0) subtitulo = 'La lista está vacía';
   else if (conProblemas) subtitulo = `${conProblemas} por corregir`;
+  else if (mezcla) subtitulo = `${ingresosDe(lote).length} de ingreso y ${salidasDe(lote).length} de salida`;
+  const revisar = { Ingreso: 'Revisar ingreso', Salida: 'Revisar salida', Mezcla: 'Revisar todo' }[tipo];
 
   return (
     <Fondo>
       <form className="modal modal-lote" id="form-lote" ref={f.formulario} hidden={confirmando} noValidate onSubmit={e => f.enviar(e, revisarLote) && setConfirmando(true)}>
-        <CabeceraLote titulo={`${tipos[tipo].titulo} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`} subtitulo={subtitulo} />
+        <CabeceraLote tipo={tipo} titulo={`${tipos[tipo].titulo} · ${items.length} ${items.length === 1 ? 'producto' : 'productos'}`} subtitulo={subtitulo} />
 
         <div className="modal-cuerpo">
           {conProblemas > 0 && (
@@ -739,7 +757,12 @@ export function ModalLoteLista({ modal }) {
               Lo que está en rojo falta corregir: toca el lápiz <IconoEditar /> de ese producto.
             </p>
           )}
-          {items.length > 0 && <ul className="lote-lista">{items.map(x => <FilaLote key={x.id} x={x} tipo={tipo} />)}</ul>}
+          {items.length > 0 && secciones.map(([t, titulo, filas]) => (
+            <section key={t} className="lote-seccion">
+              {titulo && <h3 className={`lote-seccion-titulo ${tipos[t].color}`}><span>{tipos[t].signo}</span> {titulo} <small>{filas.length}</small></h3>}
+              <ul className="lote-lista">{filas.map(x => <FilaLote key={x.id} x={x} tipo={t} />)}</ul>
+            </section>
+          ))}
           <button type="button" className="btn-anadir" data-accion="anadir" onClick={abrirBusqueda}>+ Añadir productos</button>
           <MensajeError texto={f.error} />
         </div>
@@ -748,7 +771,7 @@ export function ModalLoteLista({ modal }) {
           <button type="button" className="btn btn-blanco" data-accion="descartar-lista" onClick={() => (descartar ? descartarLote() : setDescartar(true))}>
             {descartar ? '¿Seguro? Descartar' : 'Descartar'}
           </button>
-          <button type="submit" className="btn btn-verde">Revisar {tipo.toLowerCase()}</button>
+          <button type="submit" className="btn btn-verde">{revisar}</button>
         </div>
       </form>
 
@@ -761,53 +784,67 @@ export function ModalLoteLista({ modal }) {
 function ConfirmarLote({ modal, onVolver }) {
   // se guarda fila por fila en el servidor: mientras tanto el boton queda en "Guardando…"
   const f = useFormulario();
-  const { tipo, items } = estado.lote;
-  const esIngreso = tipo === 'Ingreso';
+  const lote = estado.lote;
+  const { items } = lote;
+  const mezcla = listaMezclada(lote);
+  const tipo = mezcla ? 'Mezcla' : tipoDeItem(items[0]);
 
   // stock que va quedando: dos filas del mismo producto se suman
+  // en el orden en que se guardan: primero los ingresos
   const quedan = new Map();
-  const filas = items.map(x => {
+  const filas = [...ingresosDe(lote), ...salidasDe(lote)].map(x => {
     const { item, nuevo, categoria } = productoDeItem(x);
+    const esIngreso = esIngresoItem(x);
     const antes = quedan.get(item) ?? item.cantidad;
     const despues = redondear(antes + (esIngreso ? x.cantidad : -x.cantidad));
     quedan.set(item, despues);
-    return { x, item, nuevo, antes, despues, merch: esMerch(categoria) };
+    return { x, item, nuevo, antes, despues, esIngreso, merch: esMerch(categoria) };
   });
+  const secciones = mezcla
+    ? [['Ingreso', 'Ingresos', filas.filter(r => r.esIngreso)], ['Salida', 'Salidas', filas.filter(r => !r.esIngreso)]]
+    : [[tipo, null, filas]];
 
-  const detalle = (x, merch) => [
+  const detalle = (x, merch, esIngreso) => [
     esIngreso && (!merch || x.vence) ? (x.vence ? `Vence ${fechaVence(x.vence)}` : 'Sin fecha') : '',
-    merch ? textoMerchFila(x, tipo) : esIngreso ? textoDonador(x) : '',
+    merch ? textoMerchFila(x, tipoDeItem(x)) : esIngreso ? textoDonador(x) : '',
     x.para.length ? `Para ${textoPara(x)}` : '',
     x.observaciones,
   ].filter(Boolean).join(' · ');
-  const ventas = esIngreso ? 0 : redondear(items.reduce((s, x) => s + (x.precio != null && x.cantidad ? totalVenta(x.precio, x.cantidad) : 0), 0));
+  const ventas = redondear(salidasDe(lote).reduce((s, x) => s + (x.precio != null && x.cantidad ? totalVenta(x.precio, x.cantidad) : 0), 0));
+  const tituloRevisa = { Ingreso: 'Revisa el ingreso', Salida: 'Revisa la salida', Mezcla: 'Revisa ingresos y salidas' }[tipo];
+  const confirmar = { Ingreso: 'Confirmar ingreso', Salida: 'Confirmar salida', Mezcla: 'Confirmar todo' }[tipo];
 
   return (
     <form className="modal modal-lote" id="form-lote-confirmar" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, () => confirmarLote(modal))}>
-      <CabeceraLote titulo={esIngreso ? 'Revisa el ingreso' : 'Revisa la salida'} subtitulo={`${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${usuario.nombre} · ${fechaActual()}`} onVolver={onVolver} />
+      <CabeceraLote tipo={tipo} titulo={tituloRevisa} subtitulo={`${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${usuario.nombre} · ${fechaActual()}`} onVolver={onVolver} />
 
       <div className="modal-cuerpo">
-        <ul className="lote-resumen">
-          {filas.map(({ x, item, nuevo, antes, despues, merch }) => (
-            <li key={x.id}>
-              <div>
-                <b>{item.nombre}{nuevo ? ' (producto nuevo)' : ''}</b>
-                <small>{presentacion(item)}</small>
-                {detalle(x, merch) && <small>{detalle(x, merch)}</small>}
-                {!esIngreso && despues < item.minimo && <span className="lote-problema">Quedará bajo el mínimo ({item.minimo} {item.unidad})</span>}
-              </div>
-              <div className={`lote-cambio ${esIngreso ? 'ingreso' : 'salida'}`}>
-                <em>{tipos[tipo].signo}{x.cantidad} {item.unidad}</em>
-                <small>{antes} → {despues}</small>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {secciones.map(([t, titulo, filasSeccion]) => (
+          <section key={t} className="lote-seccion">
+            {titulo && <h3 className={`lote-seccion-titulo ${tipos[t].color}`}><span>{tipos[t].signo}</span> {titulo} <small>{filasSeccion.length}</small></h3>}
+            <ul className="lote-resumen">
+              {filasSeccion.map(({ x, item, nuevo, antes, despues, merch, esIngreso }) => (
+                <li key={x.id}>
+                  <div>
+                    <b>{item.nombre}{nuevo ? ' (producto nuevo)' : ''}</b>
+                    <small>{presentacion(item)}</small>
+                    {detalle(x, merch, esIngreso) && <small>{detalle(x, merch, esIngreso)}</small>}
+                    {!esIngreso && despues < item.minimo && <span className="lote-problema">Quedará bajo el mínimo ({item.minimo} {item.unidad})</span>}
+                  </div>
+                  <div className={`lote-cambio ${esIngreso ? 'ingreso' : 'salida'}`}>
+                    <em>{tipos[esIngreso ? 'Ingreso' : 'Salida'].signo}{x.cantidad} {item.unidad}</em>
+                    <small>{antes} → {despues}</small>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
         {ventas > 0 && <p className="lote-total-ventas">Total de ventas: <b>{soles(ventas)}</b></p>}
         <MensajeError texto={f.error} />
       </div>
 
-      <Botones textoGuardar={`Confirmar ${tipo.toLowerCase()} (${items.length})`} enviando={f.enviando} conCancelar={false} />
+      <Botones textoGuardar={`${confirmar} (${items.length})`} enviando={f.enviando} conCancelar={false} />
     </form>
   );
 }
@@ -953,7 +990,8 @@ export function ModalLoteItem({ modal }) {
   }, [decimales, f.formulario]);
 
   if (!x) return null;
-  const esIngreso = estado.lote.tipo === 'Ingreso';
+  // cada fila con su tipo (la lista puede tener ingresos y salidas)
+  const esIngreso = esIngresoItem(x);
   const actividades = opcionesActividad();
 
   const dudas = x.dudas.map(c => productoPorClave(c)?.item.nombre).filter(Boolean);
@@ -976,7 +1014,7 @@ export function ModalLoteItem({ modal }) {
   return (
     <Fondo>
       <form className="modal" id="form-item" ref={f.formulario} noValidate onSubmit={e => f.enviar(e, v => guardarItem(modal, v))}>
-        <CabeceraLote titulo={elegido ? elegido.item.nombre : 'Editar producto'} subtitulo={subtitulo} />
+        <CabeceraLote tipo={tipoDeItem(x)} titulo={elegido ? elegido.item.nombre : 'Editar producto'} subtitulo={subtitulo} />
 
         <div className="modal-cuerpo">
           {x.dicho && <p className="lote-origen">Se dijo: <b>"{x.dicho}"</b></p>}

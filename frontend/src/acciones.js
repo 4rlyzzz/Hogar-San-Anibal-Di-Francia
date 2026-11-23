@@ -39,7 +39,7 @@ import {
   precioSugerido, pideVence, puedeVence, llevaLote, llevaProveedor, pideProveedor, llevaCosto, merchVacio, textoTipoMovimiento,
 } from './logica/merch.js';
 import { personas, personasVacio, listaPersonas, montoDe, tiposDe } from './logica/personas.js';
-import { interpretarDictado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from './logica/dictado.js';
+import { interpretarMezclado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from './logica/dictado.js';
 import { procesarTextoConIA } from './servicios/dictadoIA.js';
 
 // envases (en plural)
@@ -405,6 +405,8 @@ function leerVista() {
   }
   if (vista.lote && ['Ingreso', 'Salida'].includes(vista.lote.tipo) && Array.isArray(vista.lote.items)) {
     estado.lote = vista.lote;
+    // listas guardadas antes de poder mezclar: sus filas son del tipo de la lista
+    for (const x of estado.lote.items) if (!['Ingreso', 'Salida'].includes(x.tipo)) x.tipo = vista.lote.tipo;
     // las filas nuevas no repiten id
     siguienteItem = Math.max(siguienteItem, ...vista.lote.items.map(x => Number(x.id) + 1 || 0));
   }
@@ -1023,7 +1025,7 @@ export async function confirmarMovimiento(modal, datos) {
 // aqui solo se define (nombre, presentacion, minimo, codigo); cuanto entra, vence y donador van en su fila
 // desde: { itemId } para completar esa fila (sin itemId se agrega una), nombre y codigoBarras para empezar
 export function abrirProducto(categoria, desde = {}) {
-  if (estado.lote?.tipo !== 'Ingreso' || !permitido(categoria, categorias)) return;
+  if (!creaProductos(desde.itemId) || !permitido(categoria, categorias)) return;
   abrirModal({ ...desde, tipo: 'producto', categoria });
 }
 
@@ -1156,7 +1158,7 @@ async function renombrarProducto(item, categoria, nombre) {
 export function guardarProducto(modal, v) {
   const { categoria } = modal;
   const lote = estado.lote;
-  if (lote?.tipo !== 'Ingreso' || !permitido(categoria, categorias)) return;
+  if (!creaProductos(modal.itemId) || !permitido(categoria, categorias)) return;
   if (esMerch(categoria)) return guardarProductoMerch(modal, v);
 
   const escrito = leer(v, 'nombre', reglas.nombreProducto);
@@ -1778,7 +1780,7 @@ let siguienteItem = 1;
 
 function nuevoItem(datos) {
   return {
-    id: siguienteItem++, origen: 'manual', categoria: null, productoId: null, productoNuevo: null, dudas: [], cantidad: null, vence: undefined,
+    id: siguienteItem++, tipo: estado.lote?.tipo ?? 'Ingreso', origen: 'manual', categoria: null, productoId: null, productoNuevo: null, dudas: [], cantidad: null, vence: undefined,
     donador: '', donadorNuevo: null, donadorDicho: '', actividad: '', para: [], observaciones: '', dicho: '', nombreDicho: '', codigoBarras: '', avisos: {},
     ...merchVacioItem(),
     ...datos,
@@ -1841,8 +1843,32 @@ export function donadorDeItem(x) {
   return estado.donadores.find(d => mismoId(d.id, x.donador))?.nombre ?? '';
 }
 
-function filasDelMismo(x) {
-  return estado.lote.items.filter(o => o.productoId != null && !o.productoNuevo && o.categoria === x.categoria && mismoId(o.productoId, x.productoId));
+// ---------- ingresos y salidas en la misma lista ----------
+// cada fila lleva su tipo; estado.lote.tipo es lo que se esta agregando ahora (el boton que se eligio)
+export const tipoDeItem = x => (['Ingreso', 'Salida'].includes(x?.tipo) ? x.tipo : estado.lote?.tipo ?? 'Ingreso');
+export const esIngresoItem = x => tipoDeItem(x) === 'Ingreso';
+export const ingresosDe = lote => lote.items.filter(esIngresoItem);
+export const salidasDe = lote => lote.items.filter(x => !esIngresoItem(x));
+// la lista tiene de los dos
+export const listaMezclada = lote => Boolean(lote && ingresosDe(lote).length && salidasDe(lote).length);
+
+// los productos nuevos se crean desde un ingreso (su fila, o lo que se esta agregando)
+function creaProductos(itemId) {
+  if (!estado.lote) return false;
+  const x = itemId != null ? estado.lote.items.find(i => i.id === itemId) : null;
+  return x ? esIngresoItem(x) : estado.lote.tipo === 'Ingreso';
+}
+
+// filas de la lista del mismo producto (tipo: solo las de ese tipo)
+function filasDelMismo(x, tipo = null) {
+  return estado.lote.items.filter(o => o.productoId != null && !o.productoNuevo && o.categoria === x.categoria && mismoId(o.productoId, x.productoId)
+    && (!tipo || tipoDeItem(o) === tipo));
+}
+
+// cuanto se puede sacar en esta lista: lo que hay mas lo que entra en ella (los ingresos se guardan primero)
+function disponibleEnLista(item, categoria) {
+  const entra = filasDelMismo({ categoria, productoId: item.id }, 'Ingreso').reduce((s, o) => s + (o.cantidad || 0), 0);
+  return redondear(disponible(item) + entra);
 }
 
 // lo que falta corregir en una fila (vacio si esta lista)
@@ -1852,7 +1878,7 @@ export function problemasItem(x) {
 }
 
 function problemasDeFila(x) {
-  const { tipo } = estado.lote;
+  const tipo = tipoDeItem(x);
   const producto = productoDeItem(x);
   // avisos cortos: arriba de la lista se explica que se corrigen con el lapiz
   if (!producto) {
@@ -1880,9 +1906,10 @@ function problemasDeFila(x) {
     if (!x.donador && !x.donadorDicho && x.actividad) problemas.push(`Dijiste "${x.actividad}": falta el donador`);
   }
   if (tipo === 'Salida' && x.cantidad) {
-    const filas = filasDelMismo(x);
+    const filas = filasDelMismo(x, 'Salida');
     const total = redondear(filas.reduce((s, o) => s + (o.cantidad || 0), 0));
-    if (total > disponible(item)) problemas.push(`Solo hay ${disponible(item)} ${item.unidad}${filas.length > 1 ? ` (en la lista suman ${total})` : ''}`);
+    const hay = disponibleEnLista(item, producto.categoria);
+    if (total > hay) problemas.push(`Solo hay ${hay} ${item.unidad}${filas.length > 1 ? ` (en la lista suman ${total})` : ''}`);
   }
   return problemas;
 }
@@ -1904,10 +1931,15 @@ function problemasMerch(x, item, tipo) {
 
 // ---------- abrir y moverse entre pantallas ----------
 // empieza una lista; si ya habia una del mismo tipo, sigue con esa
+// con una lista del otro tipo se sigue en la misma: ingresos y salidas se guardan juntos
 export function empezarLote(tipo) {
   if (!permitido(tipo, ['Ingreso', 'Salida'])) return;
-  if (estado.lote?.tipo !== tipo) estado.lote = { tipo, items: [] };
-  if (estado.lote.items.length) abrirLista();
+  if (!estado.lote) estado.lote = { tipo, items: [] };
+  const cambia = estado.lote.tipo !== tipo;
+  // las filas de antes conservan su tipo
+  for (const x of estado.lote.items) x.tipo = tipoDeItem(x);
+  estado.lote.tipo = tipo;
+  if (!cambia && estado.lote.items.length) abrirLista();
   else abrirBusqueda();
 }
 
@@ -1981,14 +2013,14 @@ export function agregarCodigo(texto) {
   if (!estado.lote) return null;
   const codigo = leer({ codigo: texto }, 'codigo', reglas.codigoBarras);
   const encontrado = productoPorCodigo(codigo);
-  const repetido = estado.lote.items.find(x => x.origen === 'codigo' && x.codigoBarras === codigo);
+  const repetido = estado.lote.items.find(x => x.origen === 'codigo' && x.codigoBarras === codigo && tipoDeItem(x) === estado.lote.tipo);
   const nueva = redondear((repetido?.cantidad ?? 0) + 1);
   if (nueva > cantidadMaxima) falla(`No se puede pasar de ${cantidadMaxima}.`, 'codigo');
   // en una salida no se escanea lo que no hay (cuenta lo que ya va en otras filas de ese producto)
   if (encontrado && estado.lote.tipo === 'Salida') {
     const { item, categoria } = encontrado;
     const hay = disponible(item);
-    const enLista = redondear(filasDelMismo({ categoria, productoId: item.id }).reduce((s, o) => s + (o.cantidad || 0), 0));
+    const enLista = redondear(filasDelMismo({ categoria, productoId: item.id }, 'Salida').reduce((s, o) => s + (o.cantidad || 0), 0));
     if (hay <= 0) falla(`"${item.nombre}" no tiene stock para sacar.`, 'codigo');
     if (enLista + 1 > hay) falla(`Solo hay ${hay} ${item.unidad} de "${item.nombre}" y ya van ${enLista} en la lista.`, 'codigo');
   }
@@ -2022,16 +2054,18 @@ export function cantidadDicha(valor) {
 
 export async function agregarDictado(v) {
   // 1. Validar el tipo de operación dicho en voz ("ingreso" o "salida")
-  const dicho = tipoDictado(leer(v, 'dictado', reglas.dictado));
-  // abierta: la lista que ya tiene productos (no se puede mezclar con el otro tipo)
-  const abierta = estado.lote?.items.length ? estado.lote.tipo : null;
+  // se pueden decir los dos: "ingreso de 3 kilos de arroz y salida de 2 latas de leche"
+  const texto = leer(v, 'dictado', reglas.dictado);
+  const dicho = tipoDictado(texto);
+  // sin decirlo: el de la lista (el boton que se eligio)
+  const porDefecto = dicho.tipo ?? tipoElegido();
 
-  // 2. Parser Local: Extrae donadores y actividades dinámicas desde CouchDB / Estado actual
-  const interpretadoLocal = interpretarDictado(dicho.resto, todosLosProductos(), extraDictado(dicho.tipo ?? tipoElegido()));
+  // 2. Parser Local: cada producto con su tipo, donadores y actividades
+  const interpretadoLocal = interpretarMezclado(texto, todosLosProductos(), extraDictado, porDefecto);
 
   // 3. IA (Groq, Gemini... via Django): Parsing de alta precisión para productos, cantidades y fechas ISO
-  // el mismo texto que consulto la vista previa (sin "ingreso"/"salida"): asi se reusa esa respuesta
-  const itemsProcesados = await procesarTextoConIA(dicho.resto);
+  // el mismo texto que consulto la vista previa: asi se reusa esa respuesta
+  const itemsProcesados = await procesarTextoConIA(textoParaIA(texto));
 
   // --- FILTRO POST-PROCESADO: Anti-alucinaciones y limpieza de ruido ---
   const ruídosComunes = new Set(['eh', 'um', 'ah', 'pantalla', 'ruido', 'undefined', 'null', 'algo', 'cosa']);
@@ -2048,23 +2082,18 @@ export async function agregarDictado(v) {
   // el comprador (o proveedor) y el medio de pago dichos una vez valen para toda la venta
   compartirVentaIA(itemsValidos);
 
-  // Determinar la operación dominante (Ingreso vs Salida)
-  if (dicho.ambos) {
-    falla('Dijiste ingreso y salida: registra uno a la vez.', 'dictado');
-  }
-  // 1. lo dicho, 2. la lista abierta o elegida ("Registrar ingreso" > "Hablar"), 3. lo que entendio la IA
-  const tipoIA = { salida: 'Salida', ingreso: 'Ingreso' }[itemsValidos[0]?.tipo] ?? null;
-  const tipo = dicho.tipo ?? tipoElegido() ?? tipoIA;
-  if (!tipo) {
+  // el tipo de cada producto: 1. con los dos dichos, el que entendio la IA para ese producto (o el local);
+  // 2. lo dicho; 3. la lista abierta o elegida ("Registrar ingreso" > "Hablar"); 4. lo que entendio la IA
+  const tipoDeIA = item => ({ salida: 'Salida', ingreso: 'Ingreso' }[item?.tipo] ?? null);
+  const tipoUnico = porDefecto ?? tipoDeIA(itemsValidos[0]);
+  if (!dicho.ambos && !tipoUnico) {
     falla('Falta decir si es ingreso o salida. Por ejemplo: "ingreso de dos kilos de arroz".', 'dictado');
   }
-  if (abierta && tipo !== abierta) {
-    falla(`Tienes una lista de ${abierta.toLowerCase()} sin guardar: confírmala o descártala primero.`, 'dictado');
-  }
 
-  if (!abierta) estado.lote = { tipo, items: [] };
+  if (!estado.lote) estado.lote = { tipo: tipoUnico ?? interpretadoLocal[0]?.tipo ?? 'Ingreso', items: [] };
   const lote = estado.lote;
-  const esIngreso = tipo === 'Ingreso';
+  // las filas que ya estaban conservan su tipo
+  for (const x of lote.items) x.tipo = tipoDeItem(x);
 
   // Usar la lista filtrada de la IA como base principal; si falló por completo, usar el parser local
   const listaBase = itemsValidos.length > 0 ? itemsValidos : interpretadoLocal;
@@ -2089,14 +2118,22 @@ export async function agregarDictado(v) {
       : { producto: r.producto, dudas: r.dudas ?? [] };
     // lo que entendio el dictado local de ese mismo producto (sin importar en que orden lo puso)
     const localDelProducto = producto ? interpretadoLocal.find(x => mismoProducto(x.producto, producto)) : null;
+    // el tipo lo decide el orden de lo dicho ("... y salida de ..."): el local lo lee de ahi; la IA a veces se equivoca
+    const tipo = !dicho.ambos
+      ? tipoUnico
+      : (itemsValidos[i] ? localDelProducto?.tipo ?? tipoDeIA(itemIA) : r.tipo) ?? r.tipo ?? lote.tipo;
+    const esIngreso = tipo === 'Ingreso';
     const presentacion = itemsValidos[i] ? localDelProducto?.presentacion : r.presentacion;
     // la cantidad de la IA en la unidad del producto ("5 sacos de 50 kg" no son 50 sacos)
     const cantidad = itemsValidos[i]
       ? cantidadDeLaIA(itemIA.cantidad, itemIA.unidad, producto?.item, localDelProducto ?? null)
       : r.cantidad;
 
-    // 💡 Prioridad de Fecha: 1. Fecha ISO de la IA, 2. Regex del Parser Local
-    const fechaFinal = itemIA.vence || (r.vence && reglas.vencimiento(r.vence).ok ? r.vence : null);
+    // 💡 Prioridad de Fecha: 1. Fecha ISO de la IA, 2. Regex del Parser Local (de ese mismo producto)
+    const delLocal = itemsValidos[i] ? localDelProducto ?? {} : r;
+    const fechaFinal = itemIA.vence || (delLocal.vence && reglas.vencimiento(delLocal.vence).ok ? delLocal.vence : null);
+    // "sin fecha de vencimiento": queda como que no tiene (no como que falta)
+    const vence = fechaFinal ? { vence: fechaFinal } : delLocal.sinVence ? { vence: null } : {};
 
     // 💡 Mapeo de Donador: 1. Donador ID desde la BD local, 2. Texto del donador dicho
     const donadorId = r.donador ? String(r.donador.id) : '';
@@ -2108,6 +2145,7 @@ export async function agregarDictado(v) {
       : null;
 
     lote.items.push(nuevoItem({
+      tipo,
       origen: 'voz',
       dicho: (itemIA.producto || r.dicho || '').slice(0, 100),
       nombreDicho: (itemIA.producto || r.nombreDicho || '').slice(0, largos.nombreProducto),
@@ -2119,7 +2157,7 @@ export async function agregarDictado(v) {
       avisos: presentacion ? { presentacion } : {},
       
       // Metadatos adjuntos para rendering visual (previsualización y lista final)
-      ...(esIngreso && fechaFinal && { vence: fechaFinal }),
+      ...(esIngreso && vence),
       ...(producto && { categoria: producto.categoria, productoId: producto.item.id }),
       ...(esIngreso && !merch && {
         donador: donadorId,
@@ -2132,6 +2170,13 @@ export async function agregarDictado(v) {
 
   abrirLista();
 }
+// lo que se manda a la IA: sin "ingreso"/"salida" si se dijo uno solo (ya se sabe);
+// con los dos se manda todo, para que diga de que tipo es cada producto
+export function textoParaIA(texto) {
+  const dicho = tipoDictado(texto);
+  return dicho.ambos ? String(texto).trim() : dicho.resto;
+}
+
 function merchDictado(item, esIngreso, cantidad, local, ia) {
   const tipo = esIngreso ? 'proveedor' : 'comprador';
   const dichoIA = typeof ia[tipo] === 'string' ? ia[tipo].trim() : '';
@@ -2191,7 +2236,7 @@ export function guardarItem(modal, v) {
   const lote = estado.lote;
   const x = lote?.items.find(i => i.id === modal.itemId);
   if (!x) return;
-  const esIngreso = lote.tipo === 'Ingreso';
+  const esIngreso = esIngresoItem(x);
 
   // 'nuevo' deja el producto que se esta creando
   const clave = v.producto ?? '';
@@ -2205,9 +2250,10 @@ export function guardarItem(modal, v) {
 
   const cantidad = leer(v, 'cantidad', cantidadDe(item.unidad));
   if (!esIngreso) {
-    const otras = redondear(filasDelMismo({ categoria, productoId: item.id }).filter(o => o !== x).reduce((s, o) => s + (o.cantidad || 0), 0));
-    if (cantidad + otras > disponible(item)) {
-      falla(`Solo se pueden sacar ${disponible(item)} ${item.unidad}${otras ? ` y en otras filas ya van ${otras}` : ''}.`, 'cantidad');
+    const otras = redondear(filasDelMismo({ categoria, productoId: item.id }, 'Salida').filter(o => o !== x).reduce((s, o) => s + (o.cantidad || 0), 0));
+    const hay = elegido.nuevo ? 0 : disponibleEnLista(item, categoria);
+    if (cantidad + otras > hay) {
+      falla(`Solo se pueden sacar ${hay} ${item.unidad}${otras ? ` y en otras filas ya van ${otras}` : ''}.`, 'cantidad');
     }
   }
   const observaciones = leer(v, 'observaciones', reglas.observaciones);
@@ -2268,7 +2314,6 @@ export function revisarLote() {
 export async function confirmarLote(modal) {
   if (estado.modal !== modal || !estado.lote) return;
   const lote = estado.lote;
-  const { tipo } = lote;
   // donadores, proveedores, compradores y productos nuevos se crean una sola vez aunque esten en varias filas
   const donadoresNuevos = new Map();
   const personasNuevas = { proveedor: new Map(), comprador: new Map() };
@@ -2282,8 +2327,11 @@ export async function confirmarLote(modal) {
   const productosNuevos = new Map();
   const fallidas = [];
   const total = lote.items.length;
+  const ingresos = ingresosDe(lote).length;
 
-  for (const x of [...lote.items]) {
+  // primero los ingresos: lo que entra en esta lista ya se puede sacar en ella
+  for (const x of [...ingresosDe(lote), ...salidasDe(lote)]) {
+    const tipo = tipoDeItem(x);
     try {
       let { item, categoria, nuevo } = productoDeItem(x);
       if (nuevo) {
@@ -2349,7 +2397,11 @@ export async function confirmarLote(modal) {
     estado.lote = null;
     if (estado.modal === modal) estado.modal = null;
     estado.filtro = 'Todos';
-    mostrarToast(`${tipo === 'Salida' ? 'Salida guardada' : 'Ingreso guardado'} · ${productos(total)}`);
+    const salidas = total - ingresos;
+    let texto = `Ingreso guardado · ${productos(total)}`;
+    if (ingresos && salidas) texto = `Guardado · ${ingresos} ${ingresos === 1 ? 'ingreso' : 'ingresos'} y ${salidas} ${salidas === 1 ? 'salida' : 'salidas'}`;
+    else if (salidas) texto = `Salida guardada · ${productos(total)}`;
+    mostrarToast(texto);
     return;
   }
   lote.items = fallidas;

@@ -86,11 +86,13 @@ export function escribirTallas(texto) {
 }
 
 // "de 400 gramos", "cajas de 10 unidades": lo que trae cada envase, no cuantos entran
+// tambien sin "de", justo despues del envase: "blister, 10 unidades", "caja 900 g" (la coma se pierde al leer)
 function esTamanoDicho(tokens, inicio, unidad) {
-  if (tokens[inicio - 1] !== 'de' || !unidad) return false;
+  if (!unidad) return false;
+  const esEnvase = t => Boolean(unidadesDichas[t]) && !medidas.has(unidadesDichas[t]) && unidadesDichas[t] !== 'unidades';
+  if (tokens[inicio - 1] !== 'de') return esEnvase(tokens[inicio - 1]) && (medidas.has(unidad) || unidad === 'unidades');
   if (medidas.has(unidad)) return true;
-  const envase = unidadesDichas[tokens[inicio - 2]];
-  return unidad === 'unidades' && Boolean(envase) && !medidas.has(envase) && envase !== 'unidades';
+  return unidad === 'unidades' && esEnvase(tokens[inicio - 2]);
 }
 
 // ---------- fecha de vencimiento dicha ----------
@@ -316,6 +318,33 @@ export function tipoDictado(texto) {
   };
 }
 
+// "ingreso de 3 kilos de arroz y salida de 2 latas de leche": un trozo por cada tipo dicho
+// -> [{ tipo: 'Ingreso' | 'Salida' | null, texto }] (null: lo que va antes de decir el tipo)
+// con la misma regla que tipoDictado: "venta de 3 entradas" no es un ingreso
+export function partirPorTipo(texto) {
+  const original = String(texto ?? '');
+  const guia = plano(original);
+  const trozos = [];
+  let actual = { tipo: null, texto: '' };
+  let desde = 0;
+  let dijo = false;
+  for (const m of guia.matchAll(avisoTipo)) {
+    const antes = guia.slice(0, m.index + m[0].search(new RegExp(`\\b${m[1]}\\b`))).match(/([a-z0-9ñ]+)\s*$/)?.[1];
+    if (dijo && antes && (/^\d/.test(antes) || esNumeroPalabra(antes) || ['de', 'del', 'las', 'los', 'unas', 'unos'].includes(antes))) continue;
+    const tipo = tipoDePalabra.get(m[1]);
+    if (!tipo) continue;
+    dijo = true;
+    actual.texto += original.slice(desde, m.index);
+    if (/[a-z0-9ñ]/i.test(actual.texto)) trozos.push(actual);
+    actual = { tipo, texto: '' };
+    desde = m.index + m[0].length;
+  }
+  actual.texto += original.slice(desde);
+  if (/[a-z0-9ñ]/i.test(actual.texto)) trozos.push(actual);
+  // "y" o comas que quedan al final de un trozo ("3 kilos de arroz y | salida de ...")
+  return trozos.map(t => ({ ...t, texto: t.texto.replace(/[\s,.;:]+$/, '').replace(/\s+(?:y|e)$/i, '').replace(/^[\s,.;:]+/, '').trim() }));
+}
+
 // partes del texto original, una por producto
 export function separarDictado(texto) {
   const original = String(texto ?? '').replace(/\s+/g, ' ').trim();
@@ -519,7 +548,7 @@ export function cantidadDeLaIA(cantidad, unidad, item, local = null) {
   if (esMedida) {
     // "50 kg" de un arroz en sacos de 50 kg: es el tamaño del saco; cuantos sacos lo dice el dictado local
     const enSuMedida = tamano ? convertir(cantidad, dicha, tamano.medida) : null;
-    if (enSuMedida != null && Math.abs(enSuMedida - tamano.valor) < 0.001) return local?.cantidad ?? 1;
+    if (enSuMedida != null && Math.abs(enSuMedida - tamano.valor) < 0.001) return local ? local.cantidad : 1;
     // "100 kg de arroz" en sacos de 50 kg -> 2 sacos; "500 g" de algo en kg -> 0,5; "30 unidades" en cajas de 10 -> 3
     const directa = convertir(cantidad, dicha, item.unidad);
     if (directa != null) return redondear(directa);
@@ -531,6 +560,24 @@ export function cantidadDeLaIA(cantidad, unidad, item, local = null) {
     return local.cantidad;
   }
   return cantidad;
+}
+
+// ---------- sin fecha de vencimiento ----------
+const avisosSinVence = [['sin', 'fecha'], ['sin', 'vencimiento'], ['sin', 'vence'], ['no', 'vence'], ['no', 'vencen'], ['no', 'caduca'], ['no', 'caducan'],
+  ['no', 'tiene', 'fecha'], ['no', 'tienen', 'fecha'], ['no', 'tiene', 'vencimiento'], ['no', 'expira']];
+
+// marca sus palabras como usadas (con "de vencimiento" si sigue); true si se dijo
+function buscarSinVence(tokens, usados) {
+  for (const aviso of avisosSinVence) {
+    for (let i = 0; i + aviso.length <= tokens.length; i++) {
+      if (!aviso.every((p, k) => tokens[i + k] === p)) continue;
+      let fin = i + aviso.length;
+      if (tokens[fin] === 'de' && ['vencimiento', 'caducidad', 'expiracion'].includes(tokens[fin + 1])) fin += 2;
+      for (let k = i; k < fin; k++) usados.add(k);
+      return true;
+    }
+  }
+  return false;
 }
 
 // ---------- donador y actividad ----------
@@ -759,6 +806,8 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
   // fecha de vencimiento dicha ("vence el 15 de octubre de 2026"): sus palabras no son producto ni cantidad
   const fecha = buscarFecha(tokens);
   if (fecha) for (let k = fecha.inicio; k < fecha.fin; k++) usados.add(k);
+  // "sin fecha de vencimiento", "no vence", "no tiene fecha": que no tiene (no es que falte decirla)
+  const sinVence = !fecha && buscarSinVence(tokens, usados);
 
   // la persona nueva dicha con "a" (la registrada ya la encontro buscarPersona)
   const rol = { Salida: comprador, Ingreso: proveedor }[tipo];
@@ -894,6 +943,8 @@ export function interpretarParte(parte, productos, { donadores = [], actividades
     // la presentacion dicha que no esta registrada: { unidad, tamano, texto: 'bolsas de 10 L' } o null
     presentacion,
     vence: fecha?.iso ?? null,
+    // se dijo que no tiene fecha de vencimiento
+    sinVence,
     // el tamaño dicho ("cajas de 20 unidades" -> { valor: 20, medida: 'unidades' }) o null
     tamano,
     // para proponer un producto nuevo con ese nombre
@@ -973,6 +1024,19 @@ export function corregirNombres(texto, productos) {
 
 // todo el dictado
 // una parte que solo dice quien dono o la actividad ("que es donación libre") se suma a la anterior
+// ---------- ingresos y salidas en el mismo dictado ----------
+// cada producto con su tipo (r.tipo): el dicho antes de el o, si no se dijo, porDefecto
+// extraDe(tipo): los donadores, compradores... para ese tipo (con el tipo, "a María" compra o vende)
+export function interpretarMezclado(texto, productos, extraDe = () => ({}), porDefecto = null) {
+  const trozos = partirPorTipo(texto);
+  // lo dicho antes del primer tipo va con el primero que se dijo ("3 kilos de arroz, ingreso")
+  const primero = trozos.find(t => t.tipo)?.tipo ?? null;
+  return trozos.flatMap(t => {
+    const tipo = t.tipo ?? porDefecto ?? primero;
+    return interpretarDictado(t.texto, productos, extraDe(tipo)).map(r => ({ ...r, tipo }));
+  });
+}
+
 // ---------- el inventario dicho ----------
 // un mismo producto puede estar en dos inventarios ("Mermelada de fresa" en Alimentos y en Merchandising):
 // "ingreso a alimentos de 3 mermeladas" o "3 mermeladas de merchandising" dice cual es
@@ -1053,7 +1117,12 @@ export function interpretarDictado(texto, productos, extra = {}) {
     const paraTodosSolo = r.paraTodos && (r.donador || r.donadorDicho || r.actividad);
     // "... Rosa Quispe con Yape" ya dice quien compro: no se vuelve a leer junto con lo anterior
     const soloPersona = r.comprador || r.proveedor;
-    if (anterior && sinProducto && !paraTodosSolo && !soloPersona) {
+    // "3 paquetes. Fideo tallarín Don Vittorio": la pausa separo la cantidad de su producto
+    const cantidadSola = anterior && !anterior.producto && !anterior.dudas.length && !anterior.nombreDicho && anterior.cantidad != null;
+    if (cantidadSola && (r.producto || r.dudas.length) && r.cantidad == null) {
+      r = interpretarParte(`${anterior.dicho} ${parte}`, deAqui, extra);
+      resultado.pop();
+    } else if (anterior && sinProducto && !paraTodosSolo && !soloPersona) {
       r = interpretarParte(`${anterior.dicho} ${parte}`, enInventario(productos, categoria ?? anterior.categoriaDicha), extra);
       if (!categoria && anterior.categoriaDicha) r.categoriaDicha = anterior.categoriaDicha;
       resultado.pop();

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { interpretarDictado, tipoDictado, partirPorInventario, categoriaDeIA, enInventario, productoDeNombre, desempatarConLocal } from '../src/logica/dictado.js';
+import { interpretarDictado, interpretarMezclado, partirPorTipo, tipoDictado, partirPorInventario, categoriaDeIA, enInventario, productoDeNombre, desempatarConLocal } from '../src/logica/dictado.js';
 
 // la misma mermelada en dos inventarios
 const mermeladaA = { item: { id: 'a1', nombre: 'Mermelada de fresa', unidad: 'frascos' }, categoria: 'Alimentos' };
@@ -69,4 +69,61 @@ test('con la IA: su inventario, o el que entendio el local para todo', () => {
 
   const { producto } = desempatarConLocal(productoDeNombre('Mermelada de fresa', enInventario(productos, 'Merchandising')), local);
   assert.equal(producto.item.id, 'm1');
+});
+
+// ---------- ingresos y salidas en el mismo dictado ----------
+const mezclado = (texto, porDefecto = null) => interpretarMezclado(texto, productos, () => ({}), porDefecto)
+  .map(r => [r.tipo, r.producto ? `${r.producto.categoria}:${r.producto.item.nombre}` : null, r.cantidad]);
+
+test('un trozo por cada tipo dicho', () => {
+  assert.deepEqual(partirPorTipo('ingreso de 3 kilos de arroz y salida de 2 panetones'), [
+    { tipo: 'Ingreso', texto: '3 kilos de arroz' }, { tipo: 'Salida', texto: '2 panetones' },
+  ]);
+  assert.deepEqual(partirPorTipo('2 kilos de arroz'), [{ tipo: null, texto: '2 kilos de arroz' }]);
+  // "entradas" despues de un numero es un producto, no el tipo
+  assert.deepEqual(partirPorTipo('venta de 3 entradas'), [{ tipo: 'Salida', texto: '3 entradas' }]);
+});
+
+test('ingreso y salida juntos, de inventarios distintos', () => {
+  assert.deepEqual(mezclado('ingreso de 3 kilos de arroz y salida de 2 panetones'), [
+    ['Ingreso', 'Alimentos:Arroz', 3], ['Salida', "Merchandising:Panetón D'Onofrio", 2],
+  ]);
+  assert.deepEqual(mezclado('salida de 2 kit salud bucal, ingreso a merchandising de 4 mermeladas de fresa y 1 panetón'), [
+    ['Salida', 'Salud:Kit Salud Bucal', 2], ['Ingreso', 'Merchandising:Mermelada de fresa', 4], ['Ingreso', "Merchandising:Panetón D'Onofrio", 1],
+  ]);
+});
+
+test('sin decir el tipo vale el de la lista; con uno solo, todo es de ese', () => {
+  assert.deepEqual(mezclado('2 kilos de arroz', 'Salida'), [['Salida', 'Alimentos:Arroz', 2]]);
+  assert.deepEqual(mezclado('ingreso de 2 kilos de arroz y 1 panetón'), [['Ingreso', 'Alimentos:Arroz', 2], ['Ingreso', "Merchandising:Panetón D'Onofrio", 1]]);
+});
+
+// ---------- como lo escribe el reconocedor al hacer pausas ----------
+const salud = [
+  ...productos,
+  { item: { id: 'a3', nombre: 'Chuño', unidad: 'kg' }, categoria: 'Alimentos' },
+  { item: { id: 'a4', nombre: 'Fideos tallarín Don Vittorio', unidad: 'paquetes', contenido: 500, medida: 'g' }, categoria: 'Alimentos' },
+  { item: { id: 's2', nombre: 'Carbamazepina 200 mg', unidad: 'blísters', contenido: 10, medida: 'unidades' }, categoria: 'Salud' },
+];
+const dictar = texto => interpretarMezclado(texto, salud, () => ({}), null);
+
+test('"sin fecha de vencimiento" dicho despues del producto', () => {
+  const [chuno] = dictar('ingreso de 11 kg de chuño suelto. Sin fecha de vencimiento.');
+  assert.equal(chuno.producto.item.nombre, 'Chuño');
+  assert.equal(chuno.cantidad, 11);
+  assert.equal(chuno.sinVence, true);
+  assert.equal(dictar('ingreso de 2 kilos de arroz que no vence')[0].sinVence, true);
+  assert.equal(dictar('ingreso de 2 kilos de arroz')[0].sinVence, false);
+});
+
+test('la cantidad separada de su producto por una pausa', () => {
+  const r = dictar('salida de 3 paquetes. Fideo tallarin dormitorio.');
+  assert.equal(r.length, 1);
+  assert.equal(r[0].producto.item.nombre, 'Fideos tallarín Don Vittorio');
+  assert.equal(r[0].cantidad, 3);
+});
+
+test('"blister, 10 unidades" sin "de" es el tamaño, no la cantidad', () => {
+  assert.equal(dictar('salida de 15 carbamazepina, 200 miligramos blister, 10 unidades')[0].cantidad, 15);
+  assert.equal(dictar('salida de carbamazepina 200 miligramos en blister 10 unidades')[0].cantidad, null);
 });
