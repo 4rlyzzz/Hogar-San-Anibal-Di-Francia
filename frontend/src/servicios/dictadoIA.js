@@ -1,5 +1,6 @@
 import api from './api.js';
 import { preprocesarTextoVoz } from '../logica/dictado.js';
+import { reglas } from '../validacion.js';
 
 // El dictado con IA pasa por Django (/api/dictado/), que llama a la IA (Groq, Gemini...) con sus propias claves.
 // El navegador nunca ve esa clave ni le manda el token de la app a la IA.
@@ -12,7 +13,10 @@ const recientes = new Map();
 const MAX_RECIENTES = 10;
 
 export const procesarTextoConIA = (textoDictado) => {
-  const texto = preprocesarTextoVoz(textoDictado);
+  // limpio igual que al agregar a la lista (leer con reglas.dictado): si no, la vista previa y
+  // "Agregar a la lista" pedirian textos apenas distintos y la IA podria responder distinto
+  const limpio = reglas.dictado(textoDictado);
+  const texto = preprocesarTextoVoz(limpio.ok ? limpio.valor : textoDictado);
   if (!texto) return Promise.resolve([]);
   if (!recientes.has(texto)) {
     const consulta = api.post('dictado/', { texto })

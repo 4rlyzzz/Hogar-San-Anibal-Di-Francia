@@ -9,10 +9,10 @@ import {
   abrirBusqueda, abrirCodigo, abrirVozLote, tipoElegido, abrirLista, agregarManual, agregarCodigo, agregarDictado, abrirItem, quitarItem, guardarItem, revisarLote, confirmarLote,
   descartarLote, problemasItem, productoDeItem, nombreItem, donadorDeItem, todosLosProductos, claveProducto, productoPorClave,
   opcionesActividad, opcionesNinos, abrirProducto, intentar, cantidadDicha, baseDe, categorias, personaDeItem, extraDictado,
-  tipoDeItem, esIngresoItem, ingresosDe, salidasDe, listaMezclada, textoParaIA,
+  tipoDeItem, esIngresoItem, ingresosDe, salidasDe, listaMezclada, textoParaIA, personaDictada,
 } from '../acciones.js';
 import { nombreCategoria, colorCategoria, textoPara, redondear, fechaActual, coincideNombre, textoPresentacion, disponible } from '../logica/comunes.js';
-import { CATEGORIA as MERCH, esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta } from '../logica/merch.js';
+import { CATEGORIA as MERCH, esMerch, textoMerch, textoTipo, soles, nombreMedio, totalVenta, llevaProveedor } from '../logica/merch.js';
 import { CamposIngresoMerch, CamposSalidaMerch, CampoVenceMerch, textoFilaMerch } from './Merch.jsx';
 import { fechaVence } from '../logica/lotes.js';
 import { interpretarMezclado, tipoDictado, productoDeNombre, cantidadDeLaIA, desempatarConLocal, mismoProducto, compartirVentaIA, categoriaDeIA, enInventario } from '../logica/dictado.js';
@@ -386,10 +386,15 @@ function LineaEntendida({ r, conTipo = false }) {
   else if (r.sinVence) datos.push('sin fecha de vencimiento');
   if (r.donador || r.donadorDicho) datos.push(`donó ${r.donador?.nombre ?? r.donadorDicho}`);
   if (r.actividad) datos.push(r.actividad);
-  if (r.comprador || r.compradorDicho) datos.push(`compra ${r.comprador?.nombre ?? r.compradorDicho}`);
-  if (r.proveedor || r.proveedorDicho) datos.push(`proveedor ${r.proveedor?.nombre ?? r.proveedorDicho}`);
+  // comprador, proveedor y medio de pago solo son de merchandising: comprador y pago en una salida,
+  // proveedor en un ingreso (y no en lo hecho en el hogar)
+  const deVenta = !item || item.tipoMerch;
+  const esSalida = r.tipo ? r.tipo === 'Salida' : true;
+  const esIngreso = r.tipo ? r.tipo === 'Ingreso' : true;
+  if (deVenta && esSalida && (r.comprador || r.compradorDicho)) datos.push(`compra ${r.comprador?.nombre ?? r.compradorDicho}`);
+  if (deVenta && esIngreso && (!item || llevaProveedor(item)) && (r.proveedor || r.proveedorDicho)) datos.push(`proveedor ${r.proveedor?.nombre ?? r.proveedorDicho}`);
   if (r.precio != null) datos.push(`${soles(r.precio)} c/u`);
-  if (r.medioPago) datos.push(nombreMedio(r.medioPago));
+  if (deVenta && esSalida && r.medioPago) datos.push(nombreMedio(r.medioPago));
 
   return (
     <li className={avisos.length ? 'con-duda' : ''}>
@@ -407,6 +412,9 @@ const erroresMicrofono = {
   'audio-capture': 'No se encontró el micrófono o lo está usando otro programa.',
   'network': 'Sin conexión con el servicio de voz. Revisa internet o usa Chrome o Edge.',
 };
+
+// cortes del servicio de voz seguidos (sin oir nada entre ellos) que se reintentan solos
+const MAXIMO_CORTES = 3;
 
 function detenerReconocedor(ref) {
   const r = ref.current;
@@ -478,6 +486,9 @@ export function ModalLoteVoz() {
             // con los dos dichos, el tipo sale del orden de lo dicho (el local); la IA a veces se equivoca
             tipo: dichoTipo.ambos ? (suyo?.tipo ?? { salida: 'Salida', ingreso: 'Ingreso' }[i.tipo] ?? null) : tipoVoz,
             vence: i.vence || suyo?.vence || null,
+            donador: suyo?.donador ?? null,
+            donadorDicho: suyo?.donadorDicho || '',
+            actividad: suyo?.actividad || null,
             sinVence: !i.vence && Boolean(suyo?.sinVence),
             cantidad: cantidadDicha(cantidadDeLaIA(i.cantidad, i.unidad, producto?.item, suyo || null)),
             unidadDicha: typeof i.unidad === 'string' ? i.unidad : '',
@@ -485,8 +496,9 @@ export function ModalLoteVoz() {
             producto,
             dudas,
             presentacion: suyo?.presentacion ?? null,
-            compradorDicho: i.comprador || suyo?.compradorDicho || suyo?.comprador?.nombre || '',
-            proveedorDicho: i.proveedor || suyo?.proveedorDicho || suyo?.proveedor?.nombre || '',
+            // igual que en la lista (personaDictada): asi "Entendí" muestra a quien quedara registrado
+            compradorDicho: (() => { const p = personaDictada('comprador', i, suyo || {}); return p.registrado?.nombre ?? p.dicho; })(),
+            proveedorDicho: (() => { const p = personaDictada('proveedor', i, suyo || {}); return p.registrado?.nombre ?? p.dicho; })(),
             precio: cantidadDicha(i.precio) ?? suyo?.precio ?? null,
             medioPago: i.medio_pago || suyo?.medioPago || '',
           };
@@ -522,6 +534,8 @@ export function ModalLoteVoz() {
     r.interimResults = false;
 
     r.onresult = (e) => {
+      // oyo algo: los cortes de antes ya no cuentan como seguidos
+      r.cortes = 0;
       let trascripcion = '';
       for (let i = e.resultIndex; i < e.results.length; ++i) {
         trascripcion += e.results[i][0].transcript + ' ';
@@ -535,6 +549,10 @@ export function ModalLoteVoz() {
     r.onerror = (e) => {
       // 'no-speech' es solo silencio: se sigue escuchando
       if (e.error === 'no-speech') return;
+      // 'network': el servicio de voz del navegador (Google) corta las sesiones largas aunque haya internet.
+      // Se vuelve a encender solo (onend) y lo dicho se conserva; solo se avisa si se corta varias veces
+      // seguidas sin oir nada, que ya es un corte de verdad
+      if (e.error === 'network' && r.debeSeguir && (r.cortes = (r.cortes ?? 0) + 1) <= MAXIMO_CORTES) return;
       // cualquier otro error detiene de verdad (si no, onend lo reinicia y falla en bucle)
       r.debeSeguir = false;
       if (e.error !== 'aborted') setAviso(erroresMicrofono[e.error] ?? 'Error o corte en el micrófono.');
@@ -544,7 +562,13 @@ export function ModalLoteVoz() {
     r.onend = () => {
       // solo se reinicia el reconocedor activo y si no se pidio parar
       if (r.debeSeguir && reconocedor.current === r) {
-        try { r.start(); } catch { r.debeSeguir = false; setGrabando(false); }
+        const reanudar = () => {
+          if (!r.debeSeguir || reconocedor.current !== r) return;
+          try { r.start(); } catch { r.debeSeguir = false; setGrabando(false); }
+        };
+        // tras un corte se espera un poco antes de reconectar
+        if (r.cortes) setTimeout(reanudar, 400);
+        else reanudar();
       } else if (reconocedor.current === r) {
         setGrabando(false);
       }

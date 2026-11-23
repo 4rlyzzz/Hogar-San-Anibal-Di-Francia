@@ -159,7 +159,8 @@ def _proveedores_ia():
 
 IA_PROVEEDORES = _proveedores_ia()
 # limite de tokens de la respuesta (incluye el razonamiento) y segundos de espera por modelo
-IA_MAX_TOKENS = int(os.getenv('IA_MAX_TOKENS', '1500'))
+# dictados largos (hasta 1000 caracteres, 20 productos): la respuesta necesita espacio
+IA_MAX_TOKENS = int(os.getenv('IA_MAX_TOKENS', '3000'))
 IA_ESPERA = int(os.getenv('IA_ESPERA', '10'))
 
 # ---------- Produccion (DEBUG=False) ----------
