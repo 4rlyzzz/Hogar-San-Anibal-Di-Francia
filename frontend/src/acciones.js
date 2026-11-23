@@ -215,7 +215,8 @@ function movimientoDesdeDoc(doc) {
     insumo: doc.insumo || doc.nombre || 'Sin insumo',
     cantidad: Number(doc.cantidad) || 0,
     saldo: Number(doc.saldo) || 0,
-    responsable: doc.responsable || doc.usuario_id || 'admin',
+    // el nombre de la cuenta (no cambia); nunca el usuario con el que se entra, que si puede cambiar
+    responsable: doc.responsable || cuentaPorId(doc.usuario_id)?.nombre || 'Sin responsable',
     donador: nombreDonador(doc.donador),
     ...(doc.proveedor && { proveedor: nombreDonador(doc.proveedor) }),
     ...(doc.comprador && { comprador: nombreDonador(doc.comprador) }),
@@ -2358,4 +2359,4 @@ export async function cargarDatosDesdeDB({ silencioso = false, aplicar = () => t
   } catch (error) {
     console.error('Error al actualizar el estado con datos de CouchDB:', error);
   }
-}
+}

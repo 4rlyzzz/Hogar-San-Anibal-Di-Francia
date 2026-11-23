@@ -208,4 +208,4 @@ Para detener o iniciar el servicio de CouchDB en Windows, abre una terminal como
 ```powershell
 net stop "Apache CouchDB"
 net start "Apache CouchDB"
-```
+```

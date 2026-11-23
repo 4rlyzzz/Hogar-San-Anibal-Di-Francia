@@ -5,8 +5,10 @@ export const coloresActividad = { ingreso: 'verde', salida: 'naranja', ajuste: '
 
 // el movimiento lo hizo esa cuenta: por su id; los movimientos viejos solo tienen el nombre
 // o el usuario con el que entro (los primeros se guardaron como 'admin')
+// con id solo cuenta el id: el usuario se puede cambiar y otra cuenta podria quedar con ese mismo texto
 export function movimientoDe(fila, cuenta) {
   if (mismoId(fila.usuario_id, cuenta.id)) return true;
+  if (String(fila.usuario_id ?? '').startsWith('usuario:')) return false;
   return [cuenta.nombre, cuenta.usuario].filter(Boolean).some(n => n === fila.responsable || n === fila.usuario_id);
 }
 
@@ -49,8 +51,9 @@ export function actividadDe(estado, cuenta) {
       texto: {
         rol: `Cambió el rol de ${c.nombre}`,
         clave: `Restableció la contraseña de ${c.nombre}`,
+        usuario: `Cambió el usuario de ${c.nombre}`,
       }[x.accion] ?? `${x.valor ? 'Activó' : 'Desactivó'} a ${c.nombre}`,
-      detalle: x.accion === 'rol' ? `Ahora es ${x.valor}` : '',
+      detalle: { rol: `Ahora es ${x.valor}`, usuario: `Ahora entra como @${x.valor}` }[x.accion] ?? '',
     })));
 
   return [...movimientos, ...donadores, ...personas, ...usuarios, ...cambios]

@@ -127,7 +127,7 @@ class EditarUsuarioTests(PruebaAPI):
 
     def test_sin_clave_nueva_se_conserva_la_actual(self):
         antes = self.couch.leer('usuario', 'usuario:cocina')['clave']
-        self.editar('usuario:cocina', nombre='Cocina Central')
+        self.editar('usuario:cocina', rol='Administrador')
         self.assertEqual(self.couch.leer('usuario', 'usuario:cocina')['clave'], antes)
 
     def test_clave_debil(self):
@@ -159,3 +159,43 @@ class EditarUsuarioTests(PruebaAPI):
         self.salir()
         r = self.client.post('/api/auth/login/', {'usuario': 'cocina', 'clave': CLAVE}, format='json')
         self.assertEqual(r.status_code, 200)
+
+    # ---------- el nombre no cambia (es el responsable del historial); el usuario si ----------
+    def test_el_nombre_no_se_cambia(self):
+        r = self.editar('usuario:cocina', nombre='Cocina Central')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.couch.leer('usuario', 'usuario:cocina')['nombre'], 'Cocina')
+        # el mismo nombre de antes no es un cambio
+        self.assertEqual(self.editar('usuario:cocina', nombre='Cocina', rol='Administrador').status_code, 200)
+
+    def test_cambiar_usuario(self):
+        r = self.editar('usuario:cocina', usuario='Cocina.Central')
+        self.assertEqual(r.status_code, 200)
+        doc = self.couch.leer('usuario', 'usuario:cocina')
+        self.assertEqual((doc['usuario'], doc['nombre']), ('cocina.central', 'Cocina'))
+        self.assertEqual(doc['cambios'][-1]['accion'], 'usuario')
+        self.salir()
+        nuevo = self.client.post('/api/auth/login/', {'usuario': 'cocina.central', 'clave': CLAVE}, format='json')
+        self.assertEqual(nuevo.status_code, 200)
+        viejo = self.client.post('/api/auth/login/', {'usuario': 'cocina', 'clave': CLAVE}, format='json')
+        self.assertNotEqual(viejo.status_code, 200)
+
+    def test_usuario_nuevo_invalido_o_repetido(self):
+        self.assertEqual(self.editar('usuario:cocina', usuario='').status_code, 400)
+        self.assertEqual(self.editar('usuario:cocina', usuario='con espacio').status_code, 400)
+        self.assertEqual(self.editar('usuario:cocina', usuario='ADMIN').status_code, 409)
+        self.assertEqual(self.couch.leer('usuario', 'usuario:cocina')['usuario'], 'cocina')
+
+    def test_el_mismo_usuario_no_es_un_cambio(self):
+        self.assertEqual(self.editar('usuario:cocina', usuario='cocina').status_code, 200)
+        self.assertFalse(self.couch.leer('usuario', 'usuario:cocina').get('cambios'))
+
+    def test_crear_con_el_usuario_que_dejo_otra_cuenta(self):
+        # cocina pasa a ser "cocina2": su identificador sigue siendo usuario:cocina
+        self.editar('usuario:cocina', usuario='cocina2')
+        r = self.client.post('/api/usuarios/', {'usuario': 'cocina', 'nombre': 'Cocina nueva', 'clave': 'coci12345'}, format='json')
+        self.assertIn(r.status_code, (200, 201))
+        cuentas = {u['usuario']: u for u in self.couch.todos('usuario')}
+        self.assertEqual(cuentas['cocina2']['_id'], 'usuario:cocina')
+        self.assertNotEqual(cuentas['cocina']['_id'], 'usuario:cocina')
+        self.assertEqual(cuentas['cocina']['nombre'], 'Cocina nueva')

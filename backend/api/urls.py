@@ -33,4 +33,4 @@ urlpatterns = [
     path('compradores/', CompradoresListCreateView.as_view(), name='compradores-list-create'),
     path('usuarios/', UsuariosListCreateView.as_view(), name='usuarios-list-create'),
     path('usuarios/<str:doc_id>/', UsuarioDetailView.as_view(), name='usuario-detail'),
-]
+]
